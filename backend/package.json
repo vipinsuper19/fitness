@@ -10,13 +10,15 @@
     "build": "prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "start:dev": "tsc -p tsconfig.build.json && node dist/main.js",
-    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"prisma/**/*.ts\"",
     "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json",
     "test": "prisma generate && jest",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "migrate:deploy": "prisma migrate deploy",
-    "contract:lint": "redocly lint ../contracts/openapi.yaml --config ../contracts/redocly.yaml"
+    "contract:lint": "redocly lint ../contracts/openapi.yaml --config ../contracts/redocly.yaml",
+    "db:seed": "tsx prisma/seed.ts",
+    "migrate:check": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
@@ -46,6 +48,7 @@
     "prisma": "7.10.1",
     "supertest": "^7.1.0",
     "ts-jest": "^29.4.0",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
     "yaml": "^2.9.1"
