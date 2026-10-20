@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1.7
 # Render (Docker runtime) builds this from the backend/ directory.
+# Base image pinned by digest (node:22-bookworm-slim multi-arch index, 2026-10-20).
+# Bump deliberately: replace the digest when upgrading Node.
+ARG NODE_IMAGE=node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 
-FROM node:22-bookworm-slim AS build
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -10,7 +13,7 @@ COPY prisma ./prisma
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM node:22-bookworm-slim AS runtime
+FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends tini ca-certificates \

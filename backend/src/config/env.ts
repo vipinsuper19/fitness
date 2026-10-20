@@ -16,6 +16,8 @@ export const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  /** Requests per minute per client IP on auth and account routes. */
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
   CORS_ORIGINS: z.string().optional(),
   /** Enables Swagger UI at /docs. Defaults on outside production. */
   SWAGGER_ENABLED: z
