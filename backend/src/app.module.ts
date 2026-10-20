@@ -9,6 +9,8 @@ import { IdempotencyModule } from './idempotency/idempotency.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProfileModule } from './profile/profile.module';
 import { PlansModule } from './workout-plans/plans.module';
+import { SessionsModule } from './workout-sessions/sessions.module';
+import { XpModule } from './xp/xp.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { PlansModule } from './workout-plans/plans.module';
     GoalsModule,
     ExercisesModule,
     PlansModule,
+    SessionsModule,
+    XpModule,
   ],
 })
 export class AppModule {}

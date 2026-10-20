@@ -37,7 +37,21 @@ export function decodeCursor<K extends string>(
   } catch {
     // fall through
   }
-  throw new ApiError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Some fields are invalid.', {
+  throw invalidCursor();
+}
+
+/** The one error for any unusable cursor. */
+export function invalidCursor(): ApiError {
+  return new ApiError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Some fields are invalid.', {
     fields: { cursor: 'cursor is not valid; start again without it' },
   });
+}
+
+/** Decodes a `{ t: ISO timestamp, id: uuid }` cursor used by time-ordered lists. */
+export function decodeTimeCursor(cursor: string | undefined): { t: Date; id: string } | undefined {
+  const c = decodeCursor(cursor, ['t', 'id'] as const);
+  if (!c) return undefined;
+  const t = new Date(c.t);
+  if (Number.isNaN(t.getTime()) || t.toISOString() !== c.t) throw invalidCursor();
+  return { t, id: c.id };
 }
