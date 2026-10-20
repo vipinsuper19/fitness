@@ -1,6 +1,7 @@
 import { Controller, Get, HttpCode, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 
+import { Public } from '../auth/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface HealthResponse {
@@ -15,6 +16,7 @@ export interface HealthResponse {
  * `?db=true` to also probe the database.
  */
 @ApiTags('health')
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(private readonly prisma: PrismaService) {}

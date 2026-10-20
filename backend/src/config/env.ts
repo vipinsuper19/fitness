@@ -16,6 +16,14 @@ export const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(30),
+  /** Requests per minute per client IP on auth and account routes. */
+  AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
+  /** Looser per-IP limit for POST /auth/refresh (apps refresh on every launch). */
+  AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  /** Failed logins allowed per account per 15 minutes before 429. */
+  LOGIN_MAX_FAILURES_PER_ACCOUNT: z.coerce.number().int().positive().default(5),
+  /** Proxy hops in front of the app (Render: 1, per Render's docs). Sets Express `trust proxy`. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
   CORS_ORIGINS: z.string().optional(),
   /** Enables Swagger UI at /docs. Defaults on outside production. */
   SWAGGER_ENABLED: z

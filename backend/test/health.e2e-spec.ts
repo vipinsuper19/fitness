@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
@@ -9,7 +9,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { configureApp } from '../src/setup';
 
 describe('GET /health', () => {
-  let app: INestApplication;
+  let app: NestExpressApplication;
   let dbUp = true;
 
   beforeAll(async () => {
@@ -31,7 +31,7 @@ describe('GET /health', () => {
         $disconnect: async () => undefined,
       })
       .compile();
-    app = moduleRef.createNestApplication();
+    app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false });
     configureApp(app, env);
     await app.init();
   });
