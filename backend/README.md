@@ -36,7 +36,13 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 - Schema: `prisma/schema.prisma`. MVP entities are User, RefreshToken, UserProfile, FitnessGoal, Exercise, WorkoutPlan (+ WorkoutPlanVersion), PlannedWorkout, PlannedExercise, WorkoutSession, ExerciseSetLog, FoodItem, FoodLog, WaterLog, BodyMeasurement, XPTransaction and IdempotencyKey.
 - Every user-owned row cascades on account deletion. A user has at most one active plan (`user_profiles.active_plan_id` is unique).
 - XP is server-only. `xp_transactions` is unique on `(user_id, source_type, source_id)`, so a retried award is a no-op. A reversal is a negative `adjustment` row.
-- Retry safety: `idempotency_keys` is unique on `(scope, key)`, and set logs are unique on `(user_id, client_set_id)`.
+- Retry safety: set logs are unique on `(user_id, client_set_id)`. `src/idempotency/idempotency.service.ts` is insert-first:
+  - It inserts an `in_progress` row keyed on `(scope, key)` before the handler runs. A concurrent duplicate hits the unique index and gets `409 IDEMPOTENCY_IN_PROGRESS`.
+  - A finished request with the same method, path and body hash is replayed. Anything else is `409 IDEMPOTENCY_KEY_REUSED`.
+  - Token-bearing responses (auth) are never stored; a database CHECK enforces this too. A sign-up retry re-runs the handler.
+  - Sign-up rows get `user_id` once the account exists, so they are erased with it.
+  - Expired rows are purged hourly.
+- `food_logs.food_id` is `ON DELETE NO ACTION`. It's checked at the end of the statement, so the account-deletion cascade can remove custom foods together with their logs, while deleting a logged food on its own still fails.
 - Migrations: `prisma/migrations/` (the Prisma init migration, plus SQL CHECK constraints that mirror the contract ranges).
   - Apply: `npm run migrate:deploy` (uses `DIRECT_URL` when set).
   - Drift check: `npm run migrate:check` (compares the migrated DB with `schema.prisma`).

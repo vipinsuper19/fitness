@@ -44,4 +44,9 @@ ALTER TABLE "xp_transactions"
   ADD CONSTRAINT "xp_transactions_amount_check" CHECK ("amount" <> 0 AND ("source_type" = 'adjustment' OR "amount" > 0));
 
 ALTER TABLE "idempotency_keys"
-  ADD CONSTRAINT "idempotency_keys_completed_check" CHECK (("status" = 'completed') = ("response_status" IS NOT NULL));
+  ADD CONSTRAINT "idempotency_keys_completed_check" CHECK (("status" = 'completed') = ("response_status" IS NOT NULL)),
+  -- Token-bearing responses are never stored: no body for auth paths or anonymous scopes.
+  ADD CONSTRAINT "idempotency_keys_no_token_body_check" CHECK (
+    "response_body" IS NULL OR ("path" NOT LIKE '%/auth/%' AND "scope" NOT LIKE 'anon:%')
+  ),
+  ADD CONSTRAINT "idempotency_keys_expiry_check" CHECK ("expires_at" > "created_at");

@@ -434,7 +434,11 @@ model FoodLog {
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  food FoodItem @relation(fields: [foodId], references: [id], onDelete: Restrict)
+  /// NO ACTION, not RESTRICT: Postgres checks it at the end of the statement,
+  /// so deleting a user removes their custom foods and the logs that use them
+  /// in one cascade. Deleting a food that is still logged on its own fails,
+  /// which keeps diary history intact.
+  food FoodItem @relation(fields: [foodId], references: [id], onDelete: NoAction)
 
   @@index([userId, date])
   @@map("food_logs")
@@ -480,7 +484,9 @@ model BodyMeasurement {
 // ---------- XP (server-authoritative) ----------
 
 /// Append-only. The unique key makes a retried award a no-op. A reversal is
-/// an `adjustment` row whose sourceId is the reversed transaction's id.
+/// an `adjustment` row whose sourceId is the reversed transaction's id, so a
+/// row can be reversed once. The reversed award row is never deleted, so the
+/// same source can never be awarded again.
 model XPTransaction {
   id         String       @id @default(uuid()) @db.Uuid
   userId     String       @map("user_id") @db.Uuid
@@ -500,8 +506,12 @@ model XPTransaction {
 // ---------- idempotency ----------
 
 /// Stored response for a write retried with the same Idempotency-Key.
+/// Inserted first as `in_progress` (the unique key serialises concurrent
+/// retries), then completed. A key is bound to method + path + body hash.
 /// `scope` is `user:<id>` for signed-in calls and `anon:register` for sign-up.
-/// Rows expire after 24 hours.
+/// Token-bearing responses (auth) are never stored (DB CHECK). A sign-up row
+/// gets `userId` once the account exists, so it is erased with the account.
+/// Rows expire after 24 hours and are purged by IdempotencyService.
 model IdempotencyKey {
   id             String            @id @default(uuid()) @db.Uuid
   scope          String            @db.VarChar(80)
