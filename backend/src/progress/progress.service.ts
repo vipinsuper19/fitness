@@ -4,7 +4,7 @@ import { ApiError } from '../common/api-error';
 import { decodeCursor, encodeCursor, invalidCursor } from '../common/cursor';
 import { isoDate, num, parseIsoDate } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
-import { dateRange, localDate, nextDate, prevDate, startOfLocalDay } from '../common/time';
+import { dateRange, daySpan, localDate, nextDate, prevDate, startOfLocalDay } from '../common/time';
 import type { BodyMeasurement } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BodyMeasurementDto, BodyMeasurementUpdateDto, MEASUREMENT_FIELDS, MeasurementListQuery, SummaryQuery } from './progress.dto';
@@ -105,6 +105,9 @@ export class ProgressService {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.bodyMeasurement.findFirst({ where: { id, userId } });
       if (!row) throw notFound('Measurement');
+      if (!MEASUREMENT_FIELDS.some((f) => dto[f] !== undefined) && dto.date === undefined) {
+        throw invalid({ body: 'send at least one field to change' });
+      }
       const data: Record<string, unknown> = {};
       for (const f of MEASUREMENT_FIELDS) if (dto[f] !== undefined) data[f] = dto[f];
       if (dto.date !== undefined) data.date = parseIsoDate(dto.date)!;
@@ -129,15 +132,15 @@ export class ProgressService {
    */
   async summary(userId: string, q: SummaryQuery, now = new Date()): Promise<ProgressSummary> {
     if (q.from > q.to) throw invalid({ from: 'from must be on or before to' });
-    const days = dateRange(q.from, q.to);
-    if (days.length > MAX_SUMMARY_DAYS) throw invalid({ to: `the range can cover at most ${MAX_SUMMARY_DAYS} days` });
+    if (daySpan(q.from, q.to) > MAX_SUMMARY_DAYS) throw invalid({ to: `the range can cover at most ${MAX_SUMMARY_DAYS} days` });
+    const days = dateRange(q.from, q.to, MAX_SUMMARY_DAYS);
 
     const profile = await this.prisma.userProfile.findUnique({ where: { userId }, select: { timezone: true } });
     const tz = profile?.timezone ?? 'Asia/Kolkata';
     const start = startOfLocalDay(q.from, tz);
     const end = startOfLocalDay(nextDate(q.to), tz);
 
-    const [measurements, sessions, foods, awards] = await Promise.all([
+    const [measurements, sessions, foods] = await Promise.all([
       this.prisma.bodyMeasurement.findMany({
         where: { userId, date: { gte: parseIsoDate(q.from)!, lte: parseIsoDate(q.to)! }, weightKg: { not: null } },
         orderBy: [{ date: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
@@ -145,18 +148,22 @@ export class ProgressService {
       }),
       this.prisma.workoutSession.findMany({
         where: { userId, status: 'completed', completedAt: { gte: start, lt: end } },
-        select: { completedAt: true, activeSeconds: true },
+        select: { id: true, completedAt: true, activeSeconds: true },
       }),
       this.prisma.foodLog.groupBy({
         by: ['date'],
         where: { userId, date: { gte: parseIsoDate(q.from)!, lte: parseIsoDate(q.to)! } },
         _sum: { energyKcal: true },
       }),
-      this.prisma.xPTransaction.findMany({
-        where: { userId, sourceType: 'workout_session', createdAt: { gte: start, lt: end } },
-        select: { id: true, amount: true, createdAt: true },
-      }),
     ]);
+    // XP is attributed to the day the session was completed (not when the award row was written).
+    const completedDay = new Map(sessions.map((s) => [s.id, localDate(s.completedAt!, tz)]));
+    const awards = sessions.length
+      ? await this.prisma.xPTransaction.findMany({
+          where: { userId, sourceType: 'workout_session', sourceId: { in: sessions.map((s) => s.id) } },
+          select: { id: true, amount: true, sourceId: true },
+        })
+      : [];
     const reversed = new Set(
       awards.length
         ? (
@@ -187,7 +194,7 @@ export class ProgressService {
     }
     for (const a of awards) {
       if (reversed.has(a.id)) continue;
-      const p = points.get(localDate(a.createdAt, tz));
+      const p = points.get(completedDay.get(a.sourceId!)!);
       if (p) p.xpEarned += a.amount;
     }
 

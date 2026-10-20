@@ -77,6 +77,8 @@ describeDb('T15: body measurements and progress summary (HTTP + Postgres)', () =
       expect((await api(token).patch(url0).send({ weightKg: 72 }).expect(200)).body).toMatchObject({ date: '2026-10-01', weightKg: 72, waistCm: 84.5 });
       expect((await api(token).patch(url0).send({ date: '2026-10-02' }).expect(200)).body).toMatchObject({ date: '2026-10-02', weightKg: 72, waistCm: 84.5 });
       await api(token).patch(url0).send({ date: null }).expect(400);
+      await api(token).patch(url0).send({}).expect(400);
+      await api(token).patch(url0).send({ date: '9999-12-31' }).expect(400);
       // null clears
       expect((await api(token).patch(url0).send({ waistCm: null }).expect(200)).body).toMatchObject({ weightKg: 72, waistCm: null });
       // clearing the last value is rejected and leaves the entry as it was
@@ -113,9 +115,22 @@ describeDb('T15: body measurements and progress summary (HTTP + Postgres)', () =
       const done = (await api(token).post(`/api/v1/workout-sessions/${s.id}/complete`).send({}).expect(200)).body;
       const startedAt = new Date(at.getTime() - activeSeconds * 1000);
       await prisma.workoutSession.update({ where: { id: s.id }, data: { startedAt, completedAt: at, activeSeconds } });
-      await prisma.xPTransaction.updateMany({ where: { userId, sourceId: s.id }, data: { createdAt: at } });
+      // The award row keeps today's createdAt: xpEarned must follow the session's completedAt.
+      void userId;
       return { id: s.id as string, xp: done.xpAwarded as number };
     }
+
+    it('rejects huge or out-of-range spans quickly instead of hanging', async () => {
+      const u = await signUp();
+      const t0 = Date.now();
+      const r = await api(u.token).get('/api/v1/progress/summary?from=2026-01-01&to=9999-12-31').timeout(5000).expect(400);
+      expect(Date.now() - t0).toBeLessThan(5000);
+      expect(r.body.code).toBe('VALIDATION_FAILED');
+      await api(u.token).get('/api/v1/progress/summary?from=2100-12-01&to=2100-12-31').timeout(5000).expect(200);
+      await api(u.token).get('/api/v1/progress/summary?from=2100-12-31&to=2101-01-01').timeout(5000).expect(400);
+      await api(u.token).get('/api/v1/progress/summary?from=1899-12-31&to=1900-01-01').timeout(5000).expect(400);
+      await api(u.token).get('/api/v1/progress/summary?from=2025-01-01&to=2026-01-02').timeout(5000).expect(400);
+    }, 10_000);
 
     it('returns one point per IST day with null for missing data, never 0', async () => {
       const u = await signUp();

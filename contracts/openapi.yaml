@@ -948,7 +948,7 @@ paths:
       tags: [progress]
       operationId: updateBodyMeasurement
       summary: Edit a body measurement
-      description: Partial update, like the profile. A field left out stays unchanged; `null` clears a measurement. After the change the entry must still have at least one measurement, otherwise 400 VALIDATION_FAILED (fields name the cleared measurements).
+      description: Partial update, like the profile. An empty body `{}` is rejected with 400. A field left out stays unchanged; `null` clears a measurement. After the change the entry must still have at least one measurement, otherwise 400 VALIDATION_FAILED (fields name the cleared measurements).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -990,7 +990,7 @@ paths:
           in: query
           required: true
           schema: { type: string, format: date }
-      description: Days are local dates in the profile timezone. `from` must be on or before `to`, and the range can cover at most 366 days (otherwise `400`). `xpEarned` counts workout awards made that day that were not later reversed.
+      description: Days are local dates in the profile timezone. `from` must be on or before `to`, and the range can cover at most 366 days (otherwise `400`). `xpEarned` counts XP from workouts completed that day (by the session's local `completedAt`), excluding awards that were later reversed. Dates must be within years 1900–2100.
       responses:
         '200':
           description: One point per day; `null` means no data that day, never 0
