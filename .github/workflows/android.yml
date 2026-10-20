@@ -34,8 +34,17 @@ jobs:
           java-version: "21"
       - if: steps.guard.outputs.present == 'true'
         uses: gradle/actions/setup-gradle@v4
-      - name: Assemble and unit test
+      - name: Assemble, unit test and lint
         if: steps.guard.outputs.present == 'true'
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleDebug testDebugUnitTest
+          ./gradlew --no-daemon assembleDebug testDebugUnitTest lintDebug --stacktrace
+      - name: Upload test and lint reports
+        if: failure() && steps.guard.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          path: |
+            android/**/build/reports/tests/
+            android/**/build/reports/lint-results-debug.html
+          retention-days: 7

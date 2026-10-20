@@ -1,7 +1,18 @@
 # android/
 
-Placeholder for the Android app (task T2, Android Developer).
+Fitness Android app (`com.vipin.fitness`, app name "Fitness").
 
-Planned: Gradle multi-module app (`app`, `core/*`, `feature/*`), Kotlin 2.x, Jetpack Compose + Material 3, MVVM + Clean, Hilt, Retrofit/OkHttp + kotlinx.serialization, Room, DataStore, WorkManager, Navigation Compose. minSdk 26. Package `com.vipin.fitness`.
+Stack: Kotlin 2.4 (AGP 9 built-in Kotlin), Jetpack Compose + Material 3, Hilt (KSP). minSdk 26, compile/target SDK 37.
+Retrofit, Room, DataStore and WorkManager arrive with T8.
 
-Build (once the skeleton lands, JDK 21): `cd android && ./gradlew assembleDebug testDebugUnitTest`
+## Modules
+- `app` – `FitnessApplication` (`@HiltAndroidApp`), `MainActivity`, app shell with bottom tabs (`navigation/`).
+- `core:designsystem` – `FitnessTheme` (Material 3, light/dark, optional dynamic color), typography, shared placeholder.
+- `feature:home`, `feature:workout`, `feature:nutrition`, `feature:progress` – tab screen stubs.
+
+## Build (JDK 21)
+```
+cd android
+./gradlew assembleDebug testDebugUnitTest lintDebug
+```
+CI runs the same command (`.github/workflows/android.yml`, path-filtered to `android/**`).
