@@ -41,3 +41,36 @@ export function clientTime(value: string | undefined, field: string, now: Date):
   }
   return t;
 }
+
+/** Local calendar date (YYYY-MM-DD) of an instant in `tz`. */
+export function localDate(t: Date, tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(t);
+}
+
+const DAY_MS = 86_400_000;
+
+/** Inclusive day count from `from` to `to` (0 or less when from > to), computed arithmetically. */
+export function daySpan(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1;
+}
+
+/**
+ * Inclusive list of calendar dates from `from` to `to`. Compares epoch milliseconds (not strings, which
+ * mis-sort past year 9999) and refuses to build more than `maxDays` entries.
+ */
+export function dateRange(from: string, to: string, maxDays = 400): string[] {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) throw new RangeError('dateRange: invalid date');
+  if ((end - start) / DAY_MS + 1 > maxDays) throw new RangeError(`dateRange: more than ${maxDays} days`);
+  const out: string[] = [];
+  for (let t = start; t <= end && out.length < maxDays; t += DAY_MS) out.push(new Date(t).toISOString().slice(0, 10));
+  return out;
+}
+
+/** Previous calendar date (YYYY-MM-DD). */
+export function prevDate(date: string): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}

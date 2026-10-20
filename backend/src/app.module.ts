@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProgressModule } from './progress/progress.module';
 import { ProfileModule } from './profile/profile.module';
 import { PlansModule } from './workout-plans/plans.module';
 import { SessionsModule } from './workout-sessions/sessions.module';
@@ -27,6 +28,7 @@ import { XpModule } from './xp/xp.module';
     SessionsModule,
     XpModule,
     NutritionModule,
+    ProgressModule,
   ],
 })
 export class AppModule {}

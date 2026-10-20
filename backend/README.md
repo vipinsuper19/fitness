@@ -122,3 +122,16 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 - **Retries:** creating a food log or water log requires an Idempotency-Key; other writes take one optionally.
 - **Ownership:** another user's entries are 404.
 - **Offline session starts:** `POST /workout-sessions` rejects a `startedAt` more than 24 h old.
+
+## Progress (T15, backend)
+- **Body measurements:** `/body-measurements` CRUD, owner-only.
+  - Each entry needs a date and at least one measurement (kg, %, cm).
+  - `PATCH` is a partial update: a missing field stays unchanged, `null` clears it, and at least one measurement must remain (else 400).
+  - The list is newest first, with validated `{date, id}` cursors.
+- **Progress summary:** `GET /progress/summary?from&to` returns one point per local day (profile timezone), for at most 366 days. `null` means no data, never 0.
+  - **weight:** the day's latest measured weight.
+  - **energyKcal:** the day's logged kcal.
+  - **workoutsCompleted / activeMinutes:** completed sessions by local completion day.
+  - **xpEarned:** awards that day that weren't later reversed.
+- **Streak:** consecutive local days with a completed workout, ending today. If there's nothing yet today, the streak ending yesterday is returned.
+- **Daily nutrition:** `GET /nutrition/daily` now reports `entryCount` and `entriesMissing` (per optional nutrient), so a partial fibre, sugar or sodium total is visible.
