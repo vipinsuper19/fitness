@@ -1385,6 +1385,10 @@ components:
         version: { type: integer, minimum: 1 }
         name: { type: string }
         weeks: { type: integer }
+        rationale:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Optional rule-based explanation of the plan (split, volume, equipment), shown to users. Null for plans saved without one.
         workouts: { type: array, items: { $ref: '#/components/schemas/PlannedWorkout' } }
         isActive: { type: boolean }
         source: { type: string, enum: [rule_based, custom] }

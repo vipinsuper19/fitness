@@ -182,6 +182,19 @@ describeDb('T10: profile, goals, exercises, workout plans (HTTP + Postgres)', ()
       expect(seen).toEqual(all.items.map((e: { id: string }) => e.id));
       const bad = await as(alice).get('/api/v1/exercises?cursor=garbage').expect(400);
       expect(bad.body.details.fields).toHaveProperty('cursor');
+      const forge = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
+      for (const c of [
+        forge({ name: 'Push-up', id: 'x' }),
+        forge({ name: 'x'.repeat(121), id: randomUUID() }),
+        forge({ name: 1, id: randomUUID() }),
+        forge(['Push-up', randomUUID()]),
+      ]) {
+        const r = await as(alice).get(`/api/v1/exercises?cursor=${c}`).expect(400);
+        expect(r.body.code).toBe('VALIDATION_FAILED');
+        expect(r.body.details.fields).toHaveProperty('cursor');
+      }
+      // A well-formed forged cursor is just a position.
+      await as(alice).get(`/api/v1/exercises?cursor=${forge({ name: 'M', id: randomUUID() })}`).expect(200);
       await as(alice).get('/api/v1/exercises?limit=101').expect(400);
       await as(alice).get('/api/v1/exercises?muscle=neck').expect(400);
     });
