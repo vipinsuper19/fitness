@@ -90,7 +90,7 @@ describeDb('database schema (migrated Postgres)', () => {
   it('upserts set logs by client set id and stores one row', async () => {
     const user = await newUser('sets');
     const exercise = await prisma.exercise.findFirstOrThrow();
-    const session = await prisma.workoutSession.create({ data: { userId: user.id, startedAt: new Date() } });
+    const session = await prisma.workoutSession.create({ data: { userId: user.id, startedAt: new Date(), activeSince: new Date() } });
     const clientSetId = '1b4e28ba-2fa1-41d2-883f-0016d3cca427';
     const where = { userId_clientSetId: { userId: user.id, clientSetId } };
     const base = { sessionId: session.id, userId: user.id, clientSetId, exerciseId: exercise.id, setIndex: 0 };
@@ -217,7 +217,7 @@ describeDb('database schema (migrated Postgres)', () => {
     await prisma.refreshToken.create({ data: { userId: user.id, familyId: crypto.randomUUID(), tokenHash: 'f'.repeat(64), expiresAt: new Date(Date.now() + 60_000) } });
     await prisma.fitnessGoal.create({ data: { userId: user.id, type: 'lose_weight', targetValue: 70 } });
     const session = await prisma.workoutSession.create({
-      data: { userId: user.id, planVersionId: version.id, plannedWorkoutId: version.workouts[0]!.id, startedAt: new Date() },
+      data: { userId: user.id, planVersionId: version.id, plannedWorkoutId: version.workouts[0]!.id, startedAt: new Date(), activeSince: new Date() },
     });
     await prisma.exerciseSetLog.create({ data: { sessionId: session.id, userId: user.id, clientSetId: crypto.randomUUID(), exerciseId: exercise.id, setIndex: 0, reps: 10, completed: true } });
     const customFood = await prisma.foodItem.create({

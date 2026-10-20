@@ -337,6 +337,9 @@ model WorkoutSession {
   status              SessionStatus @default(in_progress)
   startedAt           DateTime      @map("started_at") @db.Timestamptz(3)
   pausedAt            DateTime?     @map("paused_at") @db.Timestamptz(3)
+  /// Start of the current running segment (null while paused or completed);
+  /// activeSeconds gets now - activeSince added on pause and on completion.
+  activeSince         DateTime?     @map("active_since") @db.Timestamptz(3)
   completedAt         DateTime?     @map("completed_at") @db.Timestamptz(3)
   /// Active time, paused time excluded.
   activeSeconds       Int           @default(0) @map("active_seconds")

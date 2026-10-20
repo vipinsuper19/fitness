@@ -16,3 +16,14 @@ export const IdempotencyKeyHeader = createParamDecorator((_: unknown, ctx: Execu
   }
   return value.toLowerCase();
 });
+
+/** Required `Idempotency-Key` (offline-synced and XP-affecting writes). */
+export const RequiredIdempotencyKey = createParamDecorator((_: unknown, ctx: ExecutionContext): string => {
+  const value = ctx.switchToHttp().getRequest<Request>().header('idempotency-key');
+  if (value === undefined || value === '' || !UUID.test(value)) {
+    throw new ApiError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Idempotency-Key is required and must be a UUID.', {
+      fields: { 'Idempotency-Key': value ? 'must be a UUID' : 'is required for this request' },
+    });
+  }
+  return value.toLowerCase();
+});

@@ -589,6 +589,23 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [workout-sessions]
+      operationId: discardWorkoutSession
+      summary: Discard a session logged by mistake (reverses its XP)
+      description: |
+        Deletes the session and its sets. If the session awarded XP, the
+        server writes one negative `adjustment` whose `sourceId` is the award.
+        The award stays in the ledger, so the session can never be awarded
+        again. The client never writes XP.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      responses:
+        '204': { description: Discarded }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
   /workout-sessions/{sessionId}/sets:
     post:
       tags: [workout-sessions]
@@ -613,7 +630,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: '`SESSION_COMPLETED`, or an idempotency conflict'
+          description: '`SESSION_COMPLETED`, `CLIENT_SET_CONFLICT` (the `clientSetId` belongs to a set in another session), or an idempotency conflict'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -640,6 +657,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionCompleteResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }

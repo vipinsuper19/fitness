@@ -89,3 +89,22 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
   - `activate` sets the single `user_profiles.active_plan_id`
 - **Retries:** every write here takes an optional `Idempotency-Key`, handled by `IdempotentWriteService`. A replay returns the stored status and body with `Idempotent-Replayed: true`. A different body, method or path is `409 IDEMPOTENCY_KEY_REUSED`.
 - **XP:** nothing here awards XP; that comes with session completion in T12.
+
+## Workout sessions and XP (T12)
+- **Start:** `POST /workout-sessions` (Idempotency-Key required).
+  - Can start from one of your own planned workouts; the session records the plan version it followed.
+  - Offline start times are accepted but must not be in the future (5 minutes of clock skew allowed).
+- **Sets:** `POST /workout-sessions/{id}/sets` upserts by the device's `clientSetId`.
+  - Re-sending a `clientSetId` replaces that set.
+  - Using a `clientSetId` in another session is `409 CLIENT_SET_CONFLICT`.
+- **Pause and resume:** `PATCH` pauses or resumes. `activeSeconds` counts only running time (`active_since` marks the running segment) and is capped at 24 h.
+- **Complete:** `POST /{id}/complete` is the only call that awards XP. It runs in one transaction under a row lock, writing the award with `sourceId` = session id.
+  - Rule: 20 base + 2 per completed set (max 30 sets) + 1 per 5 active minutes (max 20), capped at 100.
+  - A session with no completed sets is `422 SESSION_EMPTY`.
+  - Completing again returns the original `xpAwarded`, and completed sessions are read-only (`409 SESSION_COMPLETED`).
+- **Discard:** `DELETE /workout-sessions/{id}` is the correction path.
+  - A completed session's award is reversed by one `adjustment` whose `sourceId` is the award.
+  - The award stays in the ledger, so the session can never be awarded again.
+- **History:** `GET /workout-sessions/history` lists completed sessions, newest first. `from` and `to` are local dates in the profile's timezone (IST by default). Cursors are validated.
+- **XP:** `GET /xp/balance` and `GET /xp/ledger` are read-only. Reaching level n+1 from level n takes 100 × n XP.
+- **Local testing:** the concurrency tests (row locks, parallel completion) need a real Postgres. PGlite shares one session across connections, so use CI's Postgres service or a local Postgres 16.
