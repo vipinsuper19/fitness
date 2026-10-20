@@ -139,5 +139,12 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 ## Data export (T7 follow-up)
 - `GET /me/export` returns only the signed-in user's own data: user, profile, goals, every plan version, sessions with set logs, custom foods, food and water logs, body measurements and the XP ledger.
 - It never includes password hashes, refresh tokens or idempotency records, because every collection goes through an explicit view.
-- Each collection is capped at 5000 rows, newest kept: plan versions at 1000, and sets at 500 per session. Any collection that was cut is listed in `truncated`.
+- Bounded, newest-first, with queries run one after another:
+  - `EXPORT_MAX_ROWS`: 5000 rows per collection
+  - `EXPORT_MAX_SESSIONS`: 2000 sessions
+  - `EXPORT_MAX_PLAN_VERSIONS`: 200 plan versions
+  - `EXPORT_MAX_SETS_TOTAL`: 20000 set logs in total
+  - `EXPORT_MAX_PLAN_EXERCISES_TOTAL`: 10000 planned exercises in total
+- Anything cut is listed in `truncated`. The nested caps are reported as `workoutSessions.sets` and `workoutPlans.exercises`.
+- Worst case is roughly 40k rows and about 15–20 MB of JSON, under about 100 MB of peak heap.
 - Rate-limited per user: `EXPORT_RATE_LIMIT_PER_HOUR`, default 5. The response is sent with `Cache-Control: no-store`.

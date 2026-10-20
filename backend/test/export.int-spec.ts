@@ -13,7 +13,6 @@ import { parse } from 'yaml';
 
 import { seed } from '../prisma/seed';
 import { seedId } from '../prisma/seed-data/ids';
-import { EXPORT_MAX_ROWS } from '../src/me/export.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './helpers';
 
@@ -134,16 +133,59 @@ describeDb('GET /me/export (HTTP + Postgres)', () => {
     expect(allKeys.filter((k) => SECRET_KEYS.test(k))).toEqual([]);
   });
 
-  it('caps each collection and names the ones it cut', async () => {
-    const u = await signUp();
-    const base = Date.parse('2010-01-01T00:00:00Z');
-    await prisma.waterLog.createMany({
-      data: Array.from({ length: EXPORT_MAX_ROWS + 1 }, (_, i) => ({ userId: u.id, date: new Date(base + Math.floor(i / 3) * 86_400_000), amountMl: 100 })),
+  it('caps rows, total sets and total plan exercises, naming what it cut', async () => {
+    const capped = await createTestApp({
+      env: { EXPORT_MAX_ROWS: '5', EXPORT_MAX_SESSIONS: '3', EXPORT_MAX_PLAN_VERSIONS: '2', EXPORT_MAX_SETS_TOTAL: '4', EXPORT_MAX_PLAN_EXERCISES_TOTAL: '3' },
     });
-    const body = (await as(u.token).get('/api/v1/me/export').expect(200)).body;
-    expect(body.waterLogs).toHaveLength(EXPORT_MAX_ROWS);
-    expect(body.truncated).toEqual(['waterLogs']);
-    expect(body.waterLogs[0].date >= body.waterLogs.at(-1).date).toBe(true); // newest kept
+    try {
+      const h = () => request(capped.getHttpServer());
+      const reg = (await h().post('/api/v1/auth/register').send({ email: `export-cap-${randomUUID()}@example.in`, password: PASSWORD }).expect(201)).body;
+      const userId = reg.user.id as string;
+      const get = () => h().get('/api/v1/me/export').set('Authorization', `Bearer ${reg.accessToken}`);
+
+      // Under every cap: nothing is cut.
+      expect((await get().expect(200)).body.truncated).toEqual([]);
+
+      // 2 sessions x 3 sets = 6 sets > total cap of 4 (sessions themselves stay under their cap of 3).
+      const exerciseId = seedId('exercise', 'push-up');
+      const t0 = Date.parse('2026-10-01T06:00:00Z');
+      for (let i = 0; i < 2; i += 1) {
+        const s = await prisma.workoutSession.create({ data: { userId, startedAt: new Date(t0 + i * 86_400_000), status: 'completed', completedAt: new Date(t0 + i * 86_400_000 + 600_000) } });
+        await prisma.exerciseSetLog.createMany({
+          data: [0, 1, 2].map((k) => ({ sessionId: s.id, userId, clientSetId: randomUUID(), exerciseId, setIndex: k, reps: 10, completed: true, loggedAt: new Date(t0 + i * 86_400_000 + k * 60_000) })),
+        });
+      }
+      // 6 water logs > row cap of 5.
+      await prisma.waterLog.createMany({ data: Array.from({ length: 6 }, (_, i) => ({ userId, date: new Date(Date.UTC(2026, 9, 1 + i)), amountMl: 100 })) });
+      // A plan with one workout of 2 exercises, then a second version: 4 planned exercises > total cap of 3.
+      const draft = (await h().post('/api/v1/workout-plans/generate').set('Authorization', `Bearer ${reg.accessToken}`).send({ goal: 'gain_muscle', experienceLevel: 'beginner', daysPerWeek: 3, sessionMinutes: 45, equipment: ['dumbbell', 'bench'] }).expect(200)).body;
+      const small = { ...draft, workouts: [{ ...draft.workouts[0], exercises: draft.workouts[0].exercises.slice(0, 2) }] };
+      const plan = (await h().post('/api/v1/workout-plans').set('Authorization', `Bearer ${reg.accessToken}`).set('Idempotency-Key', randomUUID()).send(small).expect(201)).body;
+      await h().patch(`/api/v1/workout-plans/${plan.id}`).set('Authorization', `Bearer ${reg.accessToken}`).send({ ...small, name: 'v2', baseVersion: 1 }).expect(200);
+
+      const body = (await get().expect(200)).body;
+      expect(validateExport(body)).toBe(true);
+      expect(body.truncated).toEqual(expect.arrayContaining(['workoutSessions.sets', 'workoutPlans.exercises', 'waterLogs']));
+      expect(body.truncated).not.toContain('workoutSessions');
+      expect(body.truncated).not.toContain('workoutPlans');
+      // Newest sets are kept: all 3 of the newer session, 1 of the older; each session's sets in set order.
+      const [newer, older] = body.workoutSessions;
+      expect(newer.sets.map((x: { setIndex: number }) => x.setIndex)).toEqual([0, 1, 2]);
+      expect(older.sets.map((x: { setIndex: number }) => x.setIndex)).toEqual([2]);
+      // Newest plan version keeps its exercises; the older one is cut down to the remainder.
+      const counts = body.workoutPlans.map((p: { version: number; workouts: { exercises: unknown[] }[] }) => [p.version, p.workouts[0]!.exercises.length]);
+      expect(counts).toEqual([[2, 2], [1, 1]]);
+      expect(body.waterLogs).toHaveLength(5);
+      expect(body.waterLogs[0].date).toBe('2026-10-06'); // newest kept
+
+      // A third version pushes versions over their cap of 2.
+      await h().patch(`/api/v1/workout-plans/${plan.id}`).set('Authorization', `Bearer ${reg.accessToken}`).send({ ...small, name: 'v3', baseVersion: 2 }).expect(200);
+      const again = (await get().expect(200)).body;
+      expect(again.truncated).toContain('workoutPlans');
+      expect(again.workoutPlans.map((p: { version: number }) => p.version)).toEqual([3, 2]);
+    } finally {
+      await capped.close();
+    }
   });
 
   it('requires a signed-in user', async () => {

@@ -19,9 +19,15 @@ export const envSchema = z.object({
   /** Requests per minute per client IP on auth and account routes. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
   /** Looser per-IP limit for POST /auth/refresh (apps refresh on every launch). */
+  AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
   /** GET /me/export requests allowed per user per hour. */
   EXPORT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(5),
-  AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  /** GET /me/export caps (newest rows kept; cut collections are listed in `truncated`). */
+  EXPORT_MAX_ROWS: z.coerce.number().int().positive().max(50_000).default(5000),
+  EXPORT_MAX_SESSIONS: z.coerce.number().int().positive().max(50_000).default(2000),
+  EXPORT_MAX_PLAN_VERSIONS: z.coerce.number().int().positive().max(10_000).default(200),
+  EXPORT_MAX_SETS_TOTAL: z.coerce.number().int().positive().max(200_000).default(20_000),
+  EXPORT_MAX_PLAN_EXERCISES_TOTAL: z.coerce.number().int().positive().max(100_000).default(10_000),
   /** Failed logins allowed per account per 15 minutes before 429. */
   LOGIN_MAX_FAILURES_PER_ACCOUNT: z.coerce.number().int().positive().default(5),
   /** Proxy hops in front of the app (Render: 1, per Render's docs). Sets Express `trust proxy`. */
