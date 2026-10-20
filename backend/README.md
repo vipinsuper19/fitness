@@ -108,3 +108,17 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 - **History:** `GET /workout-sessions/history` lists completed sessions, newest first. `from` and `to` are local dates in the profile's timezone (IST by default). Cursors are validated.
 - **XP:** `GET /xp/balance` and `GET /xp/ledger` are read-only. Reaching level n+1 from level n takes 100 × n XP.
 - **Local testing:** the concurrency tests (row locks, parallel completion) need a real Postgres. PGlite shares one session across connections, so use CI's Postgres service or a local Postgres 16.
+
+## Nutrition (T14, backend)
+- **Food search:** `GET /foods/search?query` covers the seeded Indian-first catalog plus your own custom foods, by English or Hindi name, brand or slug. Cursors are validated.
+- **Custom foods:** `POST /foods` creates one, visible only to you.
+- **Food log** (`/food-logs`):
+  - Nutrients are the food's per-serving values × servings, rounded to 0.1.
+  - `nutrientsOverride` stores your own totals (`nutrientsEdited: true`) and survives servings edits; `null` restores the computed values.
+  - The day is a local calendar date.
+- **Water:** `/water-logs` stores millilitres, 1–5000 per entry.
+- **Daily totals:** `GET /nutrition/daily?date` totals the day and each meal against the profile targets. An optional nutrient (fibre, sugar, sodium) stays `null` unless some entry has it.
+- **Limits:** input nutrients are capped per serving (5000 kcal, 900 g per macro, 9000 mg sodium), so 100 servings fit the diary columns.
+- **Retries:** creating a food log or water log requires an Idempotency-Key; other writes take one optionally.
+- **Ownership:** another user's entries are 404.
+- **Offline session starts:** `POST /workout-sessions` rejects a `startedAt` more than 24 h old.

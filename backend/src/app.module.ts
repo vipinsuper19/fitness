@@ -6,6 +6,7 @@ import { ExercisesModule } from './exercises/exercises.module';
 import { GoalsModule } from './goals/goals.module';
 import { HealthModule } from './health/health.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
+import { NutritionModule } from './nutrition/nutrition.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProfileModule } from './profile/profile.module';
 import { PlansModule } from './workout-plans/plans.module';
@@ -25,6 +26,7 @@ import { XpModule } from './xp/xp.module';
     PlansModule,
     SessionsModule,
     XpModule,
+    NutritionModule,
   ],
 })
 export class AppModule {}

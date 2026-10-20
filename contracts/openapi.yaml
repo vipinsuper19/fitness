@@ -787,7 +787,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
-        '204': { description: Deleted (also for an already deleted entry) }
+        '204': { description: 'Deleted. A retry with the same Idempotency-Key replays 204, so an already deleted entry is safe to retry; without a key, a missing or another user''s id is 404.' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
   /water-logs:
@@ -1420,7 +1420,10 @@ components:
       properties:
         plannedWorkoutId: { $ref: '#/components/schemas/Id' }
         planVersion: { type: integer, minimum: 1 }
-        startedAt: { type: string, format: date-time, description: Client time for offline starts; defaults to server time }
+        startedAt:
+          type: string
+          format: date-time
+          description: Client time for offline starts; defaults to server time. Must be within the last 24 hours (up to 5 minutes ahead is allowed for clock skew); otherwise `400 VALIDATION_FAILED` with `details.fields.startedAt`.
     SessionUpdate:
       type: object
       properties:
@@ -1484,7 +1487,11 @@ components:
       enum: [breakfast, lunch, dinner, snack]
     Nutrients:
       type: object
-      description: Per one `servingSize` of `servingUnit`
+      description: |
+        Per one `servingSize` of `servingUnit` on a food; totals on a log entry or a day.
+        As input (`FoodCreate.nutrients`, `nutrientsOverride`) each value has at most one
+        decimal place and is capped at 5000 kcal, 900 g for each macro and 9000 mg of sodium,
+        so 100 servings still fit the diary; larger values are `400 VALIDATION_FAILED`.
       required: [energyKcal, proteinG, carbsG, fatG]
       properties:
         energyKcal: { type: number, minimum: 0 }
