@@ -1,0 +1,41 @@
+name: android
+
+on:
+  pull_request:
+    paths: ["android/**", ".github/workflows/android.yml"]
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for Gradle build
+        id: guard
+        run: |
+          if [ -f settings.gradle.kts ] || [ -f settings.gradle ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "No Gradle build in android/ yet; skipping."; fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - if: steps.guard.outputs.present == 'true'
+        uses: gradle/actions/setup-gradle@v4
+      - name: Assemble and unit test
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug testDebugUnitTest
