@@ -26,7 +26,11 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "Fitness"
 include(":app")
+include(":core:common")
+include(":core:database")
+include(":core:datastore")
 include(":core:designsystem")
+include(":core:network")
 include(":feature:home")
 include(":feature:workout")
 include(":feature:nutrition")
