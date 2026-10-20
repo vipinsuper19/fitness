@@ -20,7 +20,7 @@ export interface PublicUser {
 
 export type AuthResponse = TokenPair & { user: PublicUser };
 
-function toPublicUser(user: { id: string; email: string; displayName: string | null; createdAt: Date }): PublicUser {
+export function toPublicUser(user: { id: string; email: string; displayName: string | null; createdAt: Date }): PublicUser {
   return { id: user.id, email: user.email, displayName: user.displayName, createdAt: user.createdAt.toISOString() };
 }
 

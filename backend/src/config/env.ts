@@ -19,6 +19,8 @@ export const envSchema = z.object({
   /** Requests per minute per client IP on auth and account routes. */
   AUTH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
   /** Looser per-IP limit for POST /auth/refresh (apps refresh on every launch). */
+  /** GET /me/export requests allowed per user per hour. */
+  EXPORT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(5),
   AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
   /** Failed logins allowed per account per 15 minutes before 429. */
   LOGIN_MAX_FAILURES_PER_ACCOUNT: z.coerce.number().int().positive().default(5),

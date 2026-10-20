@@ -16,7 +16,7 @@ export interface XpEntryView {
   createdAt: string;
 }
 
-const toView = (x: XPTransaction): XpEntryView => ({
+export const toXpView = (x: XPTransaction): XpEntryView => ({
   id: x.id,
   sourceType: x.sourceType,
   sourceId: x.sourceId,
@@ -54,7 +54,7 @@ export class XpService {
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return {
-      items: page.map(toView),
+      items: page.map(toXpView),
       nextCursor: rows.length > limit && last ? encodeCursor({ t: last.createdAt.toISOString(), id: last.id }) : null,
     };
   }

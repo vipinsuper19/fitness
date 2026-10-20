@@ -135,3 +135,9 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
   - **xpEarned:** awards that day that weren't later reversed.
 - **Streak:** consecutive local days with a completed workout, ending today. If there's nothing yet today, the streak ending yesterday is returned.
 - **Daily nutrition:** `GET /nutrition/daily` now reports `entryCount` and `entriesMissing` (per optional nutrient), so a partial fibre, sugar or sodium total is visible.
+
+## Data export (T7 follow-up)
+- `GET /me/export` returns only the signed-in user's own data: user, profile, goals, every plan version, sessions with set logs, custom foods, food and water logs, body measurements and the XP ledger.
+- It never includes password hashes, refresh tokens or idempotency records, because every collection goes through an explicit view.
+- Each collection is capped at 5000 rows, newest kept: plan versions at 1000, and sets at 500 per session. Any collection that was cut is listed in `truncated`.
+- Rate-limited per user: `EXPORT_RATE_LIMIT_PER_HOUR`, default 5. The response is sent with `Cache-Control: no-store`.

@@ -43,7 +43,7 @@ export const MAX_SUMMARY_DAYS = 366;
 /** How far back the streak is followed. */
 const STREAK_LOOKBACK_DAYS = 400;
 
-const toView = (m: BodyMeasurement): MeasurementView => ({
+export const toMeasurementView = (m: BodyMeasurement): MeasurementView => ({
   id: m.id,
   date: isoDate(m.date)!,
   weightKg: num(m.weightKg),
@@ -87,17 +87,17 @@ export class ProgressService {
     });
     const page = rows.slice(0, limit);
     const last = page.at(-1);
-    return { items: page.map(toView), nextCursor: rows.length > limit && last ? encodeCursor({ d: isoDate(last.date)!, id: last.id }) : null };
+    return { items: page.map(toMeasurementView), nextCursor: rows.length > limit && last ? encodeCursor({ d: isoDate(last.date)!, id: last.id }) : null };
   }
 
   async get(userId: string, id: string): Promise<MeasurementView> {
     const row = await this.prisma.bodyMeasurement.findFirst({ where: { id, userId } });
     if (!row) throw notFound('Measurement');
-    return toView(row);
+    return toMeasurementView(row);
   }
 
   async create(userId: string, dto: BodyMeasurementDto): Promise<MeasurementView> {
-    return toView(await this.prisma.bodyMeasurement.create({ data: { userId, ...measurementData(dto) } }));
+    return toMeasurementView(await this.prisma.bodyMeasurement.create({ data: { userId, ...measurementData(dto) } }));
   }
 
   /** Partial update: a missing field stays unchanged, null clears it; at least one measurement must remain. */
@@ -116,7 +116,7 @@ export class ProgressService {
       }
       const { count } = await tx.bodyMeasurement.updateMany({ where: { id, userId }, data });
       if (count !== 1) throw notFound('Measurement');
-      return toView((await tx.bodyMeasurement.findFirst({ where: { id, userId } }))!);
+      return toMeasurementView((await tx.bodyMeasurement.findFirst({ where: { id, userId } }))!);
     });
   }
 

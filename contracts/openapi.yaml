@@ -203,6 +203,12 @@ paths:
       tags: [me]
       operationId: exportMyData
       summary: Export all of the user's data as JSON
+      description: >-
+        Only the signed-in user's own data; never password hashes, refresh tokens or idempotency records.
+        `workoutPlans` has one entry per plan version (same `id`, different `version`), newest first.
+        Each collection holds at most 5000 rows (plan versions 1000, sets 500 per session), newest kept;
+        any collection that hit its cap is named in `truncated`. Rate-limited per user (default 5 per hour,
+        `429 RATE_LIMITED` with `Retry-After`). Sent with `Cache-Control: no-store`.
       responses:
         '200':
           description: Full export
@@ -1291,6 +1297,10 @@ components:
         waterLogs: { type: array, items: { $ref: '#/components/schemas/WaterLog' } }
         bodyMeasurements: { type: array, items: { $ref: '#/components/schemas/BodyMeasurement' } }
         xpLedger: { type: array, items: { $ref: '#/components/schemas/XpTransaction' } }
+        truncated:
+          type: array
+          items: { type: string }
+          description: Collections cut at their cap, e.g. `foodLogs` or `workoutSessions.sets`; empty when complete.
 
     GoalType:
       type: string

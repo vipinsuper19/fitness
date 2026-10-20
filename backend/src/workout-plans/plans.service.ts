@@ -35,14 +35,14 @@ export interface PlanView {
   createdAt: string;
 }
 
-const versionInclude = {
+export const versionInclude = {
   workouts: { orderBy: { order: 'asc' }, include: { exercises: { orderBy: { order: 'asc' } } } },
 } satisfies Prisma.WorkoutPlanVersionInclude;
 
 type VersionRow = Prisma.WorkoutPlanVersionGetPayload<{ include: typeof versionInclude }>;
 type PlanRow = { id: string; source: 'rule_based' | 'custom'; createdAt: Date };
 
-function toView(plan: PlanRow, v: VersionRow, activePlanId: string | null): PlanView {
+export function toPlanView(plan: PlanRow, v: VersionRow, activePlanId: string | null): PlanView {
   return {
     id: plan.id,
     version: v.version,
@@ -94,7 +94,7 @@ export class PlansService {
       include: { versions: { include: versionInclude } },
     });
     const active = await this.activePlanId(userId);
-    return toView(plan, plan.versions[0]!, active);
+    return toPlanView(plan, plan.versions[0]!, active);
   }
 
   async get(userId: string, planId: string, version?: number): Promise<PlanView> {
@@ -105,7 +105,7 @@ export class PlansService {
       include: versionInclude,
     });
     if (!v) throw notFound('Plan version');
-    return toView(plan, v, await this.activePlanId(userId));
+    return toPlanView(plan, v, await this.activePlanId(userId));
   }
 
   async active(userId: string): Promise<PlanView | null> {

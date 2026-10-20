@@ -19,7 +19,7 @@ export const MAX_ACTIVE_SECONDS = 24 * 60 * 60;
 /** Offline starts may be back-dated by at most a day. */
 export const MAX_START_AGE_MS = 24 * 60 * 60 * 1000;
 
-const sessionInclude = {
+export const sessionInclude = {
   planVersion: { select: { planId: true, version: true } },
   sets: { orderBy: [{ setIndex: 'asc' }, { loggedAt: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.WorkoutSessionInclude;
@@ -80,7 +80,7 @@ function liveActiveSeconds(s: { activeSeconds: number; activeSince: Date | null 
   return Math.min(MAX_ACTIVE_SECONDS, s.activeSeconds + running);
 }
 
-function toView(s: SessionRow, now = new Date()): SessionView {
+export function toSessionView(s: SessionRow, now = new Date()): SessionView {
   return {
     id: s.id,
     planId: s.planVersion?.planId ?? null,
@@ -132,13 +132,13 @@ export class SessionsService {
       data: { userId, planVersionId, plannedWorkoutId: dto.plannedWorkoutId ?? null, startedAt, activeSince: startedAt },
       include: sessionInclude,
     });
-    return toView(row, now);
+    return toSessionView(row, now);
   }
 
   async get(userId: string, id: string, db: PrismaService | Tx = this.prisma): Promise<SessionView> {
     const row = await db.workoutSession.findFirst({ where: { id, userId }, include: sessionInclude });
     if (!row) throw notFound('Session');
-    return toView(row);
+    return toSessionView(row);
   }
 
   /** Pause, resume or edit notes. Pausing banks the running segment; paused time never counts. */
@@ -271,7 +271,7 @@ export class SessionsService {
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return {
-      items: page.map((r) => toView(r)),
+      items: page.map((r) => toSessionView(r)),
       nextCursor: rows.length > limit && last?.completedAt ? encodeCursor({ t: last.completedAt.toISOString(), id: last.id }) : null,
     };
   }
