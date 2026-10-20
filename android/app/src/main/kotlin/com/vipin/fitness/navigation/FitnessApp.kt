@@ -22,7 +22,7 @@ import com.vipin.fitness.feature.workout.WorkoutScreen
 /** App shell: Material 3 scaffold with a bottom navigation bar over the four top-level tabs. */
 @Composable
 fun FitnessApp(modifier: Modifier = Modifier) {
-    var current by rememberSaveable { mutableStateOfDestination(TopLevelDestination.START) }
+    var current by rememberSaveable { mutableStateOf(TopLevelDestination.START) }
     Scaffold(
         modifier = modifier,
         bottomBar = {
@@ -49,6 +49,3 @@ fun FitnessApp(modifier: Modifier = Modifier) {
         }
     }
 }
-
-private fun mutableStateOfDestination(start: TopLevelDestination) =
-    mutableStateOf(start)

@@ -18,8 +18,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing placeholder (no tester/Play build yet). When needed, uncomment and supply
+    // values via env vars or android/local.properties (never commit keystores or passwords):
+    // signingConfigs {
+    //     create("release") {
+    //         val props = java.util.Properties().apply {
+    //             rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    //         }
+    //         fun secret(key: String) = System.getenv(key) ?: props.getProperty(key)
+    //         storeFile = secret("FITNESS_KEYSTORE_PATH")?.let { file(it) }
+    //         storePassword = secret("FITNESS_KEYSTORE_PASSWORD")
+    //         keyAlias = secret("FITNESS_KEY_ALIAS")
+    //         keyPassword = secret("FITNESS_KEY_PASSWORD")
+    //     }
+    // }
+
     buildTypes {
         release {
+            // signingConfig = signingConfigs.getByName("release")
             optimization { enable = false }
         }
     }
