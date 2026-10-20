@@ -14,6 +14,8 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     JWT_ACCESS_SECRET: 'test-access-secret-0123456789abcdef',
     JWT_REFRESH_SECRET: 'test-refresh-secret-0123456789abcdef',
     AUTH_RATE_LIMIT_PER_MINUTE: '1000',
+    AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: '1000',
+    LOGIN_MAX_FAILURES_PER_ACCOUNT: '1000',
     ...overrides,
   });
 }

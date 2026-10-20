@@ -6,7 +6,10 @@ import { JwtService } from '@nestjs/jwt';
 import { ApiError } from '../common/api-error';
 import { ENV } from '../config/config.module';
 import type { Env } from '../config/env';
+import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+
+type Db = PrismaService | Prisma.TransactionClient;
 
 export const JWT_ISSUER = 'fitness-api';
 export const JWT_AUDIENCE = 'fitness-app';
@@ -41,17 +44,23 @@ export class TokenService {
     @Inject(ENV) private readonly env: Env,
   ) {}
 
-  async issue(userId: string, familyId: string = randomUUID()): Promise<TokenPair> {
+  async issue(userId: string, familyId: string = randomUUID(), db: Db = this.prisma): Promise<TokenPair> {
+    const { refreshToken } = await this.createRefresh(db, userId, familyId);
+    return { accessToken: await this.signAccess(userId), refreshToken, tokenType: 'Bearer', expiresIn: this.env.JWT_ACCESS_TTL_SECONDS };
+  }
+
+  private async createRefresh(db: Db, userId: string, familyId: string): Promise<{ id: string; refreshToken: string }> {
     const refreshToken = randomBytes(32).toString('base64url');
-    await this.prisma.refreshToken.create({
+    const row = await db.refreshToken.create({
       data: {
         userId,
         familyId,
         tokenHash: hashRefreshToken(refreshToken),
         expiresAt: new Date(Date.now() + this.env.JWT_REFRESH_TTL_DAYS * 86_400_000),
       },
+      select: { id: true },
     });
-    return { accessToken: await this.signAccess(userId), refreshToken, tokenType: 'Bearer', expiresIn: this.env.JWT_ACCESS_TTL_SECONDS };
+    return { id: row.id, refreshToken };
   }
 
   signAccess(userId: string): Promise<string> {
@@ -97,23 +106,37 @@ export class TokenService {
     if (row.expiresAt <= now) {
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'REFRESH_TOKEN_EXPIRED', 'Sign in again.');
     }
-    // Claim the token atomically; a concurrent rotation of the same token
-    // loses this race and is treated as reuse.
-    const claimed = await this.prisma.refreshToken.updateMany({
-      where: { id: row.id, revokedAt: null },
-      data: { revokedAt: now },
+    // Claim, issue and link in one transaction: either the old token is
+    // revoked AND its successor exists and is linked, or nothing changed.
+    // A concurrent rotation of the same token loses the claim and is treated
+    // as reuse. No grace window: clients serialise refreshes, and a window
+    // would let a stolen token be replayed undetected inside it.
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.refreshToken.updateMany({
+        where: { id: row.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      if (claimed.count !== 1) return null;
+      const next = await this.createRefresh(tx, row.userId, row.familyId);
+      await tx.refreshToken.update({ where: { id: row.id }, data: { replacedById: next.id } });
+      return next;
     });
-    if (claimed.count !== 1) {
+    if (!outcome) {
+      // Outside the transaction so the family revoke is not rolled back.
       await this.revokeFamily(row.familyId, now);
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'REFRESH_TOKEN_REUSED', 'Sign in again.');
     }
-    const pair = await this.issue(row.userId, row.familyId);
-    const next = await this.prisma.refreshToken.findUnique({
-      where: { tokenHash: hashRefreshToken(pair.refreshToken) },
-      select: { id: true },
-    });
-    await this.prisma.refreshToken.update({ where: { id: row.id }, data: { replacedById: next?.id ?? null } });
-    return pair;
+    return {
+      accessToken: await this.signAccess(row.userId),
+      refreshToken: outcome.refreshToken,
+      tokenType: 'Bearer',
+      expiresIn: this.env.JWT_ACCESS_TTL_SECONDS,
+    };
+  }
+
+  /** Revokes every live refresh token of a user (account deletion). */
+  async revokeAllForUser(userId: string, db: Db = this.prisma): Promise<void> {
+    await db.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
   /** Revokes one token (logout). Only the owner's token is touched. */

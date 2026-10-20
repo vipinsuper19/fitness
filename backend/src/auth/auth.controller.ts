@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 
 import { AuthResponse, AuthService } from './auth.service';
 import { CurrentUserId } from './current-user.decorator';
@@ -12,6 +12,7 @@ import type { TokenPair } from './token.service';
 @ApiTags('auth')
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
+@SkipThrottle({ refresh: true })
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
@@ -31,6 +32,8 @@ export class AuthController {
   }
 
   @Public()
+  // Looser 'refresh' bucket instead of the strict 'auth' one.
+  @SkipThrottle({ auth: true, refresh: false })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshDto): Promise<TokenPair> {
@@ -48,6 +51,7 @@ export class AuthController {
 @ApiTags('me')
 @Controller('me')
 @UseGuards(ThrottlerGuard)
+@SkipThrottle({ refresh: true })
 export class MeController {
   constructor(private readonly auth: AuthService) {}
 

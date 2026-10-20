@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 
+import { TokenService } from '../src/auth/token.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './helpers';
 
@@ -103,6 +104,12 @@ describeDb('auth (HTTP + Postgres)', () => {
     const first = (await register()).body;
     const second = (await http().post('/api/v1/auth/refresh').send({ refreshToken: first.refreshToken }).expect(200)).body;
     expect(second.refreshToken).not.toBe(first.refreshToken);
+    // Claim, issue and link happened together: the old row points at its successor.
+    const rows = await prisma.refreshToken.findMany({ where: { userId: first.user.id }, orderBy: { createdAt: 'asc' } });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.revokedAt).not.toBeNull();
+    expect(rows[0]!.replacedById).toBe(rows[1]!.id);
+    expect(rows[1]!.familyId).toBe(rows[0]!.familyId);
     const third = (await http().post('/api/v1/auth/refresh').send({ refreshToken: second.refreshToken }).expect(200)).body;
 
     const reuse = await http().post('/api/v1/auth/refresh').send({ refreshToken: first.refreshToken }).expect(401);
@@ -156,6 +163,61 @@ describeDb('auth (HTTP + Postgres)', () => {
     expect(await prisma.refreshToken.count({ where: { userId: me.user.id } })).toBe(0);
     await http().post('/api/v1/auth/login').send({ email: address, password }).expect(401);
     await http().post('/api/v1/auth/refresh').send({ refreshToken: me.refreshToken }).expect(401);
+  });
+
+  it('rejects a deleted user’s still-unexpired access token with 401 UNAUTHENTICATED', async () => {
+    const me = (await register()).body;
+    await http().delete('/api/v1/me').set('Authorization', `Bearer ${me.accessToken}`).send({ password }).expect(204);
+    const res = await http().post('/api/v1/auth/logout').set('Authorization', `Bearer ${me.accessToken}`).send({ refreshToken: me.refreshToken }).expect(401);
+    expect(res.body.code).toBe('UNAUTHENTICATED');
+    const again = await http().delete('/api/v1/me').set('Authorization', `Bearer ${me.accessToken}`).send({ password }).expect(401);
+    expect(again.body.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('revokes every refresh token explicitly on account deletion', async () => {
+    const address = email();
+    const me = (await register(address)).body;
+    await http().post('/api/v1/auth/login').send({ email: address, password }).expect(200);
+    const spy = jest.spyOn(app.get(TokenService), 'revokeAllForUser');
+    try {
+      await http().delete('/api/v1/me').set('Authorization', `Bearer ${me.accessToken}`).send({ password }).expect(204);
+      expect(spy).toHaveBeenCalledWith(me.user.id, expect.anything());
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await prisma.refreshToken.count({ where: { userId: me.user.id } })).toBe(0);
+  });
+
+  it('locks an account after repeated failed logins, even across IPs, and a success resets it', async () => {
+    const limited = await createTestApp({ env: { LOGIN_MAX_FAILURES_PER_ACCOUNT: '2' } });
+    try {
+      const h = () => request(limited.getHttpServer());
+      const address = email();
+      await h().post('/api/v1/auth/register').send({ email: address, password }).expect(201);
+      await h().post('/api/v1/auth/login').send({ email: address, password: 'wrong-wrong-1' }).expect(401);
+      await h().post('/api/v1/auth/login').send({ email: address, password }).expect(200); // resets
+      await h().post('/api/v1/auth/login').set('X-Forwarded-For', '203.0.113.1').send({ email: address, password: 'wrong-wrong-2' }).expect(401);
+      await h().post('/api/v1/auth/login').set('X-Forwarded-For', '203.0.113.2').send({ email: address, password: 'wrong-wrong-3' }).expect(401);
+      const locked = await h().post('/api/v1/auth/login').send({ email: address, password }).expect(429);
+      expect(locked.body.code).toBe('RATE_LIMITED');
+      expect(Number(locked.headers['retry-after'])).toBeGreaterThan(0);
+      // Other accounts are unaffected.
+      await h().post('/api/v1/auth/login').send({ email: email(), password }).expect(401);
+    } finally {
+      await limited.close();
+    }
+  });
+
+  it('gives refresh its own, looser bucket', async () => {
+    const limited = await createTestApp({ env: { AUTH_RATE_LIMIT_PER_MINUTE: '2', AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: '4' } });
+    try {
+      const h = () => request(limited.getHttpServer());
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i += 1) statuses.push((await h().post('/api/v1/auth/refresh').send({ refreshToken: `nope-${i}` })).status);
+      expect(statuses).toEqual([401, 401, 401, 401, 429]);
+    } finally {
+      await limited.close();
+    }
   });
 
   it('rate limits auth routes with 429 RATE_LIMITED and Retry-After', async () => {

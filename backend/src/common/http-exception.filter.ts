@@ -72,7 +72,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
     if (status === 429) {
       const retryAfter = res.getHeader('Retry-After');
-      if (!retryAfter) res.setHeader('Retry-After', '60');
+      const fromDetails = body.details?.retryAfterSeconds;
+      if (typeof fromDetails === 'number') res.setHeader('Retry-After', String(fromDetails));
+      else if (!retryAfter) res.setHeader('Retry-After', '60');
     }
     res.status(status).json(body);
   }

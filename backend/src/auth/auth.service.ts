@@ -5,6 +5,7 @@ import { Prisma } from '../generated/prisma/client';
 import { IdempotencyService, requestHash } from '../idempotency/idempotency.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginFailureLimiter } from './login-failure-limiter';
 import { PasswordService } from './password.service';
 import { TokenPair, TokenService } from './token.service';
 
@@ -23,6 +24,20 @@ function toPublicUser(user: { id: string; email: string; displayName: string | n
   return { id: user.id, email: user.email, displayName: user.displayName, createdAt: user.createdAt.toISOString() };
 }
 
+/** True only when the unique violation is on users.email (not some other unique index). */
+function isEmailConflict(error: Prisma.PrismaClientKnownRequestError): boolean {
+  const meta = (error.meta ?? {}) as Record<string, unknown>;
+  const target = meta.target;
+  if (Array.isArray(target)) return target.includes('email');
+  if (typeof target === 'string') return target.includes('email');
+  // Driver adapters (adapter-pg) report the constraint under driverAdapterError.
+  const cause = (meta.driverAdapterError as { cause?: { constraint?: { fields?: string[]; index?: string } } } | undefined)?.cause;
+  const constraint = cause?.constraint;
+  if (constraint?.fields) return constraint.fields.some((f) => f.replace(/"/g, '') === 'email');
+  if (constraint?.index) return constraint.index.includes('email');
+  return false;
+}
+
 const invalidCredentials = () =>
   new ApiError(HttpStatus.UNAUTHORIZED, 'INVALID_CREDENTIALS', 'Email or password is incorrect.');
 
@@ -33,6 +48,7 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
     private readonly idempotency: IdempotencyService,
+    private readonly loginFailures: LoginFailureLimiter,
   ) {}
 
   /**
@@ -70,7 +86,7 @@ export class AuthService {
       return { ...pair, user: toPublicUser(user) };
     } catch (error) {
       if (recordId) await this.idempotency.abandon(recordId).catch(() => undefined);
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && isEmailConflict(error)) {
         throw new ApiError(HttpStatus.CONFLICT, 'EMAIL_TAKEN', 'An account with this email already exists. Sign in instead.');
       }
       throw error;
@@ -78,12 +94,18 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
+    this.loginFailures.assertAllowed(dto.email);
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user) {
       await this.passwords.verifyAgainstDummy(dto.password);
+      this.loginFailures.recordFailure(dto.email);
       throw invalidCredentials();
     }
-    if (!(await this.passwords.verify(user.passwordHash, dto.password))) throw invalidCredentials();
+    if (!(await this.passwords.verify(user.passwordHash, dto.password))) {
+      this.loginFailures.recordFailure(dto.email);
+      throw invalidCredentials();
+    }
+    this.loginFailures.reset(dto.email);
     const pair = await this.tokens.issue(user.id);
     return { ...pair, user: toPublicUser(user) };
   }
@@ -103,6 +125,11 @@ export class AuthService {
     if (!(await this.passwords.verify(user.passwordHash, password))) {
       throw new ApiError(HttpStatus.FORBIDDEN, 'INVALID_PASSWORD', 'Password is incorrect.');
     }
-    await this.prisma.user.delete({ where: { id: userId } });
+    // Revoke explicitly (not only via the cascade) so the intent survives any
+    // future soft-delete; the guard's user lookup rejects old access tokens.
+    await this.prisma.$transaction(async (tx) => {
+      await this.tokens.revokeAllForUser(userId, tx);
+      await tx.user.delete({ where: { id: userId } });
+    });
   }
 }

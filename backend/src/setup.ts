@@ -17,7 +17,7 @@ export const BODY_LIMIT = '100kb';
  */
 export function configureApp(app: NestExpressApplication, env: Env): void {
   // Render terminates TLS in front of the service; trust one proxy hop for req.ip.
-  app.set('trust proxy', 1);
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
   app.use(requestIdMiddleware);
   app.use(helmet());
   app.useBodyParser('json', { limit: BODY_LIMIT });
