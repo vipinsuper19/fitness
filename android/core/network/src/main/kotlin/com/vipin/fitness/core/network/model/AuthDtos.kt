@@ -3,9 +3,8 @@ package com.vipin.fitness.core.network.model
 import kotlinx.serialization.Serializable
 
 /*
- * DTOs for the auth endpoints, hand-written from the draft T5 contract
- * (contracts/openapi.yaml on PR #4, not yet merged). If the contract changes before it lands,
- * only these classes and AuthApi need updating; everything else depends on AuthTokens.
+ * DTOs for the auth endpoints, hand-written from contracts/openapi.yaml (T5, merged in #4).
+ * Keep them in sync with that file; everything else depends on AuthTokens, not on these.
  */
 
 @Serializable

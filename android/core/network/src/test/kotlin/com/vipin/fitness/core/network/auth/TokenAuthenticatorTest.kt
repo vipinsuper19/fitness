@@ -19,6 +19,9 @@ import org.junit.Before
 import org.junit.Test
 import retrofit2.Call
 import retrofit2.http.GET
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -69,7 +72,7 @@ class TokenAuthenticatorTest {
         val baseUrl = server.url("/api/v1/").toString()
         val json = fitnessJson()
         val base = OkHttpClient()
-        val refresher = RetrofitTokenRefresher(retrofit(baseUrl, base, json).create(RefreshApi::class.java)) { 1_000L }
+        val refresher = RetrofitTokenRefresher(retrofit(baseUrl, base, json).create(RefreshApi::class.java), Clock.fixed(Instant.ofEpochMilli(1_000L), ZoneOffset.UTC))
         val client = base.newBuilder()
             .addInterceptor(AuthInterceptor(store))
             .authenticator(TokenAuthenticator(store, refresher, events))

@@ -10,8 +10,17 @@ import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.POST
 
-/** Auth endpoints from the T5 draft. Paths are relative to `.../api/v1/`. */
+/**
+ * Auth endpoints from contracts/openapi.yaml. Paths are relative to `.../api/v1/`.
+ * Only register takes an Idempotency-Key; login and refresh take none (token responses are never
+ * stored or replayed).
+ */
 interface AuthApi {
+    /**
+     * The key only rejects a concurrent duplicate (409 IDEMPOTENCY_IN_PROGRESS). Retrying after the
+     * first attempt finished returns 201 with fresh tokens if it hadn't created the account, or
+     * 409 EMAIL_TAKEN if it had: the caller should then offer sign-in.
+     */
     @Unauthenticated
     @POST("auth/register")
     suspend fun register(

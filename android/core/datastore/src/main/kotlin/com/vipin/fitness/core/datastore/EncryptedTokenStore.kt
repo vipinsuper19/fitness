@@ -5,9 +5,11 @@ import android.content.SharedPreferences
 import android.util.Base64
 import androidx.core.content.edit
 import com.vipin.fitness.core.network.auth.AuthTokens
+import com.vipin.fitness.core.network.auth.SessionEvents
 import com.vipin.fitness.core.network.auth.TokenStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.json.JSONObject
+import java.security.GeneralSecurityException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -16,16 +18,17 @@ import javax.inject.Singleton
  * (excluded from backup by the app's backup rules). Synchronous because OkHttp calls it from
  * its own threads; reads are served from memory after the first load.
  *
- * A blob that fails to decrypt (key wiped, app data restored elsewhere) is dropped and the user
- * signs in again.
+ * A blob that fails to decrypt (Keystore key lost or invalidated, data tampered) is dropped and
+ * [SessionEvents.notifyExpired] sends the user back to sign-in.
  */
 @Singleton
 class EncryptedTokenStore internal constructor(
     private val prefs: SharedPreferences,
     private val cipher: TokenCipher,
+    private val sessionEvents: SessionEvents,
 ) : TokenStore {
-    @Inject constructor(@ApplicationContext context: Context, cipher: TokenCipher) :
-        this(context.getSharedPreferences(FILE, Context.MODE_PRIVATE), cipher)
+    @Inject constructor(@ApplicationContext context: Context, cipher: TokenCipher, sessionEvents: SessionEvents) :
+        this(context.getSharedPreferences(FILE, Context.MODE_PRIVATE), cipher, sessionEvents)
 
     private val lock = Any()
     private var loaded = false
@@ -45,7 +48,14 @@ class EncryptedTokenStore internal constructor(
             .put("r", tokens.refreshToken)
             .put("e", tokens.accessExpiresAtEpochMs)
             .toString()
-        val blob = Base64.encodeToString(cipher.encrypt(json.toByteArray()), Base64.NO_WRAP)
+        val sealed = try {
+            cipher.encrypt(json.toByteArray())
+        } catch (e: GeneralSecurityException) {
+            // Even a regenerated key failed: we can't keep the session safely, so end it.
+            dropSession()
+            return@synchronized
+        }
+        val blob = Base64.encodeToString(sealed, Base64.NO_WRAP)
         prefs.edit(commit = true) { putString(KEY, blob) } // commit: a lost rotated refresh token logs the user out
         cached = tokens
         loaded = true
@@ -63,9 +73,16 @@ class EncryptedTokenStore internal constructor(
             val o = JSONObject(String(cipher.decrypt(Base64.decode(blob, Base64.NO_WRAP))))
             AuthTokens(o.getString("a"), o.getString("r"), o.getLong("e"))
         }.getOrElse {
-            prefs.edit(commit = true) { remove(KEY) }
+            dropSession()
             null
         }
+    }
+
+    private fun dropSession() {
+        prefs.edit(commit = true) { remove(KEY) }
+        cached = null
+        loaded = true
+        sessionEvents.notifyExpired()
     }
 
     private companion object {

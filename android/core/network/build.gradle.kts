@@ -14,9 +14,19 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     testOptions { unitTests.isIncludeAndroidResources = true }
-    defaultConfig {
-        // Placeholder until T17 gives a staging URL. 10.0.2.2 is the host machine from the emulator.
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000/api/v1/\"")
+    buildTypes {
+        debug {
+            // 10.0.2.2 is the dev machine as seen from the emulator (cleartext allowed in debug only).
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000/api/v1/\"")
+        }
+        release {
+            // HTTPS only. T17 passes the real host with -Pfitness.releaseApiBaseUrl=https://...;
+            // until then the placeholder makes NetworkModule fail loudly at startup.
+            val url = providers.gradleProperty("fitness.releaseApiBaseUrl")
+                .getOrElse("https://unset.invalid/api/v1/")
+            require(url.startsWith("https://")) { "fitness.releaseApiBaseUrl must be https, was $url" }
+            buildConfigField("String", "API_BASE_URL", "\"$url\"")
+        }
     }
     buildFeatures { buildConfig = true }
 }

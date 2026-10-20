@@ -2,6 +2,7 @@ package com.vipin.fitness.core.network.auth
 
 import com.vipin.fitness.core.network.model.RefreshRequestDto
 import java.io.IOException
+import java.time.Clock
 import javax.inject.Inject
 
 sealed interface RefreshResult {
@@ -18,13 +19,13 @@ fun interface TokenRefresher {
 
 class RetrofitTokenRefresher @Inject constructor(
     private val api: RefreshApi,
-    private val clock: () -> Long,
+    private val clock: Clock,
 ) : TokenRefresher {
     override fun refresh(refreshToken: String): RefreshResult = try {
         val response = api.refresh(RefreshRequestDto(refreshToken)).execute()
         val body = response.body()
         when {
-            response.isSuccessful && body != null -> RefreshResult.Success(body.toAuthTokens(clock()))
+            response.isSuccessful && body != null -> RefreshResult.Success(body.toAuthTokens(clock.millis()))
             response.code() == 401 -> RefreshResult.Rejected
             else -> RefreshResult.Failed
         }

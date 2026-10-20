@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import com.vipin.fitness.core.datastore.EncryptedTokenStore
-import com.vipin.fitness.core.datastore.KeystoreTokenCipher
+import com.vipin.fitness.core.datastore.AesGcmTokenCipher
+import com.vipin.fitness.core.datastore.KeystoreKeyProvider
+import com.vipin.fitness.core.datastore.SecretKeyProvider
 import com.vipin.fitness.core.datastore.TokenCipher
 import com.vipin.fitness.core.network.auth.TokenStore
 import dagger.Binds
@@ -21,9 +23,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 abstract class DataStoreModule {
     @Binds abstract fun tokenStore(impl: EncryptedTokenStore): TokenStore
-    @Binds abstract fun tokenCipher(impl: KeystoreTokenCipher): TokenCipher
+    @Binds abstract fun keyProvider(impl: KeystoreKeyProvider): SecretKeyProvider
 
     companion object {
+        @Provides @Singleton
+        fun tokenCipher(keys: SecretKeyProvider): TokenCipher = AesGcmTokenCipher(keys)
+
         @Provides @Singleton
         fun preferences(@ApplicationContext context: Context): DataStore<Preferences> =
             PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("user_prefs") }

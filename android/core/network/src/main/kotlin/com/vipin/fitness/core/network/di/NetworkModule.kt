@@ -17,6 +17,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.time.Clock
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -30,7 +31,7 @@ object NetworkModule {
     fun json(): Json = fitnessJson()
 
     @Provides @Named(BASE_URL)
-    fun baseUrl(): String = BuildConfig.API_BASE_URL
+    fun baseUrl(): String = checkedBaseUrl(BuildConfig.API_BASE_URL, BuildConfig.DEBUG)
 
     /** Plain client: timeouts and logging only. Used for /auth/refresh so it can't recurse. */
     @Provides @Singleton @Named("base")
@@ -64,7 +65,10 @@ object NetworkModule {
         retrofit(baseUrl, base, json).create(RefreshApi::class.java)
 
     @Provides @Singleton
-    fun tokenRefresher(api: RefreshApi): TokenRefresher = RetrofitTokenRefresher(api) { System.currentTimeMillis() }
+    fun clock(): Clock = Clock.systemUTC()
+
+    @Provides @Singleton
+    fun tokenRefresher(api: RefreshApi, clock: Clock): TokenRefresher = RetrofitTokenRefresher(api, clock)
 
     @Provides @Singleton
     fun authApi(retrofit: Retrofit): AuthApi = retrofit.create(AuthApi::class.java)
@@ -82,3 +86,17 @@ fun retrofit(baseUrl: String, client: OkHttpClient, json: Json): Retrofit = Retr
     .client(client)
     .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
     .build()
+
+/** Placeholder baked into release builds until T17 sets `-Pfitness.releaseApiBaseUrl=https://...`. */
+const val UNSET_RELEASE_BASE_URL = "https://unset.invalid/api/v1/"
+
+/**
+ * Release builds must talk HTTPS to a real host. Fails at startup (first network injection)
+ * rather than silently sending traffic to a placeholder or over cleartext.
+ */
+fun checkedBaseUrl(url: String, debug: Boolean): String {
+    if (debug) return url
+    check(url.startsWith("https://")) { "Release API_BASE_URL must be https, was $url" }
+    check(url != UNSET_RELEASE_BASE_URL) { "Release API_BASE_URL not configured; pass -Pfitness.releaseApiBaseUrl" }
+    return url
+}
