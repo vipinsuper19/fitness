@@ -1,0 +1,1636 @@
+openapi: 3.1.0
+info:
+  title: Fitness API
+  version: 1.0.0
+  summary: Lean MVP API for the Fitness Android app (India first).
+  description: |
+    Source of truth for `/api/v1`. The backend's generated Swagger is checked
+    against this file and the Android client is built from it.
+
+    **Conventions**
+    - **Auth:** email and password. The server issues its own JWTs: a
+      15-minute access token (`Authorization: Bearer`) and a rotating refresh
+      token. A refresh token is single-use; reusing one revokes its family.
+    - **Units:** canonical metric (kg, cm, ml, kcal, grams of macros). The
+      client converts for display. Money, when it appears, is INR in paise
+      (integer) with `currency: INR`.
+    - **Dates:** `date` is a local calendar date (YYYY-MM-DD) in the user's
+      timezone (default `Asia/Kolkata`); `date-time` is RFC 3339 with offset.
+    - **Missing vs zero:** a `null` metric means "no data", never 0.
+    - **Errors:** every non-2xx body is `Error`; `requestId` matches the
+      `X-Request-Id` response header.
+    - **Idempotency:** every write (POST, PUT, PATCH, DELETE) accepts an
+      `Idempotency-Key` header (a client UUID). It is **required** on
+      endpoints that can award XP or create rows the client retries offline.
+      A replay with the same key and body returns the stored response with
+      `Idempotent-Replayed: true`. The same key with a different body is
+      `409 IDEMPOTENCY_KEY_REUSED`; a replay while the first request is still
+      running is `409 IDEMPOTENCY_IN_PROGRESS`. Keys are kept for 24 hours and
+      are scoped to the user.
+      - A key is bound to the method, path and body hash of its first request.
+        Reusing it on a **different method or path** is
+        `409 IDEMPOTENCY_KEY_REUSED`; it is never replayed against another
+        endpoint.
+      - **Token-bearing responses are never stored.** `/auth/login` and
+        `/auth/refresh` do not use idempotency keys, and `/auth/register` uses
+        its key only to reject a concurrent duplicate
+        (`409 IDEMPOTENCY_IN_PROGRESS`). A register replay after the first
+        request finished re-runs the request: it returns `409 EMAIL_TAKEN` if
+        the account was created (sign in instead), or fresh tokens if it was
+        not. Tokens are never replayed from storage.
+      - Rows tied to an account are erased with the account.
+    - **XP:** awarded only by the server (workout completion in the MVP).
+      There is no client endpoint that writes XP. The ledger is unique per
+      `(userId, sourceType, sourceId)`, so retries never double-award.
+      A reversal is a negative `adjustment` entry whose `sourceId` is the
+      reversed entry. A reversed award is **never re-awarded**: the original
+      entry stays in the ledger, so completing, replaying or re-completing
+      the same session awards nothing, and an entry can be reversed only once.
+    - **Ownership:** every user-owned resource is checked; another user's
+      id returns `404 NOT_FOUND`, never 403, so ids are not enumerable.
+    - **AI:** there is no AI provider in the MVP. "Generate" endpoints use
+      deterministic rule-based fallbacks and say so in `generator`.
+    - **Pagination:** cursor based: `?cursor&limit` → `{ items, nextCursor }`.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: https://fitness-api.onrender.com/api/v1
+    description: Render (production)
+  - url: http://localhost:3000/api/v1
+    description: Local
+security:
+  - bearerAuth: []
+tags:
+  - name: auth
+    description: Email and password sign-in with self-issued JWTs
+  - name: me
+    description: Account, profile, export and deletion
+  - name: goals
+    description: Fitness goals
+  - name: exercises
+    description: Seeded, read-only exercise catalog
+  - name: workout-plans
+    description: Rule-based or custom plans, versioned
+  - name: workout-sessions
+    description: Workout tracking, set logs and completion (awards XP)
+  - name: nutrition
+    description: Foods, food logs, water and daily totals
+  - name: progress
+    description: Body measurements and progress summary
+  - name: xp
+    description: Server-authoritative XP ledger (read-only)
+
+paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Create an account with email and password
+      description: |
+        `Idempotency-Key` only rejects a concurrent duplicate
+        (`409 IDEMPOTENCY_IN_PROGRESS`). The response holds tokens, so it is
+        never stored or replayed. Retrying after the first request finished
+        returns `409 EMAIL_TAKEN` when the account exists (sign in instead),
+        or `201` with fresh tokens when the first attempt did not create it.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Account created and signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: '`EMAIL_TAKEN` (also on a retry after a successful sign-up), `IDEMPOTENCY_IN_PROGRESS`, or `IDEMPOTENCY_KEY_REUSED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Sign in with email and password
+      description: Takes no `Idempotency-Key`; token responses are never stored.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: '`INVALID_CREDENTIALS` (same response for unknown email and wrong password)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshTokens
+      summary: Rotate the refresh token and get a new access token
+      description: The presented refresh token is revoked. Reusing a revoked token revokes the whole family (`REFRESH_TOKEN_REUSED`). Takes no `Idempotency-Key`; token responses are never stored.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401':
+          description: '`REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED` or `REFRESH_TOKEN_REUSED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke a refresh token (this device)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '204': { description: Signed out (also returned for an already revoked token) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me:
+    delete:
+      tags: [me]
+      operationId: deleteAccount
+      summary: Delete the account and all user data
+      description: Requires the current password. Revokes every token; data is erased, not soft-deleted.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeleteAccountRequest' }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`INVALID_PASSWORD`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /me/export:
+    get:
+      tags: [me]
+      operationId: exportMyData
+      summary: Export all of the user's data as JSON
+      responses:
+        '200':
+          description: Full export
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataExport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /me/profile:
+    get:
+      tags: [me]
+      operationId: getProfile
+      summary: Get the profile
+      responses:
+        '200':
+          description: Profile (fields are null until onboarding sets them)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [me]
+      operationId: updateProfile
+      summary: Replace the profile (onboarding and edit)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileUpdate' }
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+
+  /goals:
+    get:
+      tags: [goals]
+      operationId: listGoals
+      summary: List goals
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/GoalStatus' }
+      responses:
+        '200':
+          description: Goals, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Goal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [goals]
+      operationId: createGoal
+      summary: Create a goal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoalCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Goal' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /goals/{goalId}:
+    parameters:
+      - $ref: '#/components/parameters/GoalId'
+    get:
+      tags: [goals]
+      operationId: getGoal
+      summary: Get a goal
+      responses:
+        '200':
+          description: Goal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Goal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [goals]
+      operationId: updateGoal
+      summary: Update a goal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoalUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Goal' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    delete:
+      tags: [goals]
+      operationId: deleteGoal
+      summary: Delete a goal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /exercises:
+    get:
+      tags: [exercises]
+      operationId: listExercises
+      summary: Search the seeded, read-only exercise catalog
+      parameters:
+        - name: query
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: muscle
+          in: query
+          schema: { $ref: '#/components/schemas/MuscleGroup' }
+        - name: equipment
+          in: query
+          schema: { $ref: '#/components/schemas/Equipment' }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Page of exercises
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Exercise' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /exercises/{exerciseId}:
+    get:
+      tags: [exercises]
+      operationId: getExercise
+      summary: Get an exercise
+      parameters:
+        - $ref: '#/components/parameters/ExerciseId'
+      responses:
+        '200':
+          description: Exercise
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exercise' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workout-plans/generate:
+    post:
+      tags: [workout-plans]
+      operationId: generateWorkoutPlan
+      summary: Build a draft plan (rule-based in the MVP; never persisted)
+      description: Pure function of the request and the catalog. Same input gives the same draft. Save it with `POST /workout-plans`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanGenerateRequest' }
+      responses:
+        '200':
+          description: Draft plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlanDraft' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /workout-plans:
+    post:
+      tags: [workout-plans]
+      operationId: createWorkoutPlan
+      summary: Save a plan (from a draft or custom) as version 1
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkoutPlanDraft' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /workout-plans/active:
+    get:
+      tags: [workout-plans]
+      operationId: getActiveWorkoutPlan
+      summary: Get the active plan
+      responses:
+        '200':
+          description: The active plan (latest version)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '204': { description: No active plan }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /workout-plans/{planId}:
+    parameters:
+      - $ref: '#/components/parameters/PlanId'
+    get:
+      tags: [workout-plans]
+      operationId: getWorkoutPlan
+      summary: Get a plan version
+      parameters:
+        - name: version
+          in: query
+          description: A specific version; latest when omitted
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [workout-plans]
+      operationId: updateWorkoutPlan
+      summary: Edit a plan by creating a new version
+      description: Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkoutPlanUpdate' }
+      responses:
+        '200':
+          description: New version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`VERSION_CONFLICT`, or an idempotency conflict'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /workout-plans/{planId}/activate:
+    post:
+      tags: [workout-plans]
+      operationId: activateWorkoutPlan
+      summary: Make this plan the active one (deactivates the previous)
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Activated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /workout-sessions:
+    post:
+      tags: [workout-sessions]
+      operationId: startWorkoutSession
+      summary: Start a session (optionally from a planned workout)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SessionStart' }
+      responses:
+        '201':
+          description: Started
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutSession' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /workout-sessions/history:
+    get:
+      tags: [workout-sessions]
+      operationId: listWorkoutHistory
+      summary: List completed sessions
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Completed sessions, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/WorkoutSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /workout-sessions/{sessionId}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [workout-sessions]
+      operationId: getWorkoutSession
+      summary: Get a session with its sets
+      responses:
+        '200':
+          description: Session with its sets
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [workout-sessions]
+      operationId: updateWorkoutSession
+      summary: Pause or resume a session, or edit notes
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SessionUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutSession' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`SESSION_COMPLETED` (completed sessions are read-only), or an idempotency conflict'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /workout-sessions/{sessionId}/sets:
+    post:
+      tags: [workout-sessions]
+      operationId: upsertSetLog
+      summary: Log or correct a set (upsert by the client's set UUID)
+      description: The client-generated `clientSetId` makes this safe to retry from offline sync. Sending the same `clientSetId` again replaces that set.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetLogUpsert' }
+      responses:
+        '200':
+          description: Set stored (created or replaced)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetLog' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`SESSION_COMPLETED`, or an idempotency conflict'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /workout-sessions/{sessionId}/complete:
+    post:
+      tags: [workout-sessions]
+      operationId: completeWorkoutSession
+      summary: Finish a session; the only call that awards workout XP
+      description: |
+        XP is computed and written by the server in the same transaction.
+        A retry (same key) or a second completion returns the original result
+        and never awards XP twice.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SessionComplete' }
+      responses:
+        '200':
+          description: Completed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionCompleteResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '422':
+          description: '`SESSION_EMPTY` (no completed sets)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /foods/search:
+    get:
+      tags: [nutrition]
+      operationId: searchFoods
+      summary: Search the seeded catalog (Indian foods first) and the user's custom foods
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Page of foods
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Food' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /foods:
+    post:
+      tags: [nutrition]
+      operationId: createCustomFood
+      summary: Create a custom food
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FoodCreate' }
+      responses:
+        '201':
+          description: Created (visible only to this user)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Food' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /food-logs:
+    get:
+      tags: [nutrition]
+      operationId: listFoodLogs
+      summary: List food log entries for a day
+      parameters:
+        - $ref: '#/components/parameters/DateRequired'
+      responses:
+        '200':
+          description: Entries for the day
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/FoodLog' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [nutrition]
+      operationId: createFoodLog
+      summary: Log a food
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FoodLogCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FoodLog' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /food-logs/{foodLogId}:
+    parameters:
+      - $ref: '#/components/parameters/FoodLogId'
+    patch:
+      tags: [nutrition]
+      operationId: updateFoodLog
+      summary: Edit a food log entry
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FoodLogUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FoodLog' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    delete:
+      tags: [nutrition]
+      operationId: deleteFoodLog
+      summary: Delete a food log entry
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Deleted (also for an already deleted entry) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /water-logs:
+    get:
+      tags: [nutrition]
+      operationId: listWaterLogs
+      summary: List water entries for a day
+      parameters:
+        - $ref: '#/components/parameters/DateRequired'
+      responses:
+        '200':
+          description: Entries for the day
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/WaterLog' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [nutrition]
+      operationId: createWaterLog
+      summary: Log water
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WaterLogCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WaterLog' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /water-logs/{waterLogId}:
+    parameters:
+      - $ref: '#/components/parameters/WaterLogId'
+    patch:
+      tags: [nutrition]
+      operationId: updateWaterLog
+      summary: Edit a water entry
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WaterLogCreate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WaterLog' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    delete:
+      tags: [nutrition]
+      operationId: deleteWaterLog
+      summary: Delete a water entry
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /nutrition/daily:
+    get:
+      tags: [nutrition]
+      operationId: getDailyNutrition
+      summary: Daily nutrition totals
+      parameters:
+        - $ref: '#/components/parameters/DateRequired'
+      responses:
+        '200':
+          description: Totals for the day against the user's targets
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DailyNutrition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /body-measurements:
+    get:
+      tags: [progress]
+      operationId: listBodyMeasurements
+      summary: List body measurements
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Measurements, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/BodyMeasurement' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [progress]
+      operationId: createBodyMeasurement
+      summary: Add a body measurement
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BodyMeasurementCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BodyMeasurement' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /body-measurements/{measurementId}:
+    parameters:
+      - $ref: '#/components/parameters/MeasurementId'
+    get:
+      tags: [progress]
+      operationId: getBodyMeasurement
+      summary: Get a body measurement
+      responses:
+        '200':
+          description: Measurement
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BodyMeasurement' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [progress]
+      operationId: updateBodyMeasurement
+      summary: Edit a body measurement
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BodyMeasurementCreate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BodyMeasurement' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    delete:
+      tags: [progress]
+      operationId: deleteBodyMeasurement
+      summary: Delete a body measurement
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /progress/summary:
+    get:
+      tags: [progress]
+      operationId: getProgressSummary
+      summary: Progress over a date range
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: One point per day; `null` means no data that day, never 0
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProgressSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /xp/balance:
+    get:
+      tags: [xp]
+      operationId: getXpBalance
+      summary: XP balance and level
+      responses:
+        '200':
+          description: Server-computed balance and level
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/XpBalance' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /xp/ledger:
+    get:
+      tags: [xp]
+      operationId: listXpLedger
+      summary: XP ledger (read-only)
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ledger entries, newest first (read-only)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/XpTransaction' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from /auth/login, /auth/register or /auth/refresh (15 minutes).
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Client UUID that makes a retry safe. See the conventions above.
+      schema: { type: string, format: uuid }
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required here because the client retries this write from offline sync, or it can award XP.
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 200 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    DateRequired:
+      name: date
+      in: query
+      required: true
+      description: Local date in the user's timezone
+      schema: { type: string, format: date }
+    GoalId:
+      name: goalId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ExerciseId:
+      name: exerciseId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    PlanId:
+      name: planId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    FoodLogId:
+      name: foodLogId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    WaterLogId:
+      name: waterLogId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    MeasurementId:
+      name: measurementId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+
+  headers:
+    RetryAfter:
+      description: Seconds to wait before retrying
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    ValidationError:
+      description: '`VALIDATION_FAILED`; `details.fields` maps field paths to messages'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: '`UNAUTHENTICATED` (missing or bad token) or `TOKEN_EXPIRED` (refresh and retry)'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: '`NOT_FOUND`, including another user''s resource'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    IdempotencyConflict:
+      description: '`IDEMPOTENCY_KEY_REUSED` (different body, method or path; never replayed) or `IDEMPOTENCY_IN_PROGRESS`'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: '`RATE_LIMITED`'
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Id:
+      type: string
+      format: uuid
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code:
+          type: string
+          description: Stable machine code (UPPER_SNAKE_CASE). Clients branch on this, not on `message`.
+          examples: [VALIDATION_FAILED, NOT_FOUND, IDEMPOTENCY_KEY_REUSED]
+        message:
+          type: string
+          description: Human-readable, safe to show
+        details:
+          type: object
+          additionalProperties: true
+        requestId:
+          type: string
+    PageMeta:
+      type: object
+      required: [nextCursor]
+      properties:
+        nextCursor:
+          type: [string, 'null']
+          description: Pass as `cursor` for the next page; null on the last page
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Hashed with argon2id; never stored or logged in clear
+        displayName: { type: string, minLength: 1, maxLength: 60 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 1, maxLength: 128 }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string, minLength: 1, maxLength: 512 }
+    TokenPair:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, const: Bearer }
+        expiresIn:
+          type: integer
+          description: Access token lifetime in seconds (900)
+    AuthResponse:
+      allOf:
+        - $ref: '#/components/schemas/TokenPair'
+        - type: object
+          required: [user]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      required: [id, email, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        email: { type: string, format: email }
+        displayName: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, minLength: 1, maxLength: 128 }
+
+    Sex:
+      type: string
+      enum: [male, female, other, prefer_not_to_say]
+    ActivityLevel:
+      type: string
+      enum: [sedentary, light, moderate, active, very_active]
+    ExperienceLevel:
+      type: string
+      enum: [beginner, intermediate, advanced]
+    UnitSystem:
+      type: string
+      enum: [metric, imperial]
+      description: Display preference only; the API always uses metric
+    DietPreference:
+      type: string
+      enum: [vegetarian, eggetarian, non_vegetarian, vegan, jain]
+    Profile:
+      type: object
+      required: [userId, unitSystem, timezone, locale, currency, onboardingCompleted, updatedAt]
+      properties:
+        userId: { $ref: '#/components/schemas/Id' }
+        displayName: { type: [string, 'null'], maxLength: 60 }
+        birthYear: { type: [integer, 'null'], minimum: 1900, maximum: 2100 }
+        sex: { oneOf: [{ $ref: '#/components/schemas/Sex' }, { type: 'null' }] }
+        heightCm: { type: [number, 'null'], minimum: 50, maximum: 272 }
+        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400 }
+        activityLevel: { oneOf: [{ $ref: '#/components/schemas/ActivityLevel' }, { type: 'null' }] }
+        experienceLevel: { oneOf: [{ $ref: '#/components/schemas/ExperienceLevel' }, { type: 'null' }] }
+        dietPreference: { oneOf: [{ $ref: '#/components/schemas/DietPreference' }, { type: 'null' }] }
+        unitSystem: { $ref: '#/components/schemas/UnitSystem' }
+        timezone: { type: string, default: Asia/Kolkata, description: IANA timezone }
+        locale: { type: string, default: en-IN }
+        currency: { type: string, const: INR }
+        dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
+        dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
+        onboardingCompleted: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    ProfileUpdate:
+      type: object
+      description: Every field is optional so onboarding can be skipped and resumed. A null clears the value.
+      properties:
+        displayName: { type: [string, 'null'], maxLength: 60 }
+        birthYear: { type: [integer, 'null'], minimum: 1900, maximum: 2100 }
+        sex: { oneOf: [{ $ref: '#/components/schemas/Sex' }, { type: 'null' }] }
+        heightCm: { type: [number, 'null'], minimum: 50, maximum: 272 }
+        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400 }
+        activityLevel: { oneOf: [{ $ref: '#/components/schemas/ActivityLevel' }, { type: 'null' }] }
+        experienceLevel: { oneOf: [{ $ref: '#/components/schemas/ExperienceLevel' }, { type: 'null' }] }
+        dietPreference: { oneOf: [{ $ref: '#/components/schemas/DietPreference' }, { type: 'null' }] }
+        unitSystem: { $ref: '#/components/schemas/UnitSystem' }
+        timezone: { type: string, maxLength: 64 }
+        dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
+        dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
+        onboardingCompleted: { type: boolean }
+    DataExport:
+      type: object
+      required: [exportedAt, user]
+      properties:
+        exportedAt: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/User' }
+        profile: { $ref: '#/components/schemas/Profile' }
+        goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
+        workoutPlans: { type: array, items: { $ref: '#/components/schemas/WorkoutPlan' } }
+        workoutSessions: { type: array, items: { $ref: '#/components/schemas/WorkoutSession' } }
+        customFoods: { type: array, items: { $ref: '#/components/schemas/Food' } }
+        foodLogs: { type: array, items: { $ref: '#/components/schemas/FoodLog' } }
+        waterLogs: { type: array, items: { $ref: '#/components/schemas/WaterLog' } }
+        bodyMeasurements: { type: array, items: { $ref: '#/components/schemas/BodyMeasurement' } }
+        xpLedger: { type: array, items: { $ref: '#/components/schemas/XpTransaction' } }
+
+    GoalType:
+      type: string
+      enum: [lose_weight, gain_muscle, maintain, improve_endurance, workouts_per_week]
+    GoalStatus:
+      type: string
+      enum: [active, achieved, abandoned]
+    Goal:
+      type: object
+      required: [id, type, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        type: { $ref: '#/components/schemas/GoalType' }
+        status: { $ref: '#/components/schemas/GoalStatus' }
+        targetValue: { type: [number, 'null'], description: 'kg for weight goals, count for workouts_per_week' }
+        startValue: { type: [number, 'null'] }
+        targetDate: { type: [string, 'null'], format: date }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    GoalCreate:
+      type: object
+      required: [type]
+      properties:
+        type: { $ref: '#/components/schemas/GoalType' }
+        targetValue: { type: [number, 'null'], minimum: 0 }
+        startValue: { type: [number, 'null'], minimum: 0 }
+        targetDate: { type: [string, 'null'], format: date }
+    GoalUpdate:
+      type: object
+      properties:
+        status: { $ref: '#/components/schemas/GoalStatus' }
+        targetValue: { type: [number, 'null'], minimum: 0 }
+        targetDate: { type: [string, 'null'], format: date }
+
+    MuscleGroup:
+      type: string
+      enum: [chest, back, shoulders, biceps, triceps, forearms, core, quads, hamstrings, glutes, calves, full_body, cardio]
+    Equipment:
+      type: string
+      enum: [none, dumbbell, barbell, kettlebell, machine, cable, resistance_band, bench, pull_up_bar, other]
+    TrackingType:
+      type: string
+      enum: [reps_weight, reps, duration, distance_duration]
+      description: Which set fields apply
+    Exercise:
+      type: object
+      required: [id, slug, name, primaryMuscle, secondaryMuscles, equipment, trackingType, difficulty]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        slug: { type: string }
+        name: { type: string }
+        nameHi: { type: [string, 'null'], description: Hindi name }
+        primaryMuscle: { $ref: '#/components/schemas/MuscleGroup' }
+        secondaryMuscles: { type: array, items: { $ref: '#/components/schemas/MuscleGroup' } }
+        equipment: { type: array, items: { $ref: '#/components/schemas/Equipment' } }
+        trackingType: { $ref: '#/components/schemas/TrackingType' }
+        difficulty: { $ref: '#/components/schemas/ExperienceLevel' }
+        instructions: { type: array, items: { type: string } }
+        videoUrl: { type: [string, 'null'], format: uri }
+
+    PlanGenerateRequest:
+      type: object
+      required: [goal, experienceLevel, daysPerWeek, sessionMinutes]
+      properties:
+        goal: { $ref: '#/components/schemas/GoalType' }
+        experienceLevel: { $ref: '#/components/schemas/ExperienceLevel' }
+        daysPerWeek: { type: integer, minimum: 1, maximum: 7 }
+        sessionMinutes: { type: integer, minimum: 15, maximum: 180 }
+        equipment:
+          type: array
+          items: { $ref: '#/components/schemas/Equipment' }
+          description: Available equipment; empty or omitted means bodyweight only
+        weeks: { type: integer, minimum: 1, maximum: 16, default: 4 }
+    PlannedExercise:
+      type: object
+      required: [exerciseId, order, sets]
+      properties:
+        exerciseId: { $ref: '#/components/schemas/Id' }
+        order: { type: integer, minimum: 0 }
+        sets: { type: integer, minimum: 1, maximum: 20 }
+        repsMin: { type: [integer, 'null'], minimum: 1, maximum: 100 }
+        repsMax: { type: [integer, 'null'], minimum: 1, maximum: 100 }
+        durationSeconds: { type: [integer, 'null'], minimum: 1, maximum: 7200 }
+        targetWeightKg: { type: [number, 'null'], minimum: 0, maximum: 1000 }
+        restSeconds: { type: integer, minimum: 0, maximum: 600, default: 90 }
+        notes: { type: [string, 'null'], maxLength: 500 }
+    PlannedWorkout:
+      type: object
+      required: [dayOfWeek, name, exercises]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        dayOfWeek: { type: integer, minimum: 1, maximum: 7, description: 'ISO weekday, 1 = Monday' }
+        name: { type: string, maxLength: 80 }
+        exercises:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items: { $ref: '#/components/schemas/PlannedExercise' }
+    WorkoutPlanDraft:
+      $ref: './schemas/workout-plan-draft.schema.json'
+    WorkoutPlanUpdate:
+      allOf:
+        - $ref: '#/components/schemas/WorkoutPlanDraft'
+        - type: object
+          required: [baseVersion]
+          properties:
+            baseVersion: { type: integer, minimum: 1 }
+    WorkoutPlan:
+      type: object
+      required: [id, version, name, weeks, workouts, isActive, source, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        version: { type: integer, minimum: 1 }
+        name: { type: string }
+        weeks: { type: integer }
+        workouts: { type: array, items: { $ref: '#/components/schemas/PlannedWorkout' } }
+        isActive: { type: boolean }
+        source: { type: string, enum: [rule_based, custom] }
+        createdAt: { type: string, format: date-time }
+
+    SessionStatus:
+      type: string
+      enum: [in_progress, paused, completed]
+    SessionStart:
+      type: object
+      properties:
+        plannedWorkoutId: { $ref: '#/components/schemas/Id' }
+        planVersion: { type: integer, minimum: 1 }
+        startedAt: { type: string, format: date-time, description: Client time for offline starts; defaults to server time }
+    SessionUpdate:
+      type: object
+      properties:
+        status: { type: string, enum: [in_progress, paused] }
+        notes: { type: [string, 'null'], maxLength: 1000 }
+    SessionComplete:
+      type: object
+      properties:
+        completedAt: { type: string, format: date-time }
+        perceivedDifficulty: { type: integer, minimum: 1, maximum: 5, description: '1 = too easy, 5 = too hard' }
+        notes: { type: [string, 'null'], maxLength: 1000 }
+    SetLogUpsert:
+      type: object
+      required: [clientSetId, exerciseId, setIndex, completed]
+      properties:
+        clientSetId: { type: string, format: uuid, description: Generated on the device; the upsert key }
+        exerciseId: { $ref: '#/components/schemas/Id' }
+        setIndex: { type: integer, minimum: 0, maximum: 50 }
+        reps: { type: [integer, 'null'], minimum: 0, maximum: 1000 }
+        weightKg: { type: [number, 'null'], minimum: 0, maximum: 1000 }
+        durationSeconds: { type: [integer, 'null'], minimum: 0, maximum: 86400 }
+        distanceM: { type: [number, 'null'], minimum: 0, maximum: 1000000 }
+        completed: { type: boolean }
+        loggedAt: { type: string, format: date-time }
+    SetLog:
+      allOf:
+        - $ref: '#/components/schemas/SetLogUpsert'
+        - type: object
+          required: [id, updatedAt]
+          properties:
+            id: { $ref: '#/components/schemas/Id' }
+            updatedAt: { type: string, format: date-time }
+    WorkoutSession:
+      type: object
+      required: [id, status, startedAt, sets, activeSeconds]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        planId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        planVersion: { type: [integer, 'null'] }
+        plannedWorkoutId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        status: { $ref: '#/components/schemas/SessionStatus' }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        activeSeconds: { type: integer, minimum: 0, description: Excludes paused time }
+        perceivedDifficulty: { type: [integer, 'null'], minimum: 1, maximum: 5 }
+        notes: { type: [string, 'null'] }
+        sets: { type: array, items: { $ref: '#/components/schemas/SetLog' } }
+    SessionCompleteResult:
+      type: object
+      required: [session, xpAwarded, xpBalance]
+      properties:
+        session: { $ref: '#/components/schemas/WorkoutSession' }
+        xpAwarded:
+          type: integer
+          minimum: 0
+          description: XP from this completion; the original amount on a replay. A reversed award is never re-awarded.
+        xpBalance: { $ref: '#/components/schemas/XpBalance' }
+
+    MealType:
+      type: string
+      enum: [breakfast, lunch, dinner, snack]
+    Nutrients:
+      type: object
+      description: Per one `servingSize` of `servingUnit`
+      required: [energyKcal, proteinG, carbsG, fatG]
+      properties:
+        energyKcal: { type: number, minimum: 0 }
+        proteinG: { type: number, minimum: 0 }
+        carbsG: { type: number, minimum: 0 }
+        fatG: { type: number, minimum: 0 }
+        fiberG: { type: [number, 'null'], minimum: 0 }
+        sugarG: { type: [number, 'null'], minimum: 0 }
+        sodiumMg: { type: [number, 'null'], minimum: 0 }
+    ServingUnit:
+      type: string
+      enum: [g, ml, piece, katori, cup, tbsp, tsp, plate, glass, slice]
+      description: Indian household measures (katori, plate, glass) alongside metric
+    Food:
+      type: object
+      required: [id, name, servingSize, servingUnit, gramsPerServing, nutrients, source]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        nameHi: { type: [string, 'null'] }
+        brand: { type: [string, 'null'] }
+        servingSize: { type: number, exclusiveMinimum: 0 }
+        servingUnit: { $ref: '#/components/schemas/ServingUnit' }
+        gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, description: Weight of one serving when known }
+        nutrients: { $ref: '#/components/schemas/Nutrients' }
+        isVegetarian: { type: [boolean, 'null'] }
+        source: { type: string, enum: [catalog, custom] }
+    FoodCreate:
+      type: object
+      required: [name, servingSize, servingUnit, nutrients]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        brand: { type: [string, 'null'], maxLength: 80 }
+        servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000 }
+        servingUnit: { $ref: '#/components/schemas/ServingUnit' }
+        gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000 }
+        nutrients: { $ref: '#/components/schemas/Nutrients' }
+        isVegetarian: { type: [boolean, 'null'] }
+    FoodLog:
+      type: object
+      required: [id, foodId, foodName, date, mealType, servings, nutrients, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        foodId: { $ref: '#/components/schemas/Id' }
+        foodName: { type: string }
+        date: { type: string, format: date }
+        mealType: { $ref: '#/components/schemas/MealType' }
+        servings: { type: number, exclusiveMinimum: 0 }
+        nutrients:
+          allOf: [{ $ref: '#/components/schemas/Nutrients' }]
+          description: Totals for this entry (servings applied, or the user's edited values)
+        nutrientsEdited: { type: boolean, description: True when the user overrode the computed macros }
+        createdAt: { type: string, format: date-time }
+    FoodLogCreate:
+      type: object
+      required: [foodId, date, mealType, servings]
+      properties:
+        foodId: { $ref: '#/components/schemas/Id' }
+        date: { type: string, format: date }
+        mealType: { $ref: '#/components/schemas/MealType' }
+        servings: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        nutrientsOverride: { $ref: '#/components/schemas/Nutrients' }
+    FoodLogUpdate:
+      type: object
+      properties:
+        mealType: { $ref: '#/components/schemas/MealType' }
+        servings: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        nutrientsOverride:
+          oneOf: [{ $ref: '#/components/schemas/Nutrients' }, { type: 'null' }]
+          description: null restores the computed values
+    WaterLog:
+      type: object
+      required: [id, date, amountMl, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        date: { type: string, format: date }
+        amountMl: { type: integer, minimum: 1, maximum: 5000 }
+        createdAt: { type: string, format: date-time }
+    WaterLogCreate:
+      type: object
+      required: [date, amountMl]
+      properties:
+        date: { type: string, format: date }
+        amountMl: { type: integer, minimum: 1, maximum: 5000 }
+    DailyNutrition:
+      type: object
+      required: [date, totals, byMeal, waterMl]
+      properties:
+        date: { type: string, format: date }
+        totals: { $ref: '#/components/schemas/Nutrients' }
+        byMeal:
+          type: object
+          required: [breakfast, lunch, dinner, snack]
+          properties:
+            breakfast: { $ref: '#/components/schemas/Nutrients' }
+            lunch: { $ref: '#/components/schemas/Nutrients' }
+            dinner: { $ref: '#/components/schemas/Nutrients' }
+            snack: { $ref: '#/components/schemas/Nutrients' }
+        waterMl: { type: integer, minimum: 0 }
+        calorieTargetKcal: { type: [integer, 'null'] }
+        waterTargetMl: { type: [integer, 'null'] }
+
+    BodyMeasurement:
+      type: object
+      required: [id, date, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        date: { type: string, format: date }
+        weightKg: { type: [number, 'null'] }
+        bodyFatPct: { type: [number, 'null'] }
+        waistCm: { type: [number, 'null'] }
+        chestCm: { type: [number, 'null'] }
+        hipCm: { type: [number, 'null'] }
+        armCm: { type: [number, 'null'] }
+        thighCm: { type: [number, 'null'] }
+        createdAt: { type: string, format: date-time }
+    BodyMeasurementCreate:
+      type: object
+      required: [date]
+      minProperties: 2
+      description: '`date` plus at least one measurement'
+      properties:
+        date: { type: string, format: date }
+        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400 }
+        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70 }
+        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
+        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
+        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
+        armCm: { type: [number, 'null'], minimum: 10, maximum: 100 }
+        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150 }
+    ProgressPoint:
+      type: object
+      required: [date, weightKg, workoutsCompleted, activeMinutes, energyKcal, xpEarned]
+      properties:
+        date: { type: string, format: date }
+        weightKg: { type: [number, 'null'], description: null = not measured that day }
+        workoutsCompleted: { type: integer, minimum: 0 }
+        activeMinutes: { type: integer, minimum: 0 }
+        energyKcal: { type: [number, 'null'], description: null = nothing logged that day }
+        xpEarned: { type: integer, minimum: 0 }
+    ProgressSummary:
+      type: object
+      required: [from, to, points, streakDays]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        points: { type: array, items: { $ref: '#/components/schemas/ProgressPoint' } }
+        streakDays: { type: integer, minimum: 0, description: Consecutive days ending today with a completed workout }
+
+    XpSourceType:
+      type: string
+      enum: [workout_session, adjustment]
+      description: MVP sources. `adjustment` is a server-side reversal or correction, never a client write.
+    XpTransaction:
+      type: object
+      required: [id, sourceType, sourceId, amount, reason, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        sourceType: { $ref: '#/components/schemas/XpSourceType' }
+        sourceId: { $ref: '#/components/schemas/Id' }
+        amount: { type: integer, description: Negative for reversals }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+    XpBalance:
+      type: object
+      required: [total, level, xpIntoLevel, xpForNextLevel]
+      properties:
+        total: { type: integer, minimum: 0 }
+        level: { type: integer, minimum: 1 }
+        xpIntoLevel: { type: integer, minimum: 0 }
+        xpForNextLevel: { type: integer, minimum: 1 }
