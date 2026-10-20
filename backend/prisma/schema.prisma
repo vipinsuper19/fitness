@@ -1,0 +1,10 @@
+// MVP entities land in T6. This file only wires the client and datasource.
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

@@ -33,6 +33,11 @@ jobs:
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fitness_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/fitness_test
+      NODE_ENV: test
+      # Throwaway values for the CI database and tests only; not real secrets.
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-else
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-else
     steps:
       - uses: actions/checkout@v4
       - name: Check for package.json
@@ -42,7 +47,7 @@ jobs:
       - if: steps.guard.outputs.present == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - name: Install
@@ -63,3 +68,6 @@ jobs:
       - name: Build
         if: steps.guard.outputs.present == 'true'
         run: npm run build --if-present
+      - name: Docker build
+        if: steps.guard.outputs.present == 'true' && hashFiles('backend/Dockerfile') != ''
+        run: docker build -t fitness-api:ci .
