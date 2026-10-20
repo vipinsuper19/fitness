@@ -33,8 +33,28 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 - `GET /health` returns `{ status: "ok", uptimeSeconds }` without touching the database, so a paused Supabase project does not restart-loop the Render service.
 - `GET /health?db=true` also probes the database and reports `db: "up" | "down"`.
 
-## Docker / Render
-`docker build -t fitness-api backend/` produces a non-root Node 22 image that runs `node dist/main.js`. On Render: Docker runtime, root directory `backend`, health check path `/health`. Migrations run with `npm run migrate:deploy` against `DIRECT_URL`.
+## Deploy
+### Render (native Node 22, per `render.yaml`)
+The Blueprint in `render.yaml` defines the `fitness-api` web service: Free plan, Singapore region, root directory `backend`, health check `/health`. `autoDeploy` is off, so deploy with **Manual Deploy**. The step-by-step guide is in `docs/DEPLOY.md`. Both files come from DevOps PR #14, which isn't merged yet.
+- **Build:** `npm ci --include=dev --no-audit --no-fund && npm run build`, which runs `prisma generate` and `tsc`.
+- **Start:** `npm run migrate:deploy && npm start`. The Free plan has no pre-deploy step, so pending migrations are applied on every start. This is safe to repeat.
+- **Preset env:** `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=1` (Render puts one proxy in front of the app), `SWAGGER_ENABLED=false`.
+- **Entered in the dashboard (`sync: false`):**
+  - `DATABASE_URL` and `DIRECT_URL`: both the Supabase session pooler URI, port 5432 (IPv4).
+  - `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`: different values, at least 32 characters each (`openssl rand -base64 48`).
+  - `CORS_ORIGINS`: optional; leave empty for the Android app.
+- **Optional overrides** (defaults in `src/config/env.ts`): the JWT TTLs, the auth, refresh and login-failure limits, and the `EXPORT_*` rate limit and caps.
+- **Seed (optional, once):** Render Free has no shell, so run `npm run db:seed` locally against the same URLs.
+- **After the first deploy, check:**
+  - `curl https://<service>.onrender.com/health` returns `"status":"ok"`.
+  - `curl 'https://<service>.onrender.com/health?db=true'` returns `"db":"up"`, which also confirms the migrations ran.
+  - **`req.ip`:** confirm the app sees your real client address, not Render's proxy, so per-IP throttling works. Send 11 quick `POST /auth/login` requests from one machine: the 11th should return `429`, and requests from another network should still succeed. If they don't, adjust `TRUST_PROXY_HOPS`.
+
+### Docker (alternative, and what CI builds)
+`docker build -t fitness-api backend/` produces a non-root Node 22 image that runs `node dist/main.js`.
+- **Migrations:** `prisma` is a runtime dependency, so the pruned image keeps the CLI and you can run `docker run --rm -e DATABASE_URL -e DIRECT_URL fitness-api npm run migrate:deploy`. CI runs exactly that against its Postgres.
+- **Size:** keeping the CLI costs nothing; `@prisma/client` already pulled it in as a peer, and the pruned `node_modules` is 426 MB either way.
+- **On Render's Docker runtime:** use the same env vars and run migrations before `node dist/main.js`.
 
 ## Database (T6)
 - Schema: `prisma/schema.prisma`. MVP entities are User, RefreshToken, UserProfile, FitnessGoal, Exercise, WorkoutPlan (+ WorkoutPlanVersion), PlannedWorkout, PlannedExercise, WorkoutSession, ExerciseSetLog, FoodItem, FoodLog, WaterLog, BodyMeasurement, XPTransaction and IdempotencyKey.
