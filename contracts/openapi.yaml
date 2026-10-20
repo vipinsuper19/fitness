@@ -203,6 +203,15 @@ paths:
       tags: [me]
       operationId: exportMyData
       summary: Export all of the user's data as JSON
+      description: >-
+        Only the signed-in user's own data; never password hashes, refresh tokens or idempotency records.
+        `workoutPlans` has one entry per plan version (same `id`, different `version`), newest first.
+        Bounded and newest-first (defaults, configurable server-side): 5000 rows per top-level collection,
+        2000 sessions, 200 plan versions, 20000 set logs in total across the exported sessions and 10000
+        planned exercises in total across the exported plan versions. Anything cut is named in `truncated`
+        (`workoutSessions.sets` and `workoutPlans.exercises` for the nested caps). `profile` is omitted
+        when the user has not created one yet. Rate-limited per user (default 5 per hour,
+        `429 RATE_LIMITED` with `Retry-After`). Sent with `Cache-Control: no-store`.
       responses:
         '200':
           description: Full export
@@ -1291,6 +1300,10 @@ components:
         waterLogs: { type: array, items: { $ref: '#/components/schemas/WaterLog' } }
         bodyMeasurements: { type: array, items: { $ref: '#/components/schemas/BodyMeasurement' } }
         xpLedger: { type: array, items: { $ref: '#/components/schemas/XpTransaction' } }
+        truncated:
+          type: array
+          items: { type: string }
+          description: Collections cut at their cap, e.g. `foodLogs`, `workoutSessions.sets` or `workoutPlans.exercises`; empty when complete.
 
     GoalType:
       type: string

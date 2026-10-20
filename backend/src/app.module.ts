@@ -6,6 +6,7 @@ import { ExercisesModule } from './exercises/exercises.module';
 import { GoalsModule } from './goals/goals.module';
 import { HealthModule } from './health/health.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
+import { MeModule } from './me/me.module';
 import { NutritionModule } from './nutrition/nutrition.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProgressModule } from './progress/progress.module';
@@ -28,6 +29,7 @@ import { XpModule } from './xp/xp.module';
     SessionsModule,
     XpModule,
     NutritionModule,
+    MeModule,
     ProgressModule,
   ],
 })

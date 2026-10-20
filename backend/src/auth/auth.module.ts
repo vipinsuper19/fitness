@@ -20,6 +20,7 @@ import { TokenService } from './token.service';
       useFactory: (env: Env) => [
         { name: 'auth', ttl: 60_000, limit: env.AUTH_RATE_LIMIT_PER_MINUTE },
         { name: 'refresh', ttl: 60_000, limit: env.AUTH_REFRESH_RATE_LIMIT_PER_MINUTE },
+        { name: 'export', ttl: 3_600_000, limit: env.EXPORT_RATE_LIMIT_PER_HOUR },
       ],
     }),
   ],

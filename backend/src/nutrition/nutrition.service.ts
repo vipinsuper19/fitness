@@ -131,7 +131,7 @@ export function sum(items: Nutrients[]): Nutrients {
   };
 }
 
-const toFoodView = (f: FoodItem): FoodView => ({
+export const toFoodView = (f: FoodItem): FoodView => ({
   id: f.id,
   name: f.name,
   nameHi: f.nameHi,
@@ -144,7 +144,7 @@ const toFoodView = (f: FoodItem): FoodView => ({
   source: f.source,
 });
 
-const toLogView = (l: FoodLog & { food: { name: string } }): FoodLogView => ({
+export const toLogView = (l: FoodLog & { food: { name: string } }): FoodLogView => ({
   id: l.id,
   foodId: l.foodId,
   foodName: l.food.name,
@@ -156,14 +156,14 @@ const toLogView = (l: FoodLog & { food: { name: string } }): FoodLogView => ({
   createdAt: l.createdAt.toISOString(),
 });
 
-const toWaterView = (w: WaterLog): WaterLogView => ({
+export const toWaterView = (w: WaterLog): WaterLogView => ({
   id: w.id,
   date: isoDate(w.date)!,
   amountMl: w.amountMl,
   createdAt: w.createdAt.toISOString(),
 });
 
-const withFood = { food: { select: { name: true } } } as const;
+export const withFood = { food: { select: { name: true } } } as const;
 
 /** The catalog plus the caller's own custom foods; another user's custom food is invisible. */
 const visibleTo = (userId: string): Prisma.FoodItemWhereInput => ({ OR: [{ source: 'catalog' }, { ownerId: userId }] });

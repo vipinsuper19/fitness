@@ -18,7 +18,7 @@ export interface GoalView {
   updatedAt: string;
 }
 
-const toView = (g: FitnessGoal): GoalView => ({
+export const toGoalView = (g: FitnessGoal): GoalView => ({
   id: g.id,
   type: g.type,
   status: g.status,
@@ -50,11 +50,11 @@ export class GoalsService {
       where: { userId, ...(q.status ? { status: q.status } : {}) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
-    return { items: rows.map(toView) };
+    return { items: rows.map(toGoalView) };
   }
 
   async get(userId: string, id: string): Promise<GoalView> {
-    return toView(await this.owned(userId, id));
+    return toGoalView(await this.owned(userId, id));
   }
 
   async create(userId: string, dto: GoalCreateDto): Promise<GoalView> {
@@ -69,7 +69,7 @@ export class GoalsService {
         targetDate: parseIsoDate(dto.targetDate) ?? null,
       },
     });
-    return toView(row);
+    return toGoalView(row);
   }
 
   async update(userId: string, id: string, dto: GoalUpdateDto): Promise<GoalView> {
@@ -81,7 +81,7 @@ export class GoalsService {
       data: { status: dto.status, targetValue: dto.targetValue, targetDate: parseIsoDate(dto.targetDate) },
     });
     if (count !== 1) throw notFound('Goal');
-    return toView(await this.owned(userId, id));
+    return toGoalView(await this.owned(userId, id));
   }
 
   async remove(userId: string, id: string): Promise<void> {
