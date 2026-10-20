@@ -41,3 +41,22 @@ export function clientTime(value: string | undefined, field: string, now: Date):
   }
   return t;
 }
+
+/** Local calendar date (YYYY-MM-DD) of an instant in `tz`. */
+export function localDate(t: Date, tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(t);
+}
+
+/** Inclusive list of calendar dates from `from` to `to`. */
+export function dateRange(from: string, to: string): string[] {
+  const out: string[] = [];
+  for (let d = from; d <= to; d = nextDate(d)) out.push(d);
+  return out;
+}
+
+/** Previous calendar date (YYYY-MM-DD). */
+export function prevDate(date: string): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}

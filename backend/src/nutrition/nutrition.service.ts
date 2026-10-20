@@ -50,8 +50,23 @@ export interface WaterLogView {
   createdAt: string;
 }
 
+/** How many of the day's entries have no value for each optional nutrient. */
+export interface EntriesMissing {
+  fiberG: number;
+  sugarG: number;
+  sodiumMg: number;
+}
+
 export interface DailyNutrition {
   date: string;
+  /** Food log entries counted in the totals. */
+  entryCount: number;
+  /**
+   * Entries without fibre, sugar or sodium. When > 0 and < entryCount, that
+   * total covers only some entries (partial, an under-count); when equal to
+   * entryCount the total is null.
+   */
+  entriesMissing: EntriesMissing;
   totals: Nutrients;
   byMeal: Record<MealTypeValue, Nutrients>;
   waterMl: number;
@@ -292,8 +307,11 @@ export class NutritionService {
     ]);
     const entries = logs.map((l) => ({ meal: l.mealType as MealTypeValue, n: nutrientsOf(l) }));
     const byMeal = Object.fromEntries(MEAL_TYPES.map((m) => [m, sum(entries.filter((e) => e.meal === m).map((e) => e.n))])) as Record<MealTypeValue, Nutrients>;
+    const missing = (k: keyof EntriesMissing) => entries.filter((e) => e.n[k] == null).length;
     return {
       date,
+      entryCount: entries.length,
+      entriesMissing: { fiberG: missing('fiberG'), sugarG: missing('sugarG'), sodiumMg: missing('sodiumMg') },
       totals: sum(entries.map((e) => e.n)),
       byMeal,
       waterMl: water._sum.amountMl ?? 0,

@@ -202,6 +202,19 @@ describeDb('T14: nutrition (HTTP + Postgres)', () => {
     });
   });
 
+  it('flags partial optional-nutrient totals with a per-nutrient count of entries missing them', async () => {
+    const t = await signUp();
+    const none = (await api(t).get(`/api/v1/nutrition/daily?date=${DAY}`).expect(200)).body;
+    expect(none).toMatchObject({ entryCount: 0, entriesMissing: { fiberG: 0, sugarG: 0, sodiumMg: 0 } });
+    const poha = (await api(t).post('/api/v1/foods').send(custom).expect(201)).body; // no fibre, sugar or sodium
+    await api(t).post('/api/v1/food-logs').send({ foodId: ROTI, date: DAY, mealType: 'lunch', servings: 1 }).expect(201); // fibre only
+    await api(t).post('/api/v1/food-logs').send({ foodId: poha.id, date: DAY, mealType: 'breakfast', servings: 1 }).expect(201);
+    const d = (await api(t).get(`/api/v1/nutrition/daily?date=${DAY}`).expect(200)).body;
+    expect(d.entryCount).toBe(2);
+    expect(d.entriesMissing).toEqual({ fiberG: 1, sugarG: 2, sodiumMg: 2 });
+    expect(d.totals).toMatchObject({ fiberG: 2.5, sugarG: null, sodiumMg: null });
+  });
+
   it('nutrition writes never touch XP', async () => {
     expect(await prisma.xPTransaction.count({ where: { user: { email: { startsWith: 't14-' } } } })).toBe(0);
   });

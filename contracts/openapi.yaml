@@ -907,6 +907,7 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/BodyMeasurement' }
+        '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [progress]
@@ -947,6 +948,7 @@ paths:
       tags: [progress]
       operationId: updateBodyMeasurement
       summary: Edit a body measurement
+      description: Replaces the entry; a measurement left out becomes `null`. At least one measurement is still required.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -988,6 +990,7 @@ paths:
           in: query
           required: true
           schema: { type: string, format: date }
+      description: Days are local dates in the profile timezone. `from` must be on or before `to`, and the range can cover at most 366 days (otherwise `400`). `xpEarned` counts workout awards made that day that were not later reversed.
       responses:
         '200':
           description: One point per day; `null` means no data that day, never 0
@@ -1578,9 +1581,21 @@ components:
         amountMl: { type: integer, minimum: 1, maximum: 5000 }
     DailyNutrition:
       type: object
-      required: [date, totals, byMeal, waterMl]
+      required: [date, entryCount, entriesMissing, totals, byMeal, waterMl]
       properties:
         date: { type: string, format: date }
+        entryCount: { type: integer, minimum: 0, description: Food log entries counted in the totals }
+        entriesMissing:
+          type: object
+          description: |
+            Entries with no value for each optional nutrient. `0` means the total is complete.
+            Between `0` and `entryCount` the total is partial (it covers only the other entries,
+            so it under-counts). Equal to `entryCount` means no data, and the total is `null`.
+          required: [fiberG, sugarG, sodiumMg]
+          properties:
+            fiberG: { type: integer, minimum: 0 }
+            sugarG: { type: integer, minimum: 0 }
+            sodiumMg: { type: integer, minimum: 0 }
         totals: { $ref: '#/components/schemas/Nutrients' }
         byMeal:
           type: object
@@ -1639,7 +1654,10 @@ components:
         from: { type: string, format: date }
         to: { type: string, format: date }
         points: { type: array, items: { $ref: '#/components/schemas/ProgressPoint' } }
-        streakDays: { type: integer, minimum: 0, description: Consecutive days ending today with a completed workout }
+        streakDays:
+          type: integer
+          minimum: 0
+          description: Consecutive local days (profile timezone) with a completed workout, ending today. If today has none yet, the streak ending yesterday is returned, because it is still alive until today ends.
 
     XpSourceType:
       type: string
