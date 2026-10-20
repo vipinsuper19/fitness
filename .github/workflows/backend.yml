@@ -2,10 +2,10 @@ name: backend
 
 on:
   pull_request:
-    paths: ["backend/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "contracts/**", ".github/workflows/backend.yml"]
   push:
     branches: [main]
-    paths: ["backend/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "contracts/**", ".github/workflows/backend.yml"]
 
 permissions:
   contents: read
@@ -59,6 +59,9 @@ jobs:
       - name: Lint
         if: steps.guard.outputs.present == 'true'
         run: npm run lint --if-present
+      - name: Contract lint (contracts/openapi.yaml)
+        if: steps.guard.outputs.present == 'true'
+        run: npm run contract:lint --if-present
       - name: Typecheck
         if: steps.guard.outputs.present == 'true'
         run: npm run typecheck --if-present

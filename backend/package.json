@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "license": "UNLICENSED",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
@@ -13,7 +15,8 @@
     "test": "prisma generate && jest",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
-    "migrate:deploy": "prisma migrate deploy"
+    "migrate:deploy": "prisma migrate deploy",
+    "contract:lint": "redocly lint ../contracts/openapi.yaml --config ../contracts/redocly.yaml"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
@@ -30,17 +33,21 @@
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "@nestjs/testing": "^11.1.0",
+    "@redocly/cli": "^2.65.1",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.0",
     "@types/pg": "^8.15.0",
     "@types/supertest": "^6.0.3",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "eslint": "^10.0.0",
     "jest": "^30.0.0",
     "prisma": "7.10.1",
     "supertest": "^7.1.0",
     "ts-jest": "^29.4.0",
     "typescript": "~5.9.2",
-    "typescript-eslint": "^8.40.0"
+    "typescript-eslint": "^8.40.0",
+    "yaml": "^2.9.1"
   }
 }

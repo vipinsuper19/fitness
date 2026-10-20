@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/vipinsuper19/fitness/contracts/schemas/workout-plan-draft.schema.json",
+  "title": "WorkoutPlanDraft",
+  "description": "A plan draft from POST /workout-plans/generate, and the body of POST /workout-plans. The MVP fills it with the rule-based generator. Any later AI provider must return exactly this shape, and the server validates it before use, falling back to the rule-based generator when validation fails.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "weeks", "workouts", "generator"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "weeks": { "type": "integer", "minimum": 1, "maximum": 16 },
+    "generator": {
+      "type": "string",
+      "enum": ["rule_based", "custom"],
+      "description": "rule_based for generated drafts (no AI provider in the MVP); custom for user-built plans"
+    },
+    "rationale": {
+      "type": ["string", "null"],
+      "maxLength": 1000,
+      "description": "Plain-language reason for the split, shown to the user"
+    },
+    "workouts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dayOfWeek", "name", "exercises"],
+        "properties": {
+          "dayOfWeek": { "type": "integer", "minimum": 1, "maximum": 7, "description": "ISO weekday, 1 = Monday" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "exercises": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["exerciseId", "order", "sets"],
+              "properties": {
+                "exerciseId": { "type": "string", "format": "uuid" },
+                "order": { "type": "integer", "minimum": 0 },
+                "sets": { "type": "integer", "minimum": 1, "maximum": 20 },
+                "repsMin": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 },
+                "repsMax": { "type": ["integer", "null"], "minimum": 1, "maximum": 100 },
+                "durationSeconds": { "type": ["integer", "null"], "minimum": 1, "maximum": 7200 },
+                "targetWeightKg": { "type": ["number", "null"], "minimum": 0, "maximum": 1000 },
+                "restSeconds": { "type": "integer", "minimum": 0, "maximum": 600, "default": 90 },
+                "notes": { "type": ["string", "null"], "maxLength": 500 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

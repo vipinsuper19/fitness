@@ -1,0 +1,9 @@
+extends:
+  - recommended
+rules:
+  operation-4xx-response: error
+  operation-operationId-unique: error
+  no-unused-components: warn
+  info-license-strict: off
+  no-server-example.com: off # localhost is the documented local server
+  security-defined: error
