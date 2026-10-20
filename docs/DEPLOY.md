@@ -43,7 +43,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
 Once the service exists, set the Android **debug** build's API base URL to `https://<service>.onrender.com/api/v1/`. No Play upload.
 
 ## Free-tier notes
-- **Cold starts:** Render Free spins down after ~15 min idle, and the first request after that takes ~50 s. The app should show a loading state and retry. An external keep-alive pinger would avoid this, but it isn't set up here.
+- **Cold starts (accepted):** Render Free spins down after ~15 min idle, so the first request after that takes **about 50 s**. **No keep-alive pinger is used**, by choice, to stay within the free plan; the app should show a loading state and retry.
 - Render Free has 512 MB RAM. argon2 (19 MiB per hash) fits.
 - `backend/Dockerfile` is an alternative (runtime `docker`). The Blueprint uses the native Node runtime because the Docker image prunes the Prisma CLI, which migrate-on-start needs.
 - Node 22 is required (`engines: >=22`). argon2's native build fails on Node 20.
