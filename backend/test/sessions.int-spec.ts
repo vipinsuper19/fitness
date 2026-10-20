@@ -78,10 +78,15 @@ describeDb('T12: workout sessions and XP (HTTP + Postgres)', () => {
       await api(other.token).post('/api/v1/workout-sessions').send({ plannedWorkoutId: pw }).expect(404);
     });
 
-    it('accepts an offline start time but not one in the future', async () => {
+    it('accepts an offline start up to 24 h old, but not older or in the future', async () => {
       const u = await signUp();
       const past = new Date(Date.now() - 3600_000).toISOString();
       expect((await startSession(u.token, { startedAt: past })).startedAt).toBe(past);
+      const recent = new Date(Date.now() - 23 * 3600_000).toISOString();
+      expect((await startSession(u.token, { startedAt: recent })).startedAt).toBe(recent);
+      const stale = await api(u.token).post('/api/v1/workout-sessions').send({ startedAt: new Date(Date.now() - 25 * 3600_000).toISOString() }).expect(400);
+      expect(stale.body.code).toBe('VALIDATION_FAILED');
+      expect(stale.body.details.fields).toHaveProperty('startedAt');
       const future = new Date(Date.now() + 3600_000).toISOString();
       const r = await api(u.token).post('/api/v1/workout-sessions').send({ startedAt: future }).expect(400);
       expect(r.body.details.fields).toHaveProperty('startedAt');
@@ -260,7 +265,10 @@ describeDb('T12: workout sessions and XP (HTTP + Postgres)', () => {
     it('lists completed sessions newest first, by local (IST) date, with validated cursors', async () => {
       const u = await signUp();
       const finish = async (completedAt: string) => {
-        const s = await startSession(u.token, { startedAt: new Date(new Date(completedAt).getTime() - 1800_000).toISOString() });
+        // Fixed past dates are older than the 24 h start window, so back-date in the DB.
+        const s = await startSession(u.token);
+        const startedAt = new Date(new Date(completedAt).getTime() - 1800_000);
+        await prisma.workoutSession.update({ where: { id: s.id }, data: { startedAt, activeSince: startedAt } });
         await logSet(u.token, s.id).expect(200);
         await api(u.token).post(`/api/v1/workout-sessions/${s.id}/complete`).send({ completedAt }).expect(200);
         return s.id as string;

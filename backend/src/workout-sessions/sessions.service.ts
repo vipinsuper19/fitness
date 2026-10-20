@@ -16,6 +16,8 @@ type Tx = Prisma.TransactionClient;
 
 /** Longest session we count; guards against a device left running for days. */
 export const MAX_ACTIVE_SECONDS = 24 * 60 * 60;
+/** Offline starts may be back-dated by at most a day. */
+export const MAX_START_AGE_MS = 24 * 60 * 60 * 1000;
 
 const sessionInclude = {
   planVersion: { select: { planId: true, version: true } },
@@ -109,6 +111,9 @@ export class SessionsService {
   async start(userId: string, dto: SessionStartDto): Promise<SessionView> {
     const now = new Date();
     const startedAt = clientTime(dto.startedAt, 'startedAt', now) ?? now;
+    if (startedAt.getTime() < now.getTime() - MAX_START_AGE_MS) {
+      throw invalid('startedAt', 'startedAt cannot be more than 24 hours ago');
+    }
     let planVersionId: string | null = null;
     if (dto.plannedWorkoutId) {
       const pw = await this.prisma.plannedWorkout.findFirst({
