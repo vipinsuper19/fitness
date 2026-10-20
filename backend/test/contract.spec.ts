@@ -95,6 +95,20 @@ describe('contracts/openapi.yaml', () => {
     expect(open.map(({ op }) => op.operationId).sort()).toEqual(['login', 'refreshTokens', 'register']);
   });
 
+  it('never stores or replays token-bearing responses, and binds keys to method and path', () => {
+    const info = (spec as unknown as { info: { description: string } }).info.description;
+    expect(info).toMatch(/Token-bearing responses are never stored/);
+    expect(info).toMatch(/different method or path/);
+    expect(info).toMatch(/never re-awarded/);
+    const byId = new Map(operations().map((o) => [o.op.operationId, o]));
+    for (const id of ['login', 'refreshTokens']) {
+      expect(paramRefs(byId.get(id)!.op, byId.get(id)!.pathItem).some((r) => r.includes('Idempotency'))).toBe(false);
+    }
+    const register = byId.get('register')!.op as Operation & { description?: string };
+    expect(register.description).toMatch(/EMAIL_TAKEN/);
+    expect(register.description).toMatch(/never stored or replayed/);
+  });
+
   it('uses one error shape { code, message, details?, requestId }', () => {
     expect(spec.components.schemas.Error?.required).toEqual(['code', 'message', 'requestId']);
   });
