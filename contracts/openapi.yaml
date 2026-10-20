@@ -27,9 +27,25 @@ info:
       `409 IDEMPOTENCY_KEY_REUSED`; a replay while the first request is still
       running is `409 IDEMPOTENCY_IN_PROGRESS`. Keys are kept for 24 hours and
       are scoped to the user.
+      - A key is bound to the method, path and body hash of its first request.
+        Reusing it on a **different method or path** is
+        `409 IDEMPOTENCY_KEY_REUSED`; it is never replayed against another
+        endpoint.
+      - **Token-bearing responses are never stored.** `/auth/login` and
+        `/auth/refresh` do not use idempotency keys, and `/auth/register` uses
+        its key only to reject a concurrent duplicate
+        (`409 IDEMPOTENCY_IN_PROGRESS`). A register replay after the first
+        request finished re-runs the request: it returns `409 EMAIL_TAKEN` if
+        the account was created (sign in instead), or fresh tokens if it was
+        not. Tokens are never replayed from storage.
+      - Rows tied to an account are erased with the account.
     - **XP:** awarded only by the server (workout completion in the MVP).
       There is no client endpoint that writes XP. The ledger is unique per
       `(userId, sourceType, sourceId)`, so retries never double-award.
+      A reversal is a negative `adjustment` entry whose `sourceId` is the
+      reversed entry. A reversed award is **never re-awarded**: the original
+      entry stays in the ledger, so completing, replaying or re-completing
+      the same session awards nothing, and an entry can be reversed only once.
     - **Ownership:** every user-owned resource is checked; another user's
       id returns `404 NOT_FOUND`, never 403, so ids are not enumerable.
     - **AI:** there is no AI provider in the MVP. "Generate" endpoints use
@@ -71,6 +87,12 @@ paths:
       tags: [auth]
       operationId: register
       summary: Create an account with email and password
+      description: |
+        `Idempotency-Key` only rejects a concurrent duplicate
+        (`409 IDEMPOTENCY_IN_PROGRESS`). The response holds tokens, so it is
+        never stored or replayed. Retrying after the first request finished
+        returns `409 EMAIL_TAKEN` when the account exists (sign in instead),
+        or `201` with fresh tokens when the first attempt did not create it.
       security: []
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -87,7 +109,7 @@ paths:
               schema: { $ref: '#/components/schemas/AuthResponse' }
         '400': { $ref: '#/components/responses/ValidationError' }
         '409':
-          description: '`EMAIL_TAKEN`, or an idempotency conflict'
+          description: '`EMAIL_TAKEN` (also on a retry after a successful sign-up), `IDEMPOTENCY_IN_PROGRESS`, or `IDEMPOTENCY_KEY_REUSED`'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -97,6 +119,7 @@ paths:
       tags: [auth]
       operationId: login
       summary: Sign in with email and password
+      description: Takes no `Idempotency-Key`; token responses are never stored.
       security: []
       requestBody:
         required: true
@@ -121,7 +144,7 @@ paths:
       tags: [auth]
       operationId: refreshTokens
       summary: Rotate the refresh token and get a new access token
-      description: The presented refresh token is revoked. Reusing a revoked token revokes the whole family (`REFRESH_TOKEN_REUSED`).
+      description: The presented refresh token is revoked. Reusing a revoked token revokes the whole family (`REFRESH_TOKEN_REUSED`). Takes no `Idempotency-Key`; token responses are never stored.
       security: []
       requestBody:
         required: true
@@ -1085,7 +1108,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     IdempotencyConflict:
-      description: '`IDEMPOTENCY_KEY_REUSED` or `IDEMPOTENCY_IN_PROGRESS`'
+      description: '`IDEMPOTENCY_KEY_REUSED` (different body, method or path; never replayed) or `IDEMPOTENCY_IN_PROGRESS`'
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -1431,7 +1454,7 @@ components:
         xpAwarded:
           type: integer
           minimum: 0
-          description: XP from this completion; the original amount on a replay
+          description: XP from this completion; the original amount on a replay. A reversed award is never re-awarded.
         xpBalance: { $ref: '#/components/schemas/XpBalance' }
 
     MealType:
