@@ -72,3 +72,20 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
   - one error shape everywhere
   - throttling on auth routes (`429 RATE_LIMITED` with `Retry-After`), a looser bucket for refresh, and a per-account cap on failed logins
   - `trust proxy` set to `TRUST_PROXY_HOPS` (1, per Render's docs); verify `req.ip` after the first deploy
+
+## Profile, goals, exercises and workout plans (T10)
+- **`GET/PUT /me/profile`:**
+  - metric only (`unitSystem` is a display preference); India-first defaults (`Asia/Kolkata`, `en-IN`, INR)
+  - an omitted field is left unchanged and `null` clears it, so onboarding can be skipped and resumed
+  - height is rounded to 0.1 cm and weight to 0.01 kg
+- **`/goals` CRUD:** owner-scoped; another user's id is `404`. Weight targets must be 20–400 kg and `workouts_per_week` 1–7.
+- **`/exercises`:** the seeded catalog, read-only.
+  - search by English or Hindi name, by muscle (primary or secondary) and by equipment
+  - keyset pagination with an opaque `cursor`
+- **`/workout-plans`:**
+  - `generate` is rule-based (`src/workout-plans/generator.ts`, no AI) and pure: it never persists, and the same input gives the same draft
+  - `POST` saves version 1
+  - `PATCH` writes `baseVersion + 1`, using compare-and-set; a stale base gets `409 VERSION_CONFLICT`, and older versions stay readable through `?version=`
+  - `activate` sets the single `user_profiles.active_plan_id`
+- **Retries:** every write here takes an optional `Idempotency-Key`, handled by `IdempotentWriteService`. A replay returns the stored status and body with `Idempotent-Replayed: true`. A different body, method or path is `409 IDEMPOTENCY_KEY_REUSED`.
+- **XP:** nothing here awards XP; that comes with session completion in T12.
