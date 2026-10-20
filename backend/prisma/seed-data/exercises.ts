@@ -1,0 +1,49 @@
+import type { Equipment, ExperienceLevel, MuscleGroup, TrackingType } from '../../src/generated/prisma/client';
+
+export interface SeedExercise {
+  slug: string;
+  name: string;
+  nameHi?: string;
+  primaryMuscle: MuscleGroup;
+  secondaryMuscles: MuscleGroup[];
+  equipment: Equipment[];
+  trackingType: TrackingType;
+  difficulty: ExperienceLevel;
+  instructions: string[];
+}
+
+/** Curated MVP catalog: home (bodyweight) first, then common gym lifts. */
+export const EXERCISES: SeedExercise[] = [
+  { slug: 'push-up', name: 'Push-up', nameHi: 'पुश-अप', primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'shoulders', 'core'], equipment: ['none'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Hands slightly wider than shoulders, body in a straight line.', 'Lower your chest to just above the floor.', 'Press back up without letting the hips sag.'] },
+  { slug: 'knee-push-up', name: 'Knee push-up', primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'shoulders'], equipment: ['none'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Knees on the floor, body straight from knees to head.', 'Lower your chest, then press up.'] },
+  { slug: 'bodyweight-squat', name: 'Bodyweight squat', nameHi: 'स्क्वाट', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'hamstrings', 'core'], equipment: ['none'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Feet shoulder-width apart.', 'Sit back and down until thighs are about parallel.', 'Drive through the heels to stand.'] },
+  { slug: 'forward-lunge', name: 'Forward lunge', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'hamstrings'], equipment: ['none'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Step forward and lower until both knees are near 90 degrees.', 'Push back to standing and switch legs.'] },
+  { slug: 'glute-bridge', name: 'Glute bridge', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings', 'core'], equipment: ['none'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Lie on your back, knees bent, feet flat.', 'Lift the hips until the body is straight from knees to shoulders.', 'Lower with control.'] },
+  { slug: 'plank', name: 'Plank', primaryMuscle: 'core', secondaryMuscles: ['shoulders', 'glutes'], equipment: ['none'], trackingType: 'duration', difficulty: 'beginner', instructions: ['Forearms under shoulders, body in a straight line.', 'Brace the core and hold.'] },
+  { slug: 'side-plank', name: 'Side plank', primaryMuscle: 'core', secondaryMuscles: ['shoulders', 'glutes'], equipment: ['none'], trackingType: 'duration', difficulty: 'intermediate', instructions: ['Forearm under shoulder, feet stacked.', 'Lift the hips and hold; switch sides.'] },
+  { slug: 'mountain-climber', name: 'Mountain climber', primaryMuscle: 'core', secondaryMuscles: ['shoulders', 'quads', 'cardio'], equipment: ['none'], trackingType: 'duration', difficulty: 'beginner', instructions: ['Start in a high plank.', 'Drive knees toward the chest one at a time, quickly.'] },
+  { slug: 'burpee', name: 'Burpee', primaryMuscle: 'full_body', secondaryMuscles: ['cardio', 'chest', 'quads'], equipment: ['none'], trackingType: 'reps', difficulty: 'intermediate', instructions: ['Squat, place hands down and jump feet back to a plank.', 'Jump feet in and jump up.'] },
+  { slug: 'jumping-jack', name: 'Jumping jack', primaryMuscle: 'cardio', secondaryMuscles: ['calves', 'shoulders'], equipment: ['none'], trackingType: 'duration', difficulty: 'beginner', instructions: ['Jump feet out while raising arms overhead.', 'Jump back to start.'] },
+  { slug: 'surya-namaskar', name: 'Surya Namaskar (sun salutation)', nameHi: 'सूर्य नमस्कार', primaryMuscle: 'full_body', secondaryMuscles: ['core', 'shoulders', 'hamstrings'], equipment: ['none'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Flow through the 12 poses with the breath.', 'One rep is one full round (both sides).'] },
+  { slug: 'calf-raise', name: 'Calf raise', primaryMuscle: 'calves', secondaryMuscles: [], equipment: ['none'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Rise onto the balls of the feet.', 'Lower slowly.'] },
+  { slug: 'superman', name: 'Superman hold', primaryMuscle: 'back', secondaryMuscles: ['glutes'], equipment: ['none'], trackingType: 'duration', difficulty: 'beginner', instructions: ['Lie face down, lift arms and legs off the floor.', 'Hold, then lower.'] },
+  { slug: 'bench-dip', name: 'Bench dip', primaryMuscle: 'triceps', secondaryMuscles: ['shoulders', 'chest'], equipment: ['bench'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Hands on a bench behind you.', 'Bend the elbows to lower, then press up.'] },
+  { slug: 'pull-up', name: 'Pull-up', primaryMuscle: 'back', secondaryMuscles: ['biceps', 'forearms'], equipment: ['pull_up_bar'], trackingType: 'reps', difficulty: 'intermediate', instructions: ['Hang with an overhand grip.', 'Pull until the chin clears the bar.', 'Lower fully.'] },
+  { slug: 'band-row', name: 'Resistance band row', primaryMuscle: 'back', secondaryMuscles: ['biceps'], equipment: ['resistance_band'], trackingType: 'reps', difficulty: 'beginner', instructions: ['Anchor the band at chest height.', 'Pull elbows back, squeezing the shoulder blades.'] },
+  { slug: 'dumbbell-goblet-squat', name: 'Dumbbell goblet squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'core'], equipment: ['dumbbell'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['Hold a dumbbell at the chest.', 'Squat with an upright torso.'] },
+  { slug: 'dumbbell-bench-press', name: 'Dumbbell bench press', primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'shoulders'], equipment: ['dumbbell', 'bench'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['Lie on a bench, dumbbells over the chest.', 'Lower to chest level, press up.'] },
+  { slug: 'dumbbell-row', name: 'One-arm dumbbell row', primaryMuscle: 'back', secondaryMuscles: ['biceps'], equipment: ['dumbbell', 'bench'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['One hand and knee on a bench.', 'Row the dumbbell to the hip.'] },
+  { slug: 'dumbbell-shoulder-press', name: 'Dumbbell shoulder press', primaryMuscle: 'shoulders', secondaryMuscles: ['triceps'], equipment: ['dumbbell'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['Dumbbells at shoulder height.', 'Press overhead without arching the back.'] },
+  { slug: 'dumbbell-bicep-curl', name: 'Dumbbell bicep curl', primaryMuscle: 'biceps', secondaryMuscles: ['forearms'], equipment: ['dumbbell'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['Elbows at your sides.', 'Curl up, lower slowly.'] },
+  { slug: 'dumbbell-romanian-deadlift', name: 'Dumbbell Romanian deadlift', primaryMuscle: 'hamstrings', secondaryMuscles: ['glutes', 'back'], equipment: ['dumbbell'], trackingType: 'reps_weight', difficulty: 'intermediate', instructions: ['Soft knees, hinge at the hips.', 'Lower the dumbbells along the legs, then stand up.'] },
+  { slug: 'kettlebell-swing', name: 'Kettlebell swing', primaryMuscle: 'glutes', secondaryMuscles: ['hamstrings', 'core', 'cardio'], equipment: ['kettlebell'], trackingType: 'reps_weight', difficulty: 'intermediate', instructions: ['Hinge and hike the bell back.', 'Snap the hips to swing it to chest height.'] },
+  { slug: 'barbell-back-squat', name: 'Barbell back squat', primaryMuscle: 'quads', secondaryMuscles: ['glutes', 'hamstrings', 'core'], equipment: ['barbell'], trackingType: 'reps_weight', difficulty: 'intermediate', instructions: ['Bar on the upper back.', 'Squat to depth with a braced core, then stand.'] },
+  { slug: 'barbell-bench-press', name: 'Barbell bench press', primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'shoulders'], equipment: ['barbell', 'bench'], trackingType: 'reps_weight', difficulty: 'intermediate', instructions: ['Grip slightly wider than shoulders.', 'Lower to the chest, press up.'] },
+  { slug: 'barbell-deadlift', name: 'Barbell deadlift', primaryMuscle: 'back', secondaryMuscles: ['glutes', 'hamstrings', 'forearms'], equipment: ['barbell'], trackingType: 'reps_weight', difficulty: 'advanced', instructions: ['Bar over mid-foot, flat back.', 'Push the floor away and stand tall.'] },
+  { slug: 'lat-pulldown', name: 'Lat pulldown', primaryMuscle: 'back', secondaryMuscles: ['biceps'], equipment: ['machine', 'cable'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['Pull the bar to the upper chest.', 'Return with control.'] },
+  { slug: 'leg-press', name: 'Leg press', primaryMuscle: 'quads', secondaryMuscles: ['glutes'], equipment: ['machine'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['Feet shoulder-width on the platform.', 'Lower until knees are near 90 degrees, press.'] },
+  { slug: 'cable-tricep-pushdown', name: 'Cable tricep pushdown', primaryMuscle: 'triceps', secondaryMuscles: [], equipment: ['cable'], trackingType: 'reps_weight', difficulty: 'beginner', instructions: ['Elbows fixed at your sides.', 'Push the bar down to full extension.'] },
+  { slug: 'brisk-walk', name: 'Brisk walk', primaryMuscle: 'cardio', secondaryMuscles: ['calves'], equipment: ['none'], trackingType: 'distance_duration', difficulty: 'beginner', instructions: ['Walk at a pace where talking is possible but harder.'] },
+  { slug: 'running', name: 'Running', primaryMuscle: 'cardio', secondaryMuscles: ['quads', 'calves'], equipment: ['none'], trackingType: 'distance_duration', difficulty: 'intermediate', instructions: ['Easy conversational pace unless the plan says otherwise.'] },
+  { slug: 'skipping-rope', name: 'Skipping rope', nameHi: 'रस्सी कूद', primaryMuscle: 'cardio', secondaryMuscles: ['calves', 'shoulders'], equipment: ['other'], trackingType: 'duration', difficulty: 'beginner', instructions: ['Small jumps, wrists turning the rope.'] },
+];

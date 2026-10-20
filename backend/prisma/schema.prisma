@@ -1,4 +1,6 @@
-// MVP entities land in T6. This file only wires the client and datasource.
+// MVP schema (T6). Canonical metric units; money (when added) is INR paise.
+// Every user-owned row cascades on account deletion (DELETE /me).
+
 generator client {
   provider     = "prisma-client"
   output       = "../src/generated/prisma"
@@ -7,4 +9,517 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------- enums ----------
+
+enum Sex {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum ActivityLevel {
+  sedentary
+  light
+  moderate
+  active
+  very_active
+}
+
+enum ExperienceLevel {
+  beginner
+  intermediate
+  advanced
+}
+
+enum UnitSystem {
+  metric
+  imperial
+}
+
+enum DietPreference {
+  vegetarian
+  eggetarian
+  non_vegetarian
+  vegan
+  jain
+}
+
+enum GoalType {
+  lose_weight
+  gain_muscle
+  maintain
+  improve_endurance
+  workouts_per_week
+}
+
+enum GoalStatus {
+  active
+  achieved
+  abandoned
+}
+
+enum MuscleGroup {
+  chest
+  back
+  shoulders
+  biceps
+  triceps
+  forearms
+  core
+  quads
+  hamstrings
+  glutes
+  calves
+  full_body
+  cardio
+}
+
+enum Equipment {
+  none
+  dumbbell
+  barbell
+  kettlebell
+  machine
+  cable
+  resistance_band
+  bench
+  pull_up_bar
+  other
+}
+
+enum TrackingType {
+  reps_weight
+  reps
+  duration
+  distance_duration
+}
+
+enum PlanSource {
+  rule_based
+  custom
+}
+
+enum SessionStatus {
+  in_progress
+  paused
+  completed
+}
+
+enum ServingUnit {
+  g
+  ml
+  piece
+  katori
+  cup
+  tbsp
+  tsp
+  plate
+  glass
+  slice
+}
+
+enum FoodSource {
+  catalog
+  custom
+}
+
+enum MealType {
+  breakfast
+  lunch
+  dinner
+  snack
+}
+
+enum XpSourceType {
+  workout_session
+  adjustment
+}
+
+enum IdempotencyStatus {
+  in_progress
+  completed
+}
+
+// ---------- identity ----------
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Stored lower-cased and trimmed by the auth service.
+  email        String   @unique @db.VarChar(254)
+  /// argon2id hash; the password is never stored.
+  passwordHash String   @map("password_hash")
+  displayName  String?  @map("display_name") @db.VarChar(60)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  profile          UserProfile?
+  refreshTokens    RefreshToken[]
+  goals            FitnessGoal[]
+  workoutPlans     WorkoutPlan[]
+  workoutSessions  WorkoutSession[]
+  setLogs          ExerciseSetLog[]
+  customFoods      FoodItem[]
+  foodLogs         FoodLog[]
+  waterLogs        WaterLog[]
+  bodyMeasurements BodyMeasurement[]
+  xpTransactions   XPTransaction[]
+  idempotencyKeys  IdempotencyKey[]
+
+  @@map("users")
+}
+
+/// Rotating refresh tokens (T7). Only a SHA-256 hash is stored. Reusing a
+/// revoked token revokes every token in its family.
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  familyId     String    @map("family_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash") @db.Char(64)
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model UserProfile {
+  userId                 String           @id @map("user_id") @db.Uuid
+  birthYear              Int?             @map("birth_year") @db.SmallInt
+  sex                    Sex?
+  heightCm               Decimal?         @map("height_cm") @db.Decimal(5, 1)
+  weightKg               Decimal?         @map("weight_kg") @db.Decimal(5, 2)
+  activityLevel          ActivityLevel?   @map("activity_level")
+  experienceLevel        ExperienceLevel? @map("experience_level")
+  dietPreference         DietPreference?  @map("diet_preference")
+  unitSystem             UnitSystem       @default(metric) @map("unit_system")
+  timezone               String           @default("Asia/Kolkata") @db.VarChar(64)
+  locale                 String           @default("en-IN") @db.VarChar(16)
+  currency               String           @default("INR") @db.Char(3)
+  dailyCalorieTargetKcal Int?             @map("daily_calorie_target_kcal")
+  dailyWaterTargetMl     Int?             @map("daily_water_target_ml")
+  onboardingCompleted    Boolean          @default(false) @map("onboarding_completed")
+  /// At most one active plan per user, enforced by this single column.
+  activePlanId           String?          @unique @map("active_plan_id") @db.Uuid
+  updatedAt              DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activePlan WorkoutPlan? @relation("ActivePlan", fields: [activePlanId], references: [id], onDelete: SetNull)
+
+  @@map("user_profiles")
+}
+
+model FitnessGoal {
+  id          String     @id @default(uuid()) @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  type        GoalType
+  status      GoalStatus @default(active)
+  targetValue Decimal?   @map("target_value") @db.Decimal(8, 2)
+  startValue  Decimal?   @map("start_value") @db.Decimal(8, 2)
+  targetDate  DateTime?  @map("target_date") @db.Date
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("fitness_goals")
+}
+
+// ---------- exercise catalog (seeded, read-only) ----------
+
+model Exercise {
+  id               String          @id @db.Uuid
+  slug             String          @unique @db.VarChar(80)
+  name             String          @db.VarChar(120)
+  nameHi           String?         @map("name_hi") @db.VarChar(120)
+  primaryMuscle    MuscleGroup     @map("primary_muscle")
+  secondaryMuscles MuscleGroup[]   @map("secondary_muscles")
+  equipment        Equipment[]
+  trackingType     TrackingType    @map("tracking_type")
+  difficulty       ExperienceLevel
+  instructions     String[]
+  videoUrl         String?         @map("video_url")
+
+  plannedExercises PlannedExercise[]
+  setLogs          ExerciseSetLog[]
+
+  @@index([primaryMuscle])
+  @@map("exercises")
+}
+
+// ---------- plans (versioned) ----------
+
+model WorkoutPlan {
+  id             String     @id @default(uuid()) @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  source         PlanSource
+  /// Latest version number; PATCH creates version currentVersion + 1.
+  currentVersion Int        @default(1) @map("current_version")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions  WorkoutPlanVersion[]
+  activeFor UserProfile?         @relation("ActivePlan")
+
+  @@index([userId])
+  @@map("workout_plans")
+}
+
+model WorkoutPlanVersion {
+  id        String   @id @default(uuid()) @db.Uuid
+  planId    String   @map("plan_id") @db.Uuid
+  version   Int
+  name      String   @db.VarChar(80)
+  weeks     Int      @db.SmallInt
+  rationale String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  plan     WorkoutPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  workouts PlannedWorkout[]
+  sessions WorkoutSession[]
+
+  @@unique([planId, version])
+  @@map("workout_plan_versions")
+}
+
+model PlannedWorkout {
+  id            String @id @default(uuid()) @db.Uuid
+  planVersionId String @map("plan_version_id") @db.Uuid
+  /// ISO weekday, 1 = Monday.
+  dayOfWeek     Int    @map("day_of_week") @db.SmallInt
+  name          String @db.VarChar(80)
+  order         Int    @default(0) @db.SmallInt
+
+  planVersion WorkoutPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  exercises   PlannedExercise[]
+  sessions    WorkoutSession[]
+
+  @@index([planVersionId])
+  @@map("planned_workouts")
+}
+
+model PlannedExercise {
+  id               String   @id @default(uuid()) @db.Uuid
+  plannedWorkoutId String   @map("planned_workout_id") @db.Uuid
+  exerciseId       String   @map("exercise_id") @db.Uuid
+  order            Int      @db.SmallInt
+  sets             Int      @db.SmallInt
+  repsMin          Int?     @map("reps_min") @db.SmallInt
+  repsMax          Int?     @map("reps_max") @db.SmallInt
+  durationSeconds  Int?     @map("duration_seconds")
+  targetWeightKg   Decimal? @map("target_weight_kg") @db.Decimal(6, 2)
+  restSeconds      Int      @default(90) @map("rest_seconds") @db.SmallInt
+  notes            String?  @db.VarChar(500)
+
+  plannedWorkout PlannedWorkout @relation(fields: [plannedWorkoutId], references: [id], onDelete: Cascade)
+  exercise       Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@index([plannedWorkoutId])
+  @@map("planned_exercises")
+}
+
+// ---------- sessions ----------
+
+model WorkoutSession {
+  id                  String        @id @default(uuid()) @db.Uuid
+  userId              String        @map("user_id") @db.Uuid
+  planVersionId       String?       @map("plan_version_id") @db.Uuid
+  plannedWorkoutId    String?       @map("planned_workout_id") @db.Uuid
+  status              SessionStatus @default(in_progress)
+  startedAt           DateTime      @map("started_at") @db.Timestamptz(3)
+  pausedAt            DateTime?     @map("paused_at") @db.Timestamptz(3)
+  completedAt         DateTime?     @map("completed_at") @db.Timestamptz(3)
+  /// Active time, paused time excluded.
+  activeSeconds       Int           @default(0) @map("active_seconds")
+  perceivedDifficulty Int?          @map("perceived_difficulty") @db.SmallInt
+  notes               String?       @db.VarChar(1000)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planVersion    WorkoutPlanVersion? @relation(fields: [planVersionId], references: [id], onDelete: SetNull)
+  plannedWorkout PlannedWorkout?     @relation(fields: [plannedWorkoutId], references: [id], onDelete: SetNull)
+  sets           ExerciseSetLog[]
+
+  @@index([userId, completedAt])
+  @@index([userId, status])
+  @@map("workout_sessions")
+}
+
+/// Upserted by the device-generated clientSetId, so offline sync can retry.
+model ExerciseSetLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  sessionId       String   @map("session_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  clientSetId     String   @map("client_set_id") @db.Uuid
+  exerciseId      String   @map("exercise_id") @db.Uuid
+  setIndex        Int      @map("set_index") @db.SmallInt
+  reps            Int?     @db.SmallInt
+  weightKg        Decimal? @map("weight_kg") @db.Decimal(6, 2)
+  durationSeconds Int?     @map("duration_seconds")
+  distanceM       Decimal? @map("distance_m") @db.Decimal(9, 1)
+  completed       Boolean  @default(false)
+  loggedAt        DateTime @default(now()) @map("logged_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  session  WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, clientSetId])
+  @@index([sessionId])
+  @@map("exercise_set_logs")
+}
+
+// ---------- nutrition ----------
+
+/// Catalog foods have ownerId null; custom foods belong to one user.
+/// Nutrients are per one servingSize of servingUnit.
+model FoodItem {
+  id              String      @id @default(uuid()) @db.Uuid
+  ownerId         String?     @map("owner_id") @db.Uuid
+  slug            String?     @unique @db.VarChar(80)
+  name            String      @db.VarChar(120)
+  nameHi          String?     @map("name_hi") @db.VarChar(120)
+  brand           String?     @db.VarChar(80)
+  servingSize     Decimal     @map("serving_size") @db.Decimal(8, 2)
+  servingUnit     ServingUnit @map("serving_unit")
+  gramsPerServing Decimal?    @map("grams_per_serving") @db.Decimal(8, 2)
+  energyKcal      Decimal     @map("energy_kcal") @db.Decimal(7, 1)
+  proteinG        Decimal     @map("protein_g") @db.Decimal(6, 1)
+  carbsG          Decimal     @map("carbs_g") @db.Decimal(6, 1)
+  fatG            Decimal     @map("fat_g") @db.Decimal(6, 1)
+  fiberG          Decimal?    @map("fiber_g") @db.Decimal(6, 1)
+  sugarG          Decimal?    @map("sugar_g") @db.Decimal(6, 1)
+  sodiumMg        Decimal?    @map("sodium_mg") @db.Decimal(7, 1)
+  isVegetarian    Boolean?    @map("is_vegetarian")
+  source          FoodSource
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  owner User?     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  logs  FoodLog[]
+
+  @@index([ownerId])
+  @@index([name])
+  @@map("food_items")
+}
+
+/// Nutrient totals are snapshotted at log time (servings applied, or the
+/// user's override), so later catalog edits do not rewrite history.
+model FoodLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  foodId          String   @map("food_id") @db.Uuid
+  date            DateTime @db.Date
+  mealType        MealType @map("meal_type")
+  servings        Decimal  @db.Decimal(6, 2)
+  energyKcal      Decimal  @map("energy_kcal") @db.Decimal(7, 1)
+  proteinG        Decimal  @map("protein_g") @db.Decimal(6, 1)
+  carbsG          Decimal  @map("carbs_g") @db.Decimal(6, 1)
+  fatG            Decimal  @map("fat_g") @db.Decimal(6, 1)
+  fiberG          Decimal? @map("fiber_g") @db.Decimal(6, 1)
+  sugarG          Decimal? @map("sugar_g") @db.Decimal(6, 1)
+  sodiumMg        Decimal? @map("sodium_mg") @db.Decimal(7, 1)
+  nutrientsEdited Boolean  @default(false) @map("nutrients_edited")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food FoodItem @relation(fields: [foodId], references: [id], onDelete: Restrict)
+
+  @@index([userId, date])
+  @@map("food_logs")
+}
+
+model WaterLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  date      DateTime @db.Date
+  amountMl  Int      @map("amount_ml")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("water_logs")
+}
+
+// ---------- progress ----------
+
+/// Null columns mean "not measured", never 0.
+model BodyMeasurement {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  date       DateTime @db.Date
+  weightKg   Decimal? @map("weight_kg") @db.Decimal(5, 2)
+  bodyFatPct Decimal? @map("body_fat_pct") @db.Decimal(4, 1)
+  waistCm    Decimal? @map("waist_cm") @db.Decimal(5, 1)
+  chestCm    Decimal? @map("chest_cm") @db.Decimal(5, 1)
+  hipCm      Decimal? @map("hip_cm") @db.Decimal(5, 1)
+  armCm      Decimal? @map("arm_cm") @db.Decimal(5, 1)
+  thighCm    Decimal? @map("thigh_cm") @db.Decimal(5, 1)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("body_measurements")
+}
+
+// ---------- XP (server-authoritative) ----------
+
+/// Append-only. The unique key makes a retried award a no-op. A reversal is
+/// an `adjustment` row whose sourceId is the reversed transaction's id.
+model XPTransaction {
+  id         String       @id @default(uuid()) @db.Uuid
+  userId     String       @map("user_id") @db.Uuid
+  sourceType XpSourceType @map("source_type")
+  sourceId   String       @map("source_id") @db.Uuid
+  amount     Int
+  reason     String       @db.VarChar(200)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sourceType, sourceId])
+  @@index([userId, createdAt])
+  @@map("xp_transactions")
+}
+
+// ---------- idempotency ----------
+
+/// Stored response for a write retried with the same Idempotency-Key.
+/// `scope` is `user:<id>` for signed-in calls and `anon:register` for sign-up.
+/// Rows expire after 24 hours.
+model IdempotencyKey {
+  id             String            @id @default(uuid()) @db.Uuid
+  scope          String            @db.VarChar(80)
+  key            String            @db.Uuid
+  userId         String?           @map("user_id") @db.Uuid
+  method         String            @db.VarChar(8)
+  path           String            @db.VarChar(300)
+  /// SHA-256 of the canonical request body; a different body is a 409.
+  requestHash    String            @map("request_hash") @db.Char(64)
+  status         IdempotencyStatus @default(in_progress)
+  responseStatus Int?              @map("response_status") @db.SmallInt
+  responseBody   Json?             @map("response_body")
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt      DateTime          @map("expires_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
 }

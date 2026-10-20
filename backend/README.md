@@ -31,3 +31,14 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 
 ## Docker / Render
 `docker build -t fitness-api backend/` produces a non-root Node 22 image that runs `node dist/main.js`. On Render: Docker runtime, root directory `backend`, health check path `/health`. Migrations run with `npm run migrate:deploy` against `DIRECT_URL`.
+
+## Database (T6)
+- Schema: `prisma/schema.prisma`. MVP entities are User, RefreshToken, UserProfile, FitnessGoal, Exercise, WorkoutPlan (+ WorkoutPlanVersion), PlannedWorkout, PlannedExercise, WorkoutSession, ExerciseSetLog, FoodItem, FoodLog, WaterLog, BodyMeasurement, XPTransaction and IdempotencyKey.
+- Every user-owned row cascades on account deletion. A user has at most one active plan (`user_profiles.active_plan_id` is unique).
+- XP is server-only. `xp_transactions` is unique on `(user_id, source_type, source_id)`, so a retried award is a no-op. A reversal is a negative `adjustment` row.
+- Retry safety: `idempotency_keys` is unique on `(scope, key)`, and set logs are unique on `(user_id, client_set_id)`.
+- Migrations: `prisma/migrations/` (the Prisma init migration, plus SQL CHECK constraints that mirror the contract ranges).
+  - Apply: `npm run migrate:deploy` (uses `DIRECT_URL` when set).
+  - Drift check: `npm run migrate:check` (compares the migrated DB with `schema.prisma`).
+- Seed: `npm run db:seed` upserts 32 exercises (home-first) and 44 Indian-first foods in household servings (katori, plate, glass) with deterministic UUIDv5 ids. It is safe to re-run and never touches user data. The nutrition values are typical approximations, and users can edit them on log entries.
+- DB tests: `DB_TESTS=1 npm test` against a migrated database (CI does this with its Postgres service).

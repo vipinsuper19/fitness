@@ -35,6 +35,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fitness_test
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/fitness_test
       NODE_ENV: test
+      DB_TESTS: "1"
       # Throwaway values for the CI database and tests only; not real secrets.
       JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-else
       JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-else
@@ -56,6 +57,9 @@ jobs:
       - name: Prisma generate and migrate
         if: steps.guard.outputs.present == 'true' && hashFiles('backend/prisma/schema.prisma') != ''
         run: npx prisma generate && npx prisma migrate deploy
+      - name: Migration drift check (migrated DB vs schema.prisma)
+        if: steps.guard.outputs.present == 'true' && hashFiles('backend/prisma/migrations/**') != ''
+        run: npm run migrate:check
       - name: Lint
         if: steps.guard.outputs.present == 'true'
         run: npm run lint --if-present
