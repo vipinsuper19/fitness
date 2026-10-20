@@ -6,7 +6,7 @@ import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
-import { BodyMeasurementDto, MeasurementListQuery, SummaryQuery } from './progress.dto';
+import { BodyMeasurementDto, BodyMeasurementUpdateDto, MeasurementListQuery, SummaryQuery } from './progress.dto';
 import { MeasurementView, ProgressService, ProgressSummary } from './progress.service';
 
 @ApiTags('progress')
@@ -45,7 +45,7 @@ export class ProgressController {
   update(
     @CurrentUserId() userId: string,
     @Param('measurementId', IdParamPipe) id: string,
-    @Body() dto: BodyMeasurementDto,
+    @Body() dto: BodyMeasurementUpdateDto,
     @IdempotencyKeyHeader() key: string | undefined,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,

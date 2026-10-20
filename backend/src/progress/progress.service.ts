@@ -7,7 +7,7 @@ import { notFound } from '../common/id-param.pipe';
 import { dateRange, localDate, nextDate, prevDate, startOfLocalDay } from '../common/time';
 import type { BodyMeasurement } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { BodyMeasurementDto, MEASUREMENT_FIELDS, MeasurementListQuery, SummaryQuery } from './progress.dto';
+import { BodyMeasurementDto, BodyMeasurementUpdateDto, MEASUREMENT_FIELDS, MeasurementListQuery, SummaryQuery } from './progress.dto';
 
 export interface MeasurementView {
   id: string;
@@ -100,12 +100,21 @@ export class ProgressService {
     return toView(await this.prisma.bodyMeasurement.create({ data: { userId, ...measurementData(dto) } }));
   }
 
-  /** Full replacement: an omitted measurement becomes null. */
-  async update(userId: string, id: string, dto: BodyMeasurementDto): Promise<MeasurementView> {
-    const data = measurementData(dto);
-    const { count } = await this.prisma.bodyMeasurement.updateMany({ where: { id, userId }, data });
-    if (count !== 1) throw notFound('Measurement');
-    return this.get(userId, id);
+  /** Partial update: a missing field stays unchanged, null clears it; at least one measurement must remain. */
+  async update(userId: string, id: string, dto: BodyMeasurementUpdateDto): Promise<MeasurementView> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.bodyMeasurement.findFirst({ where: { id, userId } });
+      if (!row) throw notFound('Measurement');
+      const data: Record<string, unknown> = {};
+      for (const f of MEASUREMENT_FIELDS) if (dto[f] !== undefined) data[f] = dto[f];
+      if (dto.date !== undefined) data.date = parseIsoDate(dto.date)!;
+      if (MEASUREMENT_FIELDS.every((f) => (f in data ? data[f] : row[f]) === null)) {
+        throw invalid(Object.fromEntries(MEASUREMENT_FIELDS.filter((f) => f in data).map((f) => [f, 'the entry must keep at least one measurement'])));
+      }
+      const { count } = await tx.bodyMeasurement.updateMany({ where: { id, userId }, data });
+      if (count !== 1) throw notFound('Measurement');
+      return toView((await tx.bodyMeasurement.findFirst({ where: { id, userId } }))!);
+    });
   }
 
   async remove(userId: string, id: string): Promise<void> {

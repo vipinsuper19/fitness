@@ -126,7 +126,7 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 ## Progress (T15, backend)
 - **Body measurements:** `/body-measurements` CRUD, owner-only.
   - Each entry needs a date and at least one measurement (kg, %, cm).
-  - `PATCH` replaces the entry, so an omitted measurement becomes null.
+  - `PATCH` is a partial update: a missing field stays unchanged, `null` clears it, and at least one measurement must remain (else 400).
   - The list is newest first, with validated `{date, id}` cursors.
 - **Progress summary:** `GET /progress/summary?from&to` returns one point per local day (profile timezone), for at most 366 days. `null` means no data, never 0.
   - **weight:** the day's latest measured weight.

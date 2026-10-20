@@ -948,14 +948,14 @@ paths:
       tags: [progress]
       operationId: updateBodyMeasurement
       summary: Edit a body measurement
-      description: Replaces the entry; a measurement left out becomes `null`. At least one measurement is still required.
+      description: Partial update, like the profile. A field left out stays unchanged; `null` clears a measurement. After the change the entry must still have at least one measurement, otherwise 400 VALIDATION_FAILED (fields name the cleared measurements).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/BodyMeasurementCreate' }
+            schema: { $ref: '#/components/schemas/BodyMeasurementUpdate' }
       responses:
         '200':
           description: Updated
@@ -1628,6 +1628,19 @@ components:
       required: [date]
       minProperties: 2
       description: '`date` plus at least one measurement'
+      properties:
+        date: { type: string, format: date }
+        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400 }
+        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70 }
+        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
+        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
+        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
+        armCm: { type: [number, 'null'], minimum: 10, maximum: 100 }
+        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150 }
+    BodyMeasurementUpdate:
+      type: object
+      minProperties: 1
+      description: Partial. Missing = unchanged; `null` clears a measurement. `date` cannot be null.
       properties:
         date: { type: string, format: date }
         weightKg: { type: [number, 'null'], minimum: 20, maximum: 400 }

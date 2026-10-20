@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional, ApiPropertyOptional as Opt, PartialType } from '@nestjs/swagger';
+import { IsNumber, IsOptional, Max, Min, ValidateIf } from 'class-validator';
 
 import { PageQuery } from '../common/page.dto';
 import { IsCalendarDate } from '../common/validators';
@@ -9,7 +9,7 @@ const dp = (places: number) => ({ allowNaN: false, allowInfinity: false, maxDeci
 export const MEASUREMENT_FIELDS = ['weightKg', 'bodyFatPct', 'waistCm', 'chestCm', 'hipCm', 'armCm', 'thighCm'] as const;
 export type MeasurementField = (typeof MEASUREMENT_FIELDS)[number];
 
-/** BodyMeasurementCreate (also the PATCH body: a full replacement; omitted = null). */
+/** BodyMeasurementCreate. */
 export class BodyMeasurementDto {
   @ApiProperty({ format: 'date' }) @IsCalendarDate()
   date!: string;
@@ -34,6 +34,12 @@ export class BodyMeasurementDto {
 
   @ApiPropertyOptional({ type: Number, nullable: true, minimum: 20, maximum: 150 }) @IsOptional() @IsNumber(dp(1)) @Min(20) @Max(150)
   thighCm?: number | null;
+}
+
+/** BodyMeasurementUpdate: partial; a missing field stays unchanged, null clears a measurement. */
+export class BodyMeasurementUpdateDto extends PartialType(BodyMeasurementDto) {
+  @Opt({ format: 'date' }) @ValidateIf((o: BodyMeasurementUpdateDto) => o.date !== undefined) @IsCalendarDate()
+  override date?: string;
 }
 
 export class MeasurementListQuery extends PageQuery {

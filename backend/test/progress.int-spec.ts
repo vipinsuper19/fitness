@@ -45,7 +45,7 @@ describeDb('T15: body measurements and progress summary (HTTP + Postgres)', () =
   });
 
   describe('body measurements', () => {
-    it('creates, lists newest first with validated cursors, replaces on PATCH and deletes', async () => {
+    it('creates, lists newest first with validated cursors, partially updates on PATCH and deletes', async () => {
       const { token } = await signUp();
       const missingKey = await api(token).post('/api/v1/body-measurements', null).send({ date: '2026-10-01', weightKg: 70 }).expect(400);
       expect(missingKey.body.details.fields).toHaveProperty(['Idempotency-Key']);
@@ -72,9 +72,19 @@ describeDb('T15: body measurements and progress summary (HTTP + Postgres)', () =
         expect(r.body.details.fields).toHaveProperty('cursor');
       }
 
-      const replaced = (await api(token).patch(`/api/v1/body-measurements/${ids[0]}`).send({ date: '2026-10-01', weightKg: 72 }).expect(200)).body;
-      expect(replaced).toMatchObject({ weightKg: 72, waistCm: null });
-      await api(token).patch(`/api/v1/body-measurements/${ids[0]}`).send({ date: '2026-10-01' }).expect(400);
+      const url0 = `/api/v1/body-measurements/${ids[0]}`;
+      // partial update keeps the other fields
+      expect((await api(token).patch(url0).send({ weightKg: 72 }).expect(200)).body).toMatchObject({ date: '2026-10-01', weightKg: 72, waistCm: 84.5 });
+      expect((await api(token).patch(url0).send({ date: '2026-10-02' }).expect(200)).body).toMatchObject({ date: '2026-10-02', weightKg: 72, waistCm: 84.5 });
+      await api(token).patch(url0).send({ date: null }).expect(400);
+      // null clears
+      expect((await api(token).patch(url0).send({ waistCm: null }).expect(200)).body).toMatchObject({ weightKg: 72, waistCm: null });
+      // clearing the last value is rejected and leaves the entry as it was
+      const last = await api(token).patch(url0).send({ weightKg: null }).expect(400);
+      expect(last.body.details.fields).toHaveProperty('weightKg');
+      expect((await api(token).get(url0).expect(200)).body).toMatchObject({ weightKg: 72, waistCm: null });
+      await api(token).patch(url0).send({ weightKg: null, armCm: 30 }).expect(200);
+      await api(token).patch(url0).send({ weightKg: 72, armCm: null, date: '2026-10-01' }).expect(200);
       await api(token).delete(`/api/v1/body-measurements/${ids[0]}`).expect(204);
       await api(token).get(`/api/v1/body-measurements/${ids[0]}`).expect(404);
     });
