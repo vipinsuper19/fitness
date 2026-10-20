@@ -11,6 +11,7 @@ RUN npm ci --no-audit --no-fund
 COPY tsconfig.json tsconfig.build.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY src ./src
+# `prisma` is a runtime dependency, so the pruned image keeps the CLI and `npm run migrate:deploy` works in it.
 RUN npm run build && npm prune --omit=dev
 
 FROM ${NODE_IMAGE} AS runtime

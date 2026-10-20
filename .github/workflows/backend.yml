@@ -78,3 +78,6 @@ jobs:
       - name: Docker build
         if: steps.guard.outputs.present == 'true' && hashFiles('backend/Dockerfile') != ''
         run: docker build -t fitness-api:ci .
+      - name: Migrations run inside the image
+        if: steps.guard.outputs.present == 'true' && hashFiles('backend/Dockerfile') != ''
+        run: docker run --rm --network host -e DATABASE_URL -e DIRECT_URL fitness-api:ci npm run migrate:deploy

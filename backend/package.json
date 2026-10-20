@@ -34,6 +34,7 @@
     "class-validator": "^0.15.1",
     "helmet": "^8.3.0",
     "pg": "^8.16.0",
+    "prisma": "7.10.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "zod": "^4.1.0"
@@ -51,7 +52,6 @@
     "ajv-formats": "^3.0.1",
     "eslint": "^10.0.0",
     "jest": "^30.0.0",
-    "prisma": "7.10.1",
     "supertest": "^7.1.0",
     "ts-jest": "^29.4.0",
     "tsx": "^4.23.15",
