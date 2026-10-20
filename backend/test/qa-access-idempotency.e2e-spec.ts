@@ -102,7 +102,7 @@ describeDb('T16b QA: access rules, safe retries, duplicate XP, happy path', () =
       const water = (await as(a.token).post('/api/v1/water-logs').send({ date: DAY, amountMl: 250 }).expect(201)).body;
       const meas = (await as(a.token).post('/api/v1/body-measurements').send({ date: DAY, weightKg: 70 }).expect(201)).body;
 
-      await as(b.token).patch(`/api/v1/goals/${goal.id}`).send({ status: 'abandoned' }).expect((r) => expect([400, 404]).toContain(r.status));
+      await as(b.token).patch(`/api/v1/goals/${goal.id}`).send({ status: 'abandoned' }).expect(404);
       await as(b.token).delete(`/api/v1/goals/${goal.id}`).expect(404);
       await as(b.token).get(`/api/v1/workout-plans/${plan.id}`).expect(404);
       await as(b.token).patch(`/api/v1/workout-plans/${plan.id}`).send({ ...draft, baseVersion: 1 }).expect(404);
@@ -116,7 +116,10 @@ describeDb('T16b QA: access rules, safe retries, duplicate XP, happy path', () =
       await as(b.token).delete(`/api/v1/body-measurements/${meas.id}`).expect(404);
 
       // B's own lists never show A's rows.
-      expect((await as(b.token).get('/api/v1/goals').expect(200)).body).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: goal.id })]));
+      const bGoals = (await as(b.token).get('/api/v1/goals').expect(200)).body;
+      expect(Array.isArray(bGoals.items)).toBe(true);
+      expect(bGoals.items.map((g: { id: string }) => g.id)).not.toContain(goal.id);
+      expect((await as(a.token).get('/api/v1/goals').expect(200)).body.items.map((g: { id: string }) => g.id)).toContain(goal.id);
       const bSearch = JSON.stringify((await as(b.token).get('/api/v1/foods/search?query=QA%20private').expect(200)).body);
       expect(bSearch).not.toContain(food.id);
       const bHistory = JSON.stringify((await as(b.token).get('/api/v1/workout-sessions/history').expect(200)).body);
@@ -193,21 +196,24 @@ describeDb('T16b QA: access rules, safe retries, duplicate XP, happy path', () =
       expect(await prisma.xPTransaction.count({ where: { userId: u.id } })).toBe(1);
       const bal = (await as(u.token).get('/api/v1/xp/balance').expect(200)).body;
       const ledger = (await as(u.token).get('/api/v1/xp/ledger').expect(200)).body;
-      const items = Array.isArray(ledger) ? ledger : ledger.items;
+      const items = ledger.items;
       expect(items).toHaveLength(1);
-      expect(bal.total).toBe(items[0].amount ?? items[0].xp);
+      expect(typeof items[0].amount).toBe('number');
+      expect(bal.total).toBe(items[0].amount);
     });
 
     it('two sessions earn separately; XP is never client-writable', async () => {
       const u = await signUp();
       for (let i = 0; i < 2; i += 1) {
         const sid = await completedSession(u.token);
-        await as(u.token).post(`/api/v1/workout-sessions/${sid}/complete`).send({ xpAwarded: 100000 }).expect((r) => expect([200, 400]).toContain(r.status));
+        const bad = await as(u.token).post(`/api/v1/workout-sessions/${sid}/complete`).send({ xpAwarded: 100000 }).expect(400);
+        expect(bad.body.code).toBe('VALIDATION_FAILED');
         await as(u.token).post(`/api/v1/workout-sessions/${sid}/complete`).send({}).expect(200);
       }
       expect(await prisma.xPTransaction.count({ where: { userId: u.id } })).toBe(2);
       expect((await as(u.token).get('/api/v1/xp/balance').expect(200)).body.total).toBeLessThan(1000);
-      await as(u.token).post('/api/v1/xp/ledger').send({ amount: 500 }).expect((r) => expect([404, 405]).toContain(r.status));
+      const nf = await as(u.token).post('/api/v1/xp/ledger').send({ amount: 500 }).expect(404);
+      expect(nf.body.code).toBe('NOT_FOUND');
     });
 
     it('other user cannot complete someone else’s session to farm XP', async () => {
@@ -233,7 +239,9 @@ describeDb('T16b QA: access rules, safe retries, duplicate XP, happy path', () =
       const draft = (await as(t).post('/api/v1/workout-plans/generate', null).send({ goal: 'lose_weight', experienceLevel: 'beginner', daysPerWeek: 3, sessionMinutes: 30 }).expect(200)).body;
       expect(await prisma.workoutPlan.count({ where: { userId: u.id } })).toBe(0); // generate never persists
       const plan = (await as(t).post('/api/v1/workout-plans').send(draft).expect(201)).body;
-      await as(t).post(`/api/v1/workout-plans/${plan.id}/activate`).send({}).expect((r) => expect([200, 204]).toContain(r.status));
+      const act = (await as(t).post(`/api/v1/workout-plans/${plan.id}/activate`).send({}).expect(200)).body;
+      expect(act.id).toBe(plan.id);
+      expect(act.isActive).toBe(true);
       expect((await as(t).get('/api/v1/workout-plans/active').expect(200)).body.id).toBe(plan.id);
       const s = (await as(t).post('/api/v1/workout-sessions').send({ plannedWorkoutId: plan.workouts[0].id, planVersion: 1 }).expect(201)).body;
       await as(t).post(`/api/v1/workout-sessions/${s.id}/sets`).send({ clientSetId: randomUUID(), exerciseId: PUSH_UP, setIndex: 0, reps: 10, completed: true }).expect(200);
