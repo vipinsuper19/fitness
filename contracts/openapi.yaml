@@ -80,6 +80,10 @@ tags:
     description: Body measurements and progress summary
   - name: xp
     description: Server-authoritative XP ledger (read-only)
+  - name: badges
+    description: Rule-based achievements, awarded server-side only (read-only for clients). See docs/specs/badges-challenges.md
+  - name: challenges
+    description: Personal and weekly challenges from built-in templates (join, leave, progress). No leaderboards or social
 
 paths:
   /auth/register:
@@ -1102,6 +1106,142 @@ paths:
                         items: { $ref: '#/components/schemas/XpTransaction' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /badges:
+    get:
+      tags: [badges]
+      operationId: listBadges
+      summary: Badge catalog with the user's earned state and progress
+      description: |
+        Every badge in the server's catalog, earned or not, in a stable catalog order. Badges are
+        awarded only by the server, at the write that satisfies the rule or by the release
+        backfill, which this call may run lazily, so a fresh account can see badges earned from its existing history.
+        An earned badge is never revoked. Its bonus XP is a ledger entry with `sourceType: badge`.
+        Days are local dates in the profile timezone (default `Asia/Kolkata`). Client-dated food, water
+        and measurement entries count only when created on that local day or the next one.
+      responses:
+        '200':
+          description: Catalog with earned state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BadgeList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /challenges/templates:
+    get:
+      tags: [challenges]
+      operationId: listChallengeTemplates
+      summary: Built-in challenge templates and their allowed targets
+      responses:
+        '200':
+          description: Templates (no user-defined rules)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ChallengeTemplate' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /challenges:
+    get:
+      tags: [challenges]
+      operationId: listChallenges
+      summary: The user's challenges, newest first
+      description: Expired challenges are marked `expired` when read (the server has no scheduler).
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ChallengeStatus' }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of challenges
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Challenge' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [challenges]
+      operationId: joinChallenge
+      summary: Join a challenge from a built-in template
+      description: |
+        A `weekly` challenge covers the current week (Monday to Sunday, local, in the profile timezone) and counts
+        that week's activity, including activity before joining. A `personal` challenge starts today
+        and ends after the template's `deadlineDays` entry for the chosen target. The timezone and the water goal (the profile's
+        `dailyWaterTargetMl`, else 2000 ml) are captured at join.
+        Errors (409): `CHALLENGE_ALREADY_JOINED` means there is already an active challenge from this template, or
+        this week's weekly instance was already joined (also after leaving it); `CHALLENGE_LIMIT_REACHED`
+        means 5 challenges are active. An unknown template or a target not allowed by it is `400 VALIDATION_FAILED`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChallengeJoinRequest' }
+      responses:
+        '201':
+          description: Joined
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Challenge' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: '`CHALLENGE_ALREADY_JOINED`, `CHALLENGE_LIMIT_REACHED`, `IDEMPOTENCY_KEY_REUSED` or `IDEMPOTENCY_IN_PROGRESS`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /challenges/{challengeId}:
+    parameters:
+      - $ref: '#/components/parameters/ChallengeId'
+    get:
+      tags: [challenges]
+      operationId: getChallenge
+      summary: One challenge with current progress
+      responses:
+        '200':
+          description: Challenge
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Challenge' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /challenges/{challengeId}/leave:
+    parameters:
+      - $ref: '#/components/parameters/ChallengeId'
+    post:
+      tags: [challenges]
+      operationId: leaveChallenge
+      summary: Leave an active challenge (no XP)
+      description: 'Leaving one that is already `left` is a 200 no-op. A `completed` or `expired` challenge cannot be left: `409 CHALLENGE_NOT_ACTIVE`. `Idempotency-Key` is optional; with one, a retry replays the stored response.'
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Left
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Challenge' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`CHALLENGE_NOT_ACTIVE`, `IDEMPOTENCY_KEY_REUSED` or `IDEMPOTENCY_IN_PROGRESS`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1164,6 +1304,11 @@ components:
       schema: { $ref: '#/components/schemas/Id' }
     FoodLogId:
       name: foodLogId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ChallengeId:
+      name: challengeId
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
@@ -1365,6 +1510,8 @@ components:
         waterLogs: { type: array, items: { $ref: '#/components/schemas/WaterLog' } }
         bodyMeasurements: { type: array, items: { $ref: '#/components/schemas/BodyMeasurement' } }
         xpLedger: { type: array, items: { $ref: '#/components/schemas/XpTransaction' } }
+        badges: { type: array, items: { $ref: '#/components/schemas/ExportedBadge' }, description: Earned badges. Present once badges ship. }
+        challenges: { type: array, items: { $ref: '#/components/schemas/Challenge' }, description: 'All challenges, any status. Present once challenges ship.' }
         truncated:
           type: array
           items: { type: string }
@@ -1822,10 +1969,93 @@ components:
           minimum: 0
           description: Consecutive local days (profile timezone) with a completed workout, ending today. If today has none yet, the streak ending yesterday is returned, because it is still alive until today ends.
 
+    BadgeFamily:
+      type: string
+      enum: [workout, streak, nutrition, hydration, measurement, level]
+      description: Clients must accept unknown values.
+    Badge:
+      type: object
+      required: [code, title, description, family, bonusXp, earnedAt, progress]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9_]{2,40}$', description: 'Stable id, e.g. `FIRST_WORKOUT`, `STREAK_7`, `HYDRATED_7`. New codes can appear; clients must not hard-code the list.' }
+        title: { type: string }
+        description: { type: string, description: The exact rule in plain words }
+        family: { $ref: '#/components/schemas/BadgeFamily' }
+        bonusXp: { type: integer, minimum: 0 }
+        earnedAt: { type: [string, 'null'], format: date-time, description: null = not earned yet }
+        progress:
+          description: Progress towards the rule; null once earned or when the rule has no meaningful count
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/BadgeProgress'
+    BadgeProgress:
+      type: object
+      required: [current, target]
+      properties:
+        current: { type: integer, minimum: 0 }
+        target: { type: integer, minimum: 1 }
+    BadgeList:
+      type: object
+      required: [items, earnedCount]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Badge' } }
+        earnedCount: { type: integer, minimum: 0 }
+    ExportedBadge:
+      type: object
+      required: [code, earnedAt]
+      properties:
+        code: { type: string }
+        earnedAt: { type: string, format: date-time }
+    ChallengeType:
+      type: string
+      enum: [weekly, personal]
+    ChallengeStatus:
+      type: string
+      enum: [active, completed, expired, left]
+    ChallengeTemplate:
+      type: object
+      required: [code, type, title, description, metric, unit, targets, deadlineDays, bonusXp]
+      properties:
+        code: { type: string, pattern: '^[A-Z0-9_]{2,40}$', description: 'e.g. `WEEKLY_WORKOUTS`, `WEEKLY_ACTIVE_MINUTES`, `WEEKLY_WATER_DAYS`, `WEEKLY_FOOD_LOG_DAYS`, `PERSONAL_WORKOUTS_N`, `PERSONAL_STREAK_N`' }
+        type: { $ref: '#/components/schemas/ChallengeType' }
+        title: { type: string }
+        description: { type: string }
+        metric: { type: string, description: 'What is counted, e.g. `completed_workouts`, `active_minutes`, `water_goal_days`, `food_log_days`, `streak_days`' }
+        unit: { type: string, description: 'Display unit for progress, e.g. `workouts`, `minutes`, `days`' }
+        targets: { type: array, minItems: 1, items: { type: integer, minimum: 1 }, description: 'Allowed `target` values' }
+        deadlineDays: { type: [array, 'null'], items: { type: integer, minimum: 1 }, description: 'Personal only: window length in days for each entry of `targets` (same order and length); null for weekly' }
+        bonusXp: { type: integer, minimum: 0, description: Before the weekly cap }
+    ChallengeJoinRequest:
+      type: object
+      additionalProperties: false
+      required: [templateCode, target]
+      properties:
+        templateCode: { type: string, maxLength: 40 }
+        target: { type: integer, minimum: 1, description: 'Must be one of the template''s `targets`' }
+    Challenge:
+      type: object
+      required: [id, templateCode, type, title, target, progress, unit, windowStart, windowEnd, timezone, waterGoalMl, status, joinedAt, completedAt, leftAt, xpAwarded]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        templateCode: { type: string }
+        type: { $ref: '#/components/schemas/ChallengeType' }
+        title: { type: string }
+        target: { type: integer, minimum: 1 }
+        progress: { type: integer, minimum: 0, description: 'min(current, target), recomputed from source data while active; frozen once completed, expired or left' }
+        unit: { type: string }
+        windowStart: { type: string, format: date, description: 'Local date, inclusive' }
+        windowEnd: { type: [string, 'null'], format: date, description: 'Local date, inclusive (Sunday for weekly); null = no deadline' }
+        timezone: { type: string, description: Profile timezone captured at join }
+        waterGoalMl: { type: [integer, 'null'], description: Water goal captured at join (water templates only) }
+        status: { $ref: '#/components/schemas/ChallengeStatus' }
+        joinedAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time, description: Never cleared once set }
+        leftAt: { type: [string, 'null'], format: date-time }
+        xpAwarded: { type: integer, minimum: 0, description: Bonus XP actually awarded (after the weekly cap); 0 until completed }
     XpSourceType:
       type: string
-      enum: [workout_session, adjustment]
-      description: MVP sources. `adjustment` is a server-side reversal or correction, never a client write.
+      enum: [workout_session, adjustment, badge, challenge]
+      description: '`adjustment` is a server-side reversal or correction, never a client write. `badge` and `challenge` are bonus XP (`sourceId` = the earned badge or the challenge id); challenge bonus XP is capped at 150 per ISO week (Monday start, profile timezone), so an award can be smaller than the template''s `bonusXp`, or 0. Clients must accept unknown values.'
     XpTransaction:
       type: object
       required: [id, sourceType, sourceId, amount, reason, createdAt]

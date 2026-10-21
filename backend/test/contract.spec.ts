@@ -53,6 +53,9 @@ describe('contracts/openapi.yaml', () => {
       'get /water-logs', 'post /water-logs', 'patch /water-logs/{waterLogId}', 'delete /water-logs/{waterLogId}', 'get /nutrition/daily',
       'get /body-measurements', 'post /body-measurements', 'get /progress/summary',
       'get /xp/ledger', 'get /xp/balance',
+      // P1: badges & challenges (docs/specs/badges-challenges.md)
+      'get /badges', 'get /challenges/templates', 'get /challenges', 'post /challenges',
+      'get /challenges/{challengeId}', 'post /challenges/{challengeId}/leave',
     ];
     const actual = new Set(operations().map(({ method, path }) => `${method} ${path}`));
     for (const route of expected) expect(actual).toContain(route);
@@ -73,7 +76,7 @@ describe('contracts/openapi.yaml', () => {
   it('requires Idempotency-Key where the client retries offline or XP can be awarded', () => {
     const required = [
       'startWorkoutSession', 'upsertSetLog', 'completeWorkoutSession',
-      'createFoodLog', 'createWaterLog', 'createBodyMeasurement',
+      'createFoodLog', 'createWaterLog', 'createBodyMeasurement', 'joinChallenge',
     ];
     const byId = new Map(operations().map((o) => [o.op.operationId, o]));
     for (const id of required) {
@@ -107,6 +110,25 @@ describe('contracts/openapi.yaml', () => {
     const register = byId.get('register')!.op as Operation & { description?: string };
     expect(register.description).toMatch(/EMAIL_TAKEN/);
     expect(register.description).toMatch(/never stored or replayed/);
+  });
+
+  it('has no client endpoint that awards badges or completes challenges', () => {
+    for (const { path, method, op } of operations()) {
+      if (path.startsWith('/badges')) expect(method).toBe('get');
+      if (path.startsWith('/challenges') && method !== 'get') expect(['joinChallenge', 'leaveChallenge']).toContain(op.operationId);
+    }
+  });
+
+  it('documents the badge/challenge error codes, paging and XP sources', () => {
+    const raw = readFileSync(join(contractsDir, 'openapi.yaml'), 'utf8');
+    for (const code of ['CHALLENGE_ALREADY_JOINED', 'CHALLENGE_LIMIT_REACHED', 'CHALLENGE_NOT_ACTIVE']) expect(raw).toContain(code);
+    const byId = new Map(operations().map((o) => [o.op.operationId, o]));
+    const list = paramRefs(byId.get('listChallenges')!.op, byId.get('listChallenges')!.pathItem);
+    expect(list).toEqual(expect.arrayContaining(['#/components/parameters/Cursor', '#/components/parameters/Limit']));
+    const sources = (spec.components.schemas.XpSourceType as unknown as { enum: string[] }).enum;
+    expect(sources).toEqual(expect.arrayContaining(['workout_session', 'adjustment', 'badge', 'challenge']));
+    const challenge = spec.components.schemas.Challenge!;
+    expect(challenge.required).toEqual(expect.arrayContaining(['status', 'progress', 'target', 'windowStart', 'windowEnd', 'timezone', 'xpAwarded']));
   });
 
   it('uses one error shape { code, message, details?, requestId }', () => {
