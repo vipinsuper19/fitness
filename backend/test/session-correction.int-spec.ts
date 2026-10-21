@@ -223,6 +223,20 @@ describeDb('PRD 5.3: session correction (HTTP + Postgres)', () => {
       await api(u.token).patch(`/api/v1/workout-sessions/${s.id}/completion`).send({ completedAt: new Date(Date.now() - 3 * DAY).toISOString() }).expect(400);
     });
 
+    it('rejects moving completedAt later, and from yesterday to today', async () => {
+      const u = await signUp();
+      const s = await completed(u.token, 1);
+      const later = (await api(u.token).patch(`/api/v1/workout-sessions/${s.id}/completion`).send({ completedAt: new Date(Date.now() + 1000).toISOString() }).expect(400)).body;
+      expect(later.code).toBe('VALIDATION_FAILED');
+      expect(later.details.fields).toHaveProperty('completedAt');
+      // Completed yesterday (still inside the correction window); moving to today is another day.
+      const y = new Date(Date.now() - DAY);
+      await prisma.workoutSession.update({ where: { id: s.id }, data: { startedAt: new Date(y.getTime() - 60_000), completedAt: y } });
+      const today = (await api(u.token).patch(`/api/v1/workout-sessions/${s.id}/completion`).send({ completedAt: new Date(Date.now() - 1000).toISOString() }).expect(400)).body;
+      expect(today.details.fields).toHaveProperty('completedAt');
+      expect((await prisma.workoutSession.findUniqueOrThrow({ where: { id: s.id } })).completedAt).toEqual(y);
+    });
+
     it('moving completedAt earlier can only shorten active time (XP can drop, never rise)', async () => {
       const u = await signUp();
       const s = await completed(u.token, 1);
@@ -240,5 +254,46 @@ describeDb('PRD 5.3: session correction (HTTP + Postgres)', () => {
     const r = (await api(u.token).put(corrUrl(s.id, s.setIds[0]!)).send(set(s.setIds[0]!, { reps: 11 })).expect(200)).body;
     expect(Array.isArray(r.newBadges)).toBe(true);
     for (const b of r.newBadges) expect(b).toMatchObject({ code: expect.any(String), earnedAt: expect.any(String), progress: null });
+  });
+
+  describe('weekly challenge boundary (fake clock: Monday 2026-10-19 10:00 IST)', () => {
+    const MONDAY_10 = new Date('2026-10-19T04:30:00Z');
+    beforeEach(() => {
+      jest.useFakeTimers({
+        now: MONDAY_10,
+        doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'hrtime', 'performance'],
+      });
+    });
+    afterEach(() => jest.useRealTimers());
+
+    const sessionAt = async (token: string, completedAt: string) => {
+      const startedAt = new Date(new Date(completedAt).getTime() - 20 * 60_000).toISOString();
+      const s = (await api(token).post('/api/v1/workout-sessions').send({ startedAt }).expect(201)).body;
+      await api(token).post(`/api/v1/workout-sessions/${s.id}/sets`).send(set(randomUUID())).expect(200);
+      await api(token).post(`/api/v1/workout-sessions/${s.id}/complete`).send({ completedAt }).expect(200);
+      return s.id as string;
+    };
+    const progress = async (token: string, cid: string) => (await api(token).get(`/api/v1/challenges/${cid}`).expect(200)).body.progress as number;
+
+    it('Sunday 23:30 -> Monday is rejected and the weekly challenge stays at 0', async () => {
+      const u = await signUp();
+      const sid = await sessionAt(u.token, '2026-10-18T18:00:00Z'); // Sun 23:30 IST
+      const c = (await api(u.token).post('/api/v1/challenges').send({ templateCode: 'WEEKLY_WORKOUTS', target: 3 }).expect(201)).body;
+      expect(await progress(u.token, c.id)).toBe(0);
+      await api(u.token).patch(`/api/v1/workout-sessions/${sid}/completion`).send({ completedAt: '2026-10-18T18:40:00Z' }).expect(400); // Mon 00:10 IST
+      expect(await progress(u.token, c.id)).toBe(0);
+    });
+
+    it('Monday -> Sunday is rejected and the weekly challenge stays at 1 (no double count)', async () => {
+      const u = await signUp();
+      const c = (await api(u.token).post('/api/v1/challenges').send({ templateCode: 'WEEKLY_WORKOUTS', target: 3 }).expect(201)).body;
+      const sid = await sessionAt(u.token, '2026-10-19T03:30:00Z'); // Mon 09:00 IST
+      expect(await progress(u.token, c.id)).toBe(1);
+      await api(u.token).patch(`/api/v1/workout-sessions/${sid}/completion`).send({ completedAt: '2026-10-18T18:00:00Z' }).expect(400); // Sun 23:30 IST
+      expect(await progress(u.token, c.id)).toBe(1);
+      const ok = (await api(u.token).patch(`/api/v1/workout-sessions/${sid}/completion`).send({ completedAt: '2026-10-19T03:20:00Z' }).expect(200)).body;
+      expect(ok.session.completedAt).toBe('2026-10-19T03:20:00.000Z');
+      expect(await progress(u.token, c.id)).toBe(1);
+    });
   });
 });

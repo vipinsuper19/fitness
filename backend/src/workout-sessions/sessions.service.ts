@@ -331,7 +331,13 @@ export class SessionsService {
     return this.correct(userId, sessionId, key, async (tx, s, tz) => {
       const data: Prisma.WorkoutSessionUpdateInput = {};
       if (completedAt) {
-        if (!withinWindow(completedAt, tz, now)) throw invalid('completedAt', 'completedAt must be today or yesterday');
+        // Same local day and never later: a fix can't move a workout into another day,
+        // week or challenge window (or add active time).
+        const current = s.completedAt!;
+        if (localDate(completedAt, tz) !== localDate(current, tz)) {
+          throw invalid('completedAt', 'completedAt must be on the same day as the current completedAt');
+        }
+        if (completedAt > current) throw invalid('completedAt', 'completedAt cannot be later than the current completedAt');
         if (completedAt < s.startedAt) throw invalid('completedAt', 'completedAt must be after startedAt');
         // Moving completion earlier can only shorten active time; it never adds time.
         const span = Math.floor((completedAt.getTime() - s.startedAt.getTime()) / 1000);
