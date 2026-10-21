@@ -315,6 +315,10 @@ export class NutritionService {
     return toLogView(row);
   }
 
+  // NOTE(badges): food logs have no `date_changed_at` because PATCH can't change
+  // their date. If a date PATCH is ever added, add the column (migration), set it
+  // when the date changes (see updateWater), and select it in AchievementsService.facts(),
+  // or a re-dated entry could slip past the badges backdating rule.
   /**
    * Edits keep the user's own macros when they overrode them; otherwise the
    * entry is recomputed from the food for the new servings. A null override

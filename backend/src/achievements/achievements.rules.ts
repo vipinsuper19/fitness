@@ -56,6 +56,8 @@ export interface BadgeDef {
  * So future-dated entries never count (even once the day arrives), late entries
  * don't count, and a PATCH can't re-date an entry into a window where it would.
  * Checked on every evaluation; anything already awarded stays (never revoked).
+ * Food logs use createdAt only: their date can't be PATCHed. If that changes, they
+ * need `date_changed_at` like water logs and measurements.
  */
 export function counts(date: string, dateSetAt: Date, today: string, tz: string): boolean {
   return date <= today && dateSetAt >= startOfLocalDay(date, tz) && dateSetAt < startOfLocalDay(nextDate(nextDate(date)), tz);
