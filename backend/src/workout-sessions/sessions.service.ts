@@ -1,5 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
+import { AchievementsService } from '../achievements/achievements.service';
+import { EvaluatesAchievements } from '../achievements/evaluates-achievements.decorator';
 import { ApiError } from '../common/api-error';
 import { decodeTimeCursor, encodeCursor } from '../common/cursor';
 import { num } from '../common/decimal';
@@ -106,6 +108,7 @@ export class SessionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly xp: XpService,
+    readonly achievements: AchievementsService,
   ) {}
 
   async start(userId: string, dto: SessionStartDto): Promise<SessionView> {
@@ -163,6 +166,7 @@ export class SessionsService {
    * Upsert by the device's clientSetId (unique per user). Re-sending the same
    * clientSetId replaces that set; using it for another session is 409.
    */
+  @EvaluatesAchievements()
   async upsertSet(userId: string, sessionId: string, dto: SetLogUpsertDto): Promise<SetLogView> {
     const now = new Date();
     const loggedAt = clientTime(dto.loggedAt, 'loggedAt', now);
@@ -202,6 +206,7 @@ export class SessionsService {
    * Completing again returns the original result: the award is looked up,
    * never recomputed or re-written.
    */
+  @EvaluatesAchievements()
   async complete(userId: string, id: string, dto: SessionCompleteDto): Promise<CompleteResult> {
     return this.prisma.$transaction(async (tx) => {
       const s = await this.lock(tx, userId, id);
@@ -239,6 +244,7 @@ export class SessionsService {
    * if any, is reversed by a server-side adjustment; the award stays in the
    * ledger, so the session can never be awarded again.
    */
+  @EvaluatesAchievements()
   async discard(userId: string, id: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await this.lock(tx, userId, id);

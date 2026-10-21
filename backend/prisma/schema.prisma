@@ -483,12 +483,15 @@ model FoodLog {
 }
 
 model WaterLog {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  date      DateTime @db.Date
-  amountMl  Int      @map("amount_ml")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  date          DateTime  @db.Date
+  amountMl      Int       @map("amount_ml")
+  /// When `date` was last changed by an edit (null = never); the badges
+  /// backdating rule checks the date against this instead of createdAt.
+  dateChangedAt DateTime? @map("date_changed_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -500,18 +503,21 @@ model WaterLog {
 
 /// Null columns mean "not measured", never 0.
 model BodyMeasurement {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  date       DateTime @db.Date
-  weightKg   Decimal? @map("weight_kg") @db.Decimal(5, 2)
-  bodyFatPct Decimal? @map("body_fat_pct") @db.Decimal(4, 1)
-  waistCm    Decimal? @map("waist_cm") @db.Decimal(5, 1)
-  chestCm    Decimal? @map("chest_cm") @db.Decimal(5, 1)
-  hipCm      Decimal? @map("hip_cm") @db.Decimal(5, 1)
-  armCm      Decimal? @map("arm_cm") @db.Decimal(5, 1)
-  thighCm    Decimal? @map("thigh_cm") @db.Decimal(5, 1)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  date          DateTime  @db.Date
+  weightKg      Decimal?  @map("weight_kg") @db.Decimal(5, 2)
+  bodyFatPct    Decimal?  @map("body_fat_pct") @db.Decimal(4, 1)
+  waistCm       Decimal?  @map("waist_cm") @db.Decimal(5, 1)
+  chestCm       Decimal?  @map("chest_cm") @db.Decimal(5, 1)
+  hipCm         Decimal?  @map("hip_cm") @db.Decimal(5, 1)
+  armCm         Decimal?  @map("arm_cm") @db.Decimal(5, 1)
+  thighCm       Decimal?  @map("thigh_cm") @db.Decimal(5, 1)
+  /// When `date` was last changed by an edit (null = never); the badges
+  /// backdating rule checks the date against this instead of createdAt.
+  dateChangedAt DateTime? @map("date_changed_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

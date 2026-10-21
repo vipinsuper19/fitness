@@ -1,9 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
+import { AchievementsService } from '../achievements/achievements.service';
+import { EvaluatesAchievements } from '../achievements/evaluates-achievements.decorator';
 import { ApiError } from '../common/api-error';
 import { decodeCursor, encodeCursor, invalidCursor } from '../common/cursor';
 import { isoDate, num, parseIsoDate } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
+import { currentStreak } from '../common/streak';
 import { dateRange, daySpan, localDate, nextDate, prevDate, startOfLocalDay } from '../common/time';
 import type { BodyMeasurement } from '../generated/prisma/client';
 import type { MeasurementField } from './progress.dto';
@@ -81,7 +84,10 @@ function measurementData(dto: BodyMeasurementDto) {
 
 @Injectable()
 export class ProgressService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    readonly achievements: AchievementsService,
+  ) {}
 
   async list(userId: string, q: MeasurementListQuery): Promise<{ items: MeasurementView[]; nextCursor: string | null }> {
     const limit = q.limit ?? 20;
@@ -108,11 +114,13 @@ export class ProgressService {
     return toMeasurementView(row);
   }
 
+  @EvaluatesAchievements()
   async create(userId: string, dto: BodyMeasurementDto): Promise<MeasurementView> {
     return toMeasurementView(await this.prisma.bodyMeasurement.create({ data: { userId, ...measurementData(dto) } }));
   }
 
   /** Partial update: a missing field stays unchanged, null clears it; at least one measurement must remain. */
+  @EvaluatesAchievements()
   async update(userId: string, id: string, dto: BodyMeasurementUpdateDto): Promise<MeasurementView> {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.bodyMeasurement.findFirst({ where: { id, userId } });
@@ -122,7 +130,11 @@ export class ProgressService {
       }
       const data: Record<string, unknown> = {};
       for (const f of MEASUREMENT_FIELDS) if (dto[f] !== undefined) data[f] = stored(f, dto[f]);
-      if (dto.date !== undefined) data.date = parseIsoDate(dto.date)!;
+      if (dto.date !== undefined) {
+        data.date = parseIsoDate(dto.date)!;
+        // Badges backdating rule: a changed date is checked against the time of the edit.
+        if ((data.date as Date).getTime() !== row.date.getTime()) data.dateChangedAt = new Date();
+      }
       if (MEASUREMENT_FIELDS.every((f) => (f in data ? data[f] : row[f]) === null)) {
         throw invalid(Object.fromEntries(MEASUREMENT_FIELDS.filter((f) => f in data).map((f) => [f, 'the entry must keep at least one measurement'])));
       }
@@ -132,6 +144,7 @@ export class ProgressService {
     });
   }
 
+  @EvaluatesAchievements()
   async remove(userId: string, id: string): Promise<void> {
     const { count } = await this.prisma.bodyMeasurement.deleteMany({ where: { id, userId } });
     if (count !== 1) throw notFound('Measurement');
@@ -245,13 +258,6 @@ export class ProgressService {
       where: { userId, status: 'completed', completedAt: { gte: startOfLocalDay(first, tz) } },
       select: { completedAt: true },
     });
-    const done = new Set(rows.map((r) => localDate(r.completedAt!, tz)));
-    let day = done.has(today) ? today : prevDate(today);
-    let count = 0;
-    while (done.has(day)) {
-      count += 1;
-      day = prevDate(day);
-    }
-    return count;
+    return currentStreak(new Set(rows.map((r) => localDate(r.completedAt!, tz))), today);
   }
 }
