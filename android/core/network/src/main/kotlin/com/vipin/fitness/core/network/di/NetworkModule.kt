@@ -2,6 +2,7 @@ package com.vipin.fitness.core.network.di
 
 import com.vipin.fitness.core.network.BuildConfig
 import com.vipin.fitness.core.network.ProfileApi
+import com.vipin.fitness.core.network.WorkoutApi
 import com.vipin.fitness.core.network.auth.AuthApi
 import com.vipin.fitness.core.network.auth.AuthInterceptor
 import com.vipin.fitness.core.network.auth.RefreshApi
@@ -76,6 +77,9 @@ object NetworkModule {
 
     @Provides @Singleton
     fun profileApi(retrofit: Retrofit): ProfileApi = retrofit.create(ProfileApi::class.java)
+
+    @Provides @Singleton
+    fun workoutApi(retrofit: Retrofit): WorkoutApi = retrofit.create(WorkoutApi::class.java)
 }
 
 fun fitnessJson(): Json = Json {

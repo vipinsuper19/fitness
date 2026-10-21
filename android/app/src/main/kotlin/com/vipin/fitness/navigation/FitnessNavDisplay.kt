@@ -15,6 +15,12 @@ import com.vipin.fitness.feature.auth.RegisterRoute
 import com.vipin.fitness.feature.auth.SignInRoute
 import com.vipin.fitness.feature.onboarding.OnboardingRoute
 import com.vipin.fitness.feature.onboarding.ProfileEditRoute
+import com.vipin.fitness.feature.workout.ExerciseDetailRoute
+import com.vipin.fitness.feature.workout.ExerciseLibraryRoute
+import com.vipin.fitness.feature.workout.NewPlanRoute
+import com.vipin.fitness.feature.workout.PlanPreviewRoute
+import com.vipin.fitness.feature.workout.WorkoutDestination
+import java.time.DayOfWeek
 import kotlinx.coroutines.flow.Flow
 
 @Suppress("UNCHECKED_CAST")
@@ -59,10 +65,43 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                     OnboardingRoute(onFinished = { AppNavigation.onOnboardingFinished(stack) })
                 }
                 Route.Main -> NavEntry(key) {
-                    FitnessApp(onOpenProfile = { backStack.add(Route.Profile) })
+                    FitnessApp(
+                        onOpenProfile = { backStack.add(Route.Profile) },
+                        onWorkoutNavigate = { dest ->
+                            backStack.add(
+                                when (dest) {
+                                    WorkoutDestination.NewPlan -> Route.WorkoutNewPlan
+                                    WorkoutDestination.Library -> Route.ExerciseLibrary()
+                                    is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
+                                },
+                            )
+                        },
+                    )
                 }
                 Route.Profile -> NavEntry(key) {
                     ProfileEditRoute(onSignedOut = { AppNavigation.onSignedOut(stack) })
+                }
+                Route.WorkoutNewPlan -> NavEntry(key) {
+                    NewPlanRoute(
+                        onPreview = { backStack.add(Route.PlanPreview) },
+                        onAddExercise = { day -> backStack.add(Route.ExerciseLibrary(day.value)) },
+                    )
+                }
+                Route.PlanPreview -> NavEntry(key) {
+                    PlanPreviewRoute(
+                        onActivated = { AppNavigation.onPlanActivated(stack) },
+                        onOpenExercise = { backStack.add(Route.ExerciseDetail(it)) },
+                    )
+                }
+                is Route.ExerciseLibrary -> NavEntry(key) {
+                    ExerciseLibraryRoute(
+                        pickDay = route.pickDay?.let(DayOfWeek::of),
+                        onOpen = { backStack.add(Route.ExerciseDetail(it)) },
+                        onPicked = { AppNavigation.pop(stack) },
+                    )
+                }
+                is Route.ExerciseDetail -> NavEntry(key) {
+                    ExerciseDetailRoute(route.id)
                 }
             }
         },

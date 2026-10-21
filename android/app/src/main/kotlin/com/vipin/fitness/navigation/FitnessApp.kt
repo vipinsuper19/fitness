@@ -23,12 +23,19 @@ import com.vipin.fitness.R
 import com.vipin.fitness.feature.home.HomeScreen
 import com.vipin.fitness.feature.nutrition.NutritionScreen
 import com.vipin.fitness.feature.progress.ProgressScreen
-import com.vipin.fitness.feature.workout.WorkoutScreen
+import com.vipin.fitness.feature.workout.WorkoutDestination
+import com.vipin.fitness.feature.workout.WorkoutHomeRoute
 
 /** App shell: Material 3 scaffold with a bottom navigation bar over the four top-level tabs. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FitnessApp(onOpenProfile: () -> Unit, modifier: Modifier = Modifier) {
+fun FitnessApp(
+    onOpenProfile: () -> Unit,
+    modifier: Modifier = Modifier,
+    onWorkoutNavigate: (WorkoutDestination) -> Unit = {},
+    /** Slot so UI tests can render the shell without Hilt. */
+    workoutTab: @Composable (Modifier) -> Unit = { WorkoutHomeRoute(onWorkoutNavigate, it) },
+) {
     var current by rememberSaveable { mutableStateOf(TopLevelDestination.START) }
     Scaffold(
         modifier = modifier,
@@ -60,7 +67,7 @@ fun FitnessApp(onOpenProfile: () -> Unit, modifier: Modifier = Modifier) {
         val content = Modifier.padding(padding)
         when (current) {
             TopLevelDestination.HOME -> HomeScreen(content)
-            TopLevelDestination.WORKOUT -> WorkoutScreen(content)
+            TopLevelDestination.WORKOUT -> workoutTab(content)
             TopLevelDestination.NUTRITION -> NutritionScreen(content)
             TopLevelDestination.PROGRESS -> ProgressScreen(content)
         }
