@@ -33,6 +33,8 @@ export interface PlanView {
   isActive: boolean;
   source: 'rule_based' | 'custom';
   createdAt: string;
+  /** When the plan last became active; null if never activated. */
+  activatedAt: string | null;
 }
 
 export const versionInclude = {
@@ -40,7 +42,7 @@ export const versionInclude = {
 } satisfies Prisma.WorkoutPlanVersionInclude;
 
 type VersionRow = Prisma.WorkoutPlanVersionGetPayload<{ include: typeof versionInclude }>;
-type PlanRow = { id: string; source: 'rule_based' | 'custom'; createdAt: Date };
+type PlanRow = { id: string; source: 'rule_based' | 'custom'; createdAt: Date; activatedAt: Date | null };
 
 export function toPlanView(plan: PlanRow, v: VersionRow, activePlanId: string | null): PlanView {
   return {
@@ -68,6 +70,7 @@ export function toPlanView(plan: PlanRow, v: VersionRow, activePlanId: string | 
     isActive: activePlanId === plan.id,
     source: plan.source,
     createdAt: plan.createdAt.toISOString(),
+    activatedAt: plan.activatedAt?.toISOString() ?? null,
   };
 }
 
@@ -140,14 +143,23 @@ export class PlansService {
     return this.get(userId, planId, next);
   }
 
-  /** One active plan per user: user_profiles.active_plan_id holds it. Re-activating is a no-op. */
+  /**
+   * One active plan per user: user_profiles.active_plan_id holds it. Activating
+   * stamps activatedAt; re-activating the already active plan is a no-op and
+   * keeps its timestamp.
+   */
   async activate(userId: string, planId: string): Promise<PlanView> {
-    const plan = await this.prisma.workoutPlan.findFirst({ where: { id: planId, userId }, select: { id: true } });
-    if (!plan) throw notFound('Plan');
-    await this.prisma.userProfile.upsert({
-      where: { userId },
-      create: { userId, activePlanId: planId },
-      update: { activePlanId: planId },
+    await this.prisma.$transaction(async (tx) => {
+      const plan = await tx.workoutPlan.findFirst({ where: { id: planId, userId }, select: { id: true } });
+      if (!plan) throw notFound('Plan');
+      const profile = await tx.userProfile.findUnique({ where: { userId }, select: { activePlanId: true } });
+      if (profile?.activePlanId === planId) return;
+      await tx.userProfile.upsert({
+        where: { userId },
+        create: { userId, activePlanId: planId },
+        update: { activePlanId: planId },
+      });
+      await tx.workoutPlan.update({ where: { id: planId }, data: { activatedAt: new Date() } });
     });
     return this.get(userId, planId);
   }

@@ -264,6 +264,10 @@ model WorkoutPlan {
   /// Latest version number; PATCH creates version currentVersion + 1.
   currentVersion Int        @default(1) @map("current_version")
   createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// When the plan last became the user's active plan; null if never activated.
+  /// Re-activating the already active plan keeps it; it stays set after
+  /// another plan becomes active. Backfilled from created_at (a lower bound).
+  activatedAt    DateTime?  @map("activated_at") @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)

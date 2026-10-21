@@ -1473,7 +1473,7 @@ components:
             baseVersion: { type: integer, minimum: 1 }
     WorkoutPlan:
       type: object
-      required: [id, version, name, weeks, workouts, isActive, source, createdAt]
+      required: [id, version, name, weeks, workouts, isActive, source, createdAt, activatedAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         version: { type: integer, minimum: 1 }
@@ -1487,6 +1487,14 @@ components:
         isActive: { type: boolean }
         source: { type: string, enum: [rule_based, custom] }
         createdAt: { type: string, format: date-time }
+        activatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the plan last became the user's active plan; null if never activated.
+            Re-activating the already active plan keeps it, and it stays set after another
+            plan becomes active (use `isActive` for the current state). Plans that were
+            active before this field existed report their `createdAt` (a lower bound).
 
     SessionStatus:
       type: string
