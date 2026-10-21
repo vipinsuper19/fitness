@@ -83,7 +83,7 @@ Constants live in one `badges.rules.ts` (like `xp.rules.ts`), and the catalog is
 - The badge or challenge row and its XP row are inserted in **one transaction**. If the badge insert hits its unique key, no XP is written.
 - Workout XP is unchanged. Bonus XP never feeds back into rules except `LEVEL_5`, which excludes bonus XP so there's no cascade.
 - Reversals: none in v1 (§9). Ledger `reason` is e.g. `Badge: 7-day streak` / `Challenge: 3 workouts this week`.
-- **Weekly cap (decided):** total *challenge* bonus XP ≤ 150 per user per ISO week (Monday start, profile tz, keyed by the week of `completed_at`). An award that would exceed the cap is cut down to the remainder, and may be 0. A 0 award still inserts the ledger row (amount 0), so it can never be paid later. Badge XP is not capped.
+- **Weekly cap (decided):** total *challenge* bonus XP ≤ 150 per user per ISO week (Monday start, profile tz, keyed by the week of `completed_at`). An award that would exceed the cap is cut down to the remainder, and may be 0. The amount is stored on the challenge (`xp_awarded`). A ledger row is written only when it's > 0, because the ledger forbids 0 amounts. Completion and the award happen in one transaction, and a completed challenge is never re-awarded, so a capped award can't be paid later. Badge XP is not capped.
 
 ## 6. Awarding: server-side only, idempotent
 
@@ -118,6 +118,7 @@ user_challenges
   water_goal_ml int?                  -- snapshot at join (water templates only)
   status enum(active, completed, expired, left)
   progress int default 0
+  xp_awarded int default 0           -- after the weekly cap; ledger row only when > 0
   joined_at, completed_at?, left_at?, updated_at timestamptz(3)
   UNIQUE (user_id, template_code, window_start)          -- one weekly instance per week
   partial UNIQUE (user_id, template_code) WHERE status='active'

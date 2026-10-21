@@ -280,14 +280,15 @@ describeDb('database schema (migrated Postgres)', () => {
       expect(inserted).toBe(0);
       await prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'badge', sourceId: b.id, amount: 30, reason: 'Badge' } });
       await expect(prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'badge', sourceId: b.id, amount: 30, reason: 'Badge' } })).rejects.toThrow();
-      // Same id under another source type is a different award.
-      await prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'challenge', sourceId: b.id, amount: 0, reason: 'Challenge (capped)' } });
+      // Same id under another source type is a different award; the ledger still forbids 0 amounts.
+      await prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'challenge', sourceId: b.id, amount: 5, reason: 'Challenge' } });
+      await expect(prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'challenge', sourceId: user.id, amount: 0, reason: 'x' } })).rejects.toThrow();
     });
 
     it('allows one weekly instance per week and one active challenge per template', async () => {
       const user = await newUser('challenge');
       const c = await prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-19') } });
-      expect(c).toMatchObject({ status: 'active', progress: 0, waterGoalMl: null });
+      expect(c).toMatchObject({ status: 'active', progress: 0, xpAwarded: 0, waterGoalMl: null });
       // Same week again (even after leaving): unique (user, template, window_start).
       await prisma.userChallenge.update({ where: { id: c.id }, data: { status: 'left', leftAt: new Date() } });
       await expect(prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-19') } })).rejects.toThrow();
@@ -306,6 +307,7 @@ describeDb('database schema (migrated Postgres)', () => {
       await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { status: 'completed' } })).rejects.toThrow();
       await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { windowEnd: new Date('2026-10-20') } })).rejects.toThrow();
       await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { waterGoalMl: 50 } })).rejects.toThrow();
+      await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { xpAwarded: 151 } })).rejects.toThrow();
       await expect(prisma.userChallenge.create({ data: { ...base, templateCode: 'WEEKLY_WATER_DAYS', target: 0 } })).rejects.toThrow();
     });
 

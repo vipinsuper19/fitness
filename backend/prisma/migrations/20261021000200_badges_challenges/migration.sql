@@ -40,6 +40,7 @@ CREATE TABLE "user_challenges" (
     "water_goal_ml" INTEGER,
     "status" "ChallengeStatus" NOT NULL DEFAULT 'active',
     "progress" INTEGER NOT NULL DEFAULT 0,
+    "xp_awarded" INTEGER NOT NULL DEFAULT 0,
     "joined_at" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "join_date" DATE NOT NULL,
     "completed_at" TIMESTAMPTZ(3),
@@ -78,6 +79,7 @@ ALTER TABLE "user_challenges"
   ADD CONSTRAINT "user_challenges_target_positive" CHECK ("target" > 0),
   ADD CONSTRAINT "user_challenges_progress_range" CHECK ("progress" >= 0 AND "progress" <= "target"),
   ADD CONSTRAINT "user_challenges_window_order" CHECK ("window_end" IS NULL OR "window_end" >= "window_start"),
+  ADD CONSTRAINT "user_challenges_xp_awarded_range" CHECK ("xp_awarded" BETWEEN 0 AND 150),
   ADD CONSTRAINT "user_challenges_water_goal_range" CHECK ("water_goal_ml" IS NULL OR "water_goal_ml" BETWEEN 250 AND 10000),
   ADD CONSTRAINT "user_challenges_status_times" CHECK (
     ("status" <> 'completed' OR "completed_at" IS NOT NULL) AND ("status" <> 'left' OR "left_at" IS NOT NULL));

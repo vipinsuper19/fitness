@@ -577,6 +577,10 @@ model UserChallenge {
   waterGoalMl  Int?            @map("water_goal_ml")
   status       ChallengeStatus @default(active)
   progress     Int             @default(0)
+  /// Bonus XP actually awarded on completion (after the 150/week cap; may be
+  /// 0). A ledger row exists only when > 0 (the ledger forbids 0 amounts); the
+  /// completed status, set in the same transaction, prevents a later payout.
+  xpAwarded    Int             @default(0) @map("xp_awarded")
   joinedAt     DateTime        @default(now()) @map("joined_at") @db.Timestamptz(3)
   /// Local date of joining in `timezone`; streak challenges count only streak
   /// days on or after it.
