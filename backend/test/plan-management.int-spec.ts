@@ -171,4 +171,76 @@ describeDb('plan management (HTTP + Postgres)', () => {
     expect((await as(t).get('/api/v1/workout-sessions/history').expect(200)).body.items).toHaveLength(1);
     expect(await prisma.workoutPlanVersion.count({ where: { planId: a.id } })).toBe(1);
   });
+
+  describe('follow-ups', () => {
+    const ONLY_DATE: Parameters<typeof jest.useFakeTimers>[0] = { doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'] };
+    const at = (iso: string) => jest.setSystemTime(new Date(iso));
+    afterEach(() => jest.useRealTimers());
+
+    it('resuming a plan that already ended reports currentWeek = weeks and planEnded', async () => {
+      const t = await signUp();
+      const a = await newPlan(t); // 4 weeks
+      await activate(t, a.id);
+      await pause(t, a.id);
+      const now = Date.now();
+      await prisma.workoutPlan.update({ where: { id: a.id }, data: { activatedAt: new Date(now - 41 * DAY), pausedAt: new Date(now - DAY) } });
+      expect(await activate(t, a.id, { resume: true })).toMatchObject({ isActive: true, currentWeek: 4, planEnded: true });
+      expect((await list(t, '?status=active')).items[0]).toMatchObject({ currentWeek: 4, totalWeeks: 4 });
+      await pause(t, a.id);
+      expect(await activate(t, a.id)).toMatchObject({ currentWeek: 1, planEnded: false }); // default starts over
+    });
+
+    it('concurrent activations of different plans leave exactly one active plan, no 500', async () => {
+      const t = await signUp();
+      const plans = [await newPlan(t), await newPlan(t), await newPlan(t)];
+      const res = await Promise.all(plans.map((p) => as(t).post(`/api/v1/workout-plans/${p.id}/activate`).send({})));
+      expect(res.map((r) => r.status)).toEqual([200, 200, 200]);
+      const active = (await list(t, '?status=active')).items;
+      expect(active).toHaveLength(1);
+      expect((await as(t).get('/api/v1/workout-plans/active').expect(200)).body.id).toBe(active[0].id);
+      expect((await list(t)).items.filter((p: { isActive: boolean }) => p.isActive)).toHaveLength(1);
+    });
+
+    it('concurrent activations of the same plan (with and without resume) succeed once, no 500', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await activate(t, a.id);
+      await pause(t, a.id);
+      const res = await Promise.all([{}, { resume: true }, {}, { resume: true }].map((b) => as(t).post(`/api/v1/workout-plans/${a.id}/activate`).send(b)));
+      expect(res.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+      expect((await list(t, '?status=active')).items).toEqual([expect.objectContaining({ id: a.id, pausedAt: null })]);
+    });
+
+    it('resume across IST midnight keeps the calendar-day count (faked clock)', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      jest.useFakeTimers(ONLY_DATE);
+      at('2026-09-01T03:30:00Z'); // 09:00 IST, day 1
+      await activate(t, a.id);
+      at('2026-09-07T18:20:00Z'); // 23:50 IST on day 7
+      expect((await plan(t, a.id)).currentWeek).toBe(1);
+      await pause(t, a.id);
+      at('2026-09-07T18:40:00Z'); // 00:10 IST, 8 Sep (day 8)
+      const r = await activate(t, a.id, { resume: true });
+      expect(r.activatedAt).toBe('2026-09-01T03:50:00.000Z'); // shifted by the 20-minute pause, same start day
+      expect(r).toMatchObject({ currentWeek: 2, planEnded: false });
+    });
+
+    it('resume across IST midnight when the shift moves the start day (faked clock)', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      jest.useFakeTimers(ONLY_DATE);
+      at('2026-09-01T18:15:00Z'); // 23:45 IST on 1 Sep, day 1
+      await activate(t, a.id);
+      at('2026-09-07T18:20:00Z'); // 23:50 IST on 7 Sep, day 7
+      expect((await plan(t, a.id)).currentWeek).toBe(1);
+      await pause(t, a.id);
+      at('2026-09-07T18:40:00Z'); // 00:10 IST on 8 Sep
+      const r = await activate(t, a.id, { resume: true });
+      expect(r.activatedAt).toBe('2026-09-01T18:35:00.000Z'); // 00:05 IST on 2 Sep
+      expect(r).toMatchObject({ currentWeek: 1, planEnded: false }); // still day 7 of week 1
+      at('2026-09-08T18:40:00Z'); // 00:10 IST on 9 Sep: day 8
+      expect((await plan(t, a.id)).currentWeek).toBe(2);
+    });
+  });
 });
