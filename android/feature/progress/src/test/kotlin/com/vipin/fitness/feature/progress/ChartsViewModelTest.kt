@@ -90,6 +90,11 @@ class ChartsViewModelTest {
         assertEquals(84.5, s.series(ChartMetric.WATER)[5]!!, 0.1)
     }
 
+    @Test fun waterChartTitleUnitFollowsUnits() {
+        assertEquals("ml", ProgressFormat.waterUnitLabel(UnitSystem.METRIC))
+        assertEquals("fl oz", ProgressFormat.waterUnitLabel(UnitSystem.IMPERIAL))
+    }
+
     @Test fun chartValuesUseUnitsAndHalfUp() {
         assertEquals("2.5 L", ProgressFormat.chartValue(ChartMetric.WATER, 2500.0, UnitSystem.METRIC))
         assertEquals("1.26 L", ProgressFormat.chartValue(ChartMetric.WATER, 1255.0, UnitSystem.METRIC))
