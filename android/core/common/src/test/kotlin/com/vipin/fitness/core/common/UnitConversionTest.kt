@@ -42,4 +42,9 @@ class UnitConversionTest {
     @Test(expected = IllegalArgumentException::class) fun negativeHeightRejected() {
         UnitConversion.cmToFeetInches(-1.0)
     }
+
+    @Test fun exactHalfInchRoundsUp() {
+        assertEquals(FeetInches(5, 8.0), UnitConversion.cmToFeetInches(171.45))
+        assertEquals(171.45, UnitConversion.feetInchesToCm(5, 7.5), 0.0)
+    }
 }

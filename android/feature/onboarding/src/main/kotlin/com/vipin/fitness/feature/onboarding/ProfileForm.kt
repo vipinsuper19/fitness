@@ -38,8 +38,9 @@ data class ProfileForm(
     /** Same values shown in other units. Unparseable text is kept as-is. */
     fun withUnits(target: UnitSystem): ProfileForm {
         if (target == units) return this
-        val cm = parseHeightCm()
-        val kg = parseWeightKg()
+        // Convert from the unrounded values and round once, for display (#27).
+        val cm = heightCmExact()
+        val kg = weightKgExact()
         val base = copy(units = target)
         return base.withHeight(cm.valueOr(null), keepRaw = cm is Parsed.Bad)
             .withWeight(kg.valueOr(null), keepRaw = kg is Parsed.Bad, raw = weight)
@@ -77,7 +78,16 @@ data class ProfileForm(
         return t.toIntOrNull()?.takeIf { it in range }?.let { Parsed.Ok(it) } ?: Parsed.Bad
     }
 
-    fun parseHeightCm(): Parsed<Double> {
+    /** Canonical cm, rounded to 1 dp (what is saved). */
+    fun parseHeightCm(): Parsed<Double> = heightCmExact().rounded(1)
+
+    /** Canonical kg, rounded to 2 dp (what is saved). */
+    fun parseWeightKg(): Parsed<Double> = weightKgExact().rounded(2)
+
+    private fun Parsed<Double>.rounded(places: Int): Parsed<Double> =
+        if (this is Parsed.Ok) Parsed.Ok(value?.let { round(it, places) }) else this
+
+    private fun heightCmExact(): Parsed<Double> {
         val cm: Double? = if (units == UnitSystem.METRIC) {
             when (val p = num(heightCm)) { Parsed.Bad -> return Parsed.Bad; is Parsed.Ok -> p.value }
         } else {
@@ -87,14 +97,14 @@ data class ProfileForm(
             if (f != null && f % 1.0 != 0.0) return Parsed.Bad // whole feet only; fractions go in inches
             if (f == null && i == null) null else UnitConversion.feetInchesToCm((f ?: 0.0).toInt(), i ?: 0.0)
         }
-        return if (cm == null || cm in 50.0..272.0) Parsed.Ok(cm?.let { round(it, 1) }) else Parsed.Bad
+        return if (cm == null || cm in 50.0..272.0) Parsed.Ok(cm) else Parsed.Bad
     }
 
-    fun parseWeightKg(): Parsed<Double> = when (val p = num(weight)) {
+    private fun weightKgExact(): Parsed<Double> = when (val p = num(weight)) {
         Parsed.Bad -> Parsed.Bad
         is Parsed.Ok -> {
             val kg = UnitConversion.weightToKg(p.value, units)
-            if (kg == null || kg in 20.0..400.0) Parsed.Ok(kg?.let { round(it, 2) }) else Parsed.Bad
+            if (kg == null || kg in 20.0..400.0) Parsed.Ok(kg) else Parsed.Bad
         }
     }
 
@@ -155,10 +165,11 @@ data class ProfileForm(
             water = p.dailyWaterTargetMl?.toString().orEmpty(),
         ).withHeight(p.heightCm, keepRaw = false).withWeight(p.weightKg, keepRaw = false, raw = "")
 
-        private fun round(v: Double, places: Int) = BigDecimal(v).setScale(places, RoundingMode.HALF_UP).toDouble()
+        // BigDecimal.valueOf: the double's shortest decimal form (69.85, not 69.8499…).
+        private fun round(v: Double, places: Int) = BigDecimal.valueOf(v).setScale(places, RoundingMode.HALF_UP).toDouble()
 
         /** Compact number text: "72", "72.5" (no trailing .0). */
         internal fun fmt(v: Double, places: Int): String =
-            BigDecimal(v).setScale(places, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+            BigDecimal.valueOf(v).setScale(places, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
     }
 }
