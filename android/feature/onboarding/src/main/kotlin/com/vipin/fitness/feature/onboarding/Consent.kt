@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** null = still reading the device store. */
-data class ConsentState(val consented: Boolean? = null, val saving: Boolean = false)
+data class ConsentState(val consented: Boolean? = null, val saving: Boolean = false, val saveFailed: Boolean = false)
 
 @HiltViewModel
 class ConsentViewModel @Inject constructor(private val consent: ConsentRepository) : ViewModel() {
@@ -56,10 +56,12 @@ class ConsentViewModel @Inject constructor(private val consent: ConsentRepositor
 
     fun accept() {
         if (_state.value.saving) return
-        _state.update { it.copy(saving = true) }
+        _state.update { it.copy(saving = true, saveFailed = false) }
         viewModelScope.launch {
-            consent.accept()
-            _state.update { it.copy(consented = true, saving = false) }
+            // False: the account couldn't be identified (e.g. offline right after updating), so
+            // nothing was saved. Stay here and say so rather than letting the user through.
+            val saved = consent.accept()
+            _state.update { it.copy(consented = saved, saving = false, saveFailed = !saved) }
         }
     }
 }
@@ -71,12 +73,12 @@ fun ConsentGate(viewModel: ConsentViewModel = hiltViewModel(), content: @Composa
     when (s.consented) {
         null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         true -> content()
-        false -> ConsentContent(saving = s.saving, onContinue = viewModel::accept)
+        false -> ConsentContent(saving = s.saving, onContinue = viewModel::accept, saveFailed = s.saveFailed)
     }
 }
 
 @Composable
-fun ConsentContent(saving: Boolean, onContinue: () -> Unit) {
+fun ConsentContent(saving: Boolean, onContinue: () -> Unit, saveFailed: Boolean = false) {
     val uri = LocalUriHandler.current
     var agreed by rememberSaveable { mutableStateOf(false) }
     Column(
@@ -103,6 +105,9 @@ fun ConsentContent(saving: Boolean, onContinue: () -> Unit) {
         ) {
             Checkbox(checked = agreed, onCheckedChange = null)
             Text(stringResource(R.string.consent_agree), modifier = Modifier.padding(start = 8.dp))
+        }
+        if (saveFailed) {
+            Text(stringResource(R.string.consent_save_failed), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(ConsentTags.ERROR))
         }
         Button(
             onClick = onContinue,

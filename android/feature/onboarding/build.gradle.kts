@@ -50,3 +50,14 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+// Release builds must not ship the example.com placeholders (debug builds may).
+val checkReleaseLegalUrls by tasks.registering {
+    val values = listOf("fitness.privacyUrl", "fitness.termsUrl", "fitness.helpUrl", "fitness.feedbackEmail")
+        .associateWith { providers.gradleProperty(it).orNull }
+    doLast {
+        val missing = values.filterValues { it == null || it.contains("example.com") }.keys
+        check(missing.isEmpty()) { "Release build needs real legal/help links; set -P${missing.joinToString(" -P") { "$it=..." }}" }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkReleaseLegalUrls) }

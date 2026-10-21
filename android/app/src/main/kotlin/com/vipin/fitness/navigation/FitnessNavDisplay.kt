@@ -72,20 +72,23 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                     ConsentGate { OnboardingRoute(onFinished = { AppNavigation.onOnboardingFinished(stack) }) }
                 }
                 Route.Main -> NavEntry(key) {
-                    FitnessApp(
-                        onOpenProfile = { backStack.add(Route.Profile) },
-                        onOpenAchievements = { backStack.add(Route.Achievements) },
-                        onWorkoutNavigate = { dest ->
-                            backStack.add(
-                                when (dest) {
-                                    WorkoutDestination.NewPlan -> Route.WorkoutNewPlan
-                                    WorkoutDestination.Library -> Route.ExerciseLibrary()
-                                    is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
-                                    WorkoutDestination.ActiveSession -> Route.ActiveSession
-                                },
-                            )
-                        },
-                    )
+                    // Every signed-in user without the current consent version answers before Main.
+                    ConsentGate {
+                        FitnessApp(
+                            onOpenProfile = { backStack.add(Route.Profile) },
+                            onOpenAchievements = { backStack.add(Route.Achievements) },
+                            onWorkoutNavigate = { dest ->
+                                backStack.add(
+                                    when (dest) {
+                                        WorkoutDestination.NewPlan -> Route.WorkoutNewPlan
+                                        WorkoutDestination.Library -> Route.ExerciseLibrary()
+                                        is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
+                                        WorkoutDestination.ActiveSession -> Route.ActiveSession
+                                    },
+                                )
+                            },
+                        )
+                    }
                 }
                 Route.Profile -> NavEntry(key) {
                     ProfileEditRoute(

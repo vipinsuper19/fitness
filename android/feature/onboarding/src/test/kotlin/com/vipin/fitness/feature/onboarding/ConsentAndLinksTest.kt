@@ -43,6 +43,19 @@ class ConsentAndLinksTest {
         assertEquals(1, repo.accepts)
     }
 
+    @Test fun unidentifiedUserStaysOnConsentWithAnError() {
+        val repo = FakeConsentRepository(consented = false).apply { canIdentify = false }
+        val vm = ConsentViewModel(repo)
+        compose.setContent { ConsentGate(vm) { Text("steps") } }
+        compose.onNodeWithTag(ConsentTags.AGREE).performScrollTo().performClick()
+        compose.onNodeWithTag(ConsentTags.CONTINUE).performClick()
+        compose.onNodeWithTag(ConsentTags.ERROR).assertExists()
+        compose.onNodeWithText("steps").assertDoesNotExist()
+        repo.canIdentify = true
+        compose.onNodeWithTag(ConsentTags.CONTINUE).performScrollTo().performClick()
+        compose.onNodeWithText("steps").assertExists()
+    }
+
     @Test fun alreadyConsentedSkipsStraightToOnboarding() {
         val vm = ConsentViewModel(FakeConsentRepository(consented = true))
         compose.setContent { ConsentGate(vm) { Text("steps") } }

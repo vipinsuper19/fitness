@@ -123,6 +123,17 @@ class FakeAccountRepository : com.vipin.fitness.core.data.AccountRepository {
 
 class FakeConsentRepository(var consented: Boolean = false) : com.vipin.fitness.core.data.ConsentRepository {
     var accepts = 0
+    /** False = the user can't be identified (offline upgrade case): accept saves nothing. */
+    var canIdentify = true
+    var refreshes = 0
+    var forgets = 0
     override suspend fun hasConsented() = consented
-    override suspend fun accept() { accepts++; consented = true }
+    override suspend fun accept(): Boolean {
+        accepts++
+        if (!canIdentify) return false
+        consented = true
+        return true
+    }
+    override suspend fun refreshActiveUser() { refreshes++ }
+    override suspend fun forgetActiveUser() { forgets++; consented = false }
 }

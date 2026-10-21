@@ -7,6 +7,7 @@ object ConsentTags {
     const val CONTINUE = "consent_continue"
     const val PRIVACY = "consent_privacy"
     const val TERMS = "consent_terms"
+    const val ERROR = "consent_error"
 }
 
 /** Profile/settings: help, feedback and legal links. */

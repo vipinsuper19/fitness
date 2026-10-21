@@ -23,6 +23,15 @@ class AppNavigationTest {
     private fun appVm(signedIn: Boolean, completed: Boolean) =
         AppViewModel(FakeSessionRepository(signedIn), profiles, FakeProfileFlagsCache(completed))
 
+    @Test fun signedInLaunchRecordsTheActiveUserForConsent() {
+        val consent = com.vipin.fitness.core.testing.FakeConsentRepository()
+        AppViewModel(FakeSessionRepository(true), profiles, FakeProfileFlagsCache(true), consent)
+        assertEquals(1, consent.refreshes)
+        val signedOut = com.vipin.fitness.core.testing.FakeConsentRepository()
+        AppViewModel(FakeSessionRepository(false), profiles, FakeProfileFlagsCache(false), signedOut)
+        assertEquals(0, signedOut.refreshes)
+    }
+
     @Test fun signedOutStartsAtSignIn() {
         assertEquals(Route.SignIn(), appVm(signedIn = false, completed = true).startRoute.value)
         assertEquals(0, profiles.gets)
