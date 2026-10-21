@@ -32,11 +32,6 @@ export const envSchema = z.object({
   LOGIN_MAX_FAILURES_PER_ACCOUNT: z.coerce.number().int().positive().default(5),
   /** Proxy hops in front of the app (Render: 1, per Render's docs). Sets Express `trust proxy`. */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
-  /** TEMPORARY (remove in the TRUST_PROXY_HOPS fix PR): log client-IP diagnostics on auth routes. */
-  DEBUG_CLIENT_IP: z
-    .enum(['true', 'false'])
-    .default('false')
-    .transform((v) => v === 'true'),
   CORS_ORIGINS: z.string().optional(),
   /** Enables Swagger UI at /docs. Defaults on outside production. */
   SWAGGER_ENABLED: z

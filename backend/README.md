@@ -25,7 +25,6 @@ Validated at startup by `src/config/env.ts` (zod). The app refuses to start on a
 | `AUTH_REFRESH_RATE_LIMIT_PER_MINUTE` | per client IP on `/auth/refresh`; default 30 |
 | `LOGIN_MAX_FAILURES_PER_ACCOUNT` | failed logins per email per 15 min before 429; default 5 (in-memory, per instance) |
 | `TRUST_PROXY_HOPS` | Express `trust proxy`; default 1 in code; set to 3 on Render (127.0.0.1 socket + Render internal 10.x proxy + Cloudflare edge, confirmed in prod logs Oct 21); higher trusts forged left-hand X-Forwarded-For entries |
-| `DEBUG_CLIENT_IP` | **Temporary**, remove in the TRUST_PROXY_HOPS fix PR. `true` logs client-IP diagnostics (`req.ip`, `req.ips`, socket address, `x-forwarded-for` and its length, `cf-connecting-ip`, `true-client-ip`, `x-real-ip`, trust proxy setting, route) on POST register/login/refresh, at most 20 lines per minute. Never logs bodies, tokens, emails or auth/cookie headers. Default `false` |
 | `CORS_ORIGINS`, `SWAGGER_ENABLED` | optional |
 
 Secrets are set in the Render and Supabase dashboards only, never in the repo. There is no AI provider or key; AI features use rule-based fallbacks.
