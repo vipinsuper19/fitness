@@ -368,9 +368,13 @@ export class NutritionService {
   @EvaluatesAchievements()
   async updateWater(userId: string, id: string, dto: WaterLogUpdateDto): Promise<WaterLogView> {
     if (dto.date === undefined && dto.amountMl === undefined) throw invalid({ body: 'send date and/or amountMl' });
+    const date = dto.date !== undefined ? parseIsoDate(dto.date)! : undefined;
+    // Badges backdating rule: a changed date is checked against the time of the edit.
+    const before = date ? await this.prisma.waterLog.findFirst({ where: { id, userId }, select: { date: true } }) : null;
+    const redated = !!date && !!before && before.date.getTime() !== date.getTime();
     const { count } = await this.prisma.waterLog.updateMany({
       where: { id, userId },
-      data: { ...(dto.date !== undefined ? { date: parseIsoDate(dto.date)! } : {}), ...(dto.amountMl !== undefined ? { amountMl: dto.amountMl } : {}) },
+      data: { ...(date ? { date } : {}), ...(redated ? { dateChangedAt: new Date() } : {}), ...(dto.amountMl !== undefined ? { amountMl: dto.amountMl } : {}) },
     });
     if (count !== 1) throw notFound('Water log');
     return toWaterView(await this.prisma.waterLog.findUniqueOrThrow({ where: { id } }));

@@ -103,6 +103,19 @@ describeDb('badges & challenges engine (Postgres)', () => {
       expect(await ledger(u, 'badge')).toHaveLength(1);
     });
 
+    it('future-dated entries never count, even once their days arrive', async () => {
+      const u = await user();
+      const c = await challenge(u, { templateCode: 'WEEKLY_WATER_DAYS', target: 3, windowStart: d('2026-10-26'), windowEnd: d('2026-11-01'), joinDate: d('2026-10-26'), joinedAt: at('2026-10-26', 1) });
+      // Logged today (2026-10-21) for each of the next 7 days.
+      for (const day of days('2026-10-22', 7)) await prisma.waterLog.create({ data: { userId: u, date: d(day), amountMl: 3000, createdAt: at('2026-10-21', 9) } });
+      const later = at('2026-10-30', 12);
+      expect((await engine.facts(u, later)).waterByDate.size).toBe(0);
+      const r = await engine.evaluate(u, later);
+      expect(r.badgesAwarded).not.toContain('HYDRATED_7');
+      expect(r.challengesCompleted).toEqual([]);
+      expect(await prisma.userChallenge.findUniqueOrThrow({ where: { id: c.id } })).toMatchObject({ status: 'active', progress: 0 });
+    });
+
     it('uses the profile water goal, else 2000 ml', async () => {
       const withGoal = await user({ dailyWaterTargetMl: 3000 });
       const noGoal = await user();
@@ -259,6 +272,34 @@ describeDb('badges & challenges engine (Postgres)', () => {
         boom.mockRestore();
         warn.mockRestore();
       }
+    });
+
+    it('re-dating an old entry through PATCH does not make it count; awarded badges stay', async () => {
+      const { token, id } = await signUp();
+      const auth = { Authorization: `Bearer ${token}` };
+      const today = localDate(new Date(), tz);
+      const minus = (n: number) => { let x = today; for (let i = 0; i < n; i += 1) x = new Date(Date.parse(`${x}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10); return x; };
+      // Logged today for today: counts and earns FIRST_MEASUREMENT.
+      const m = (await http().post('/api/v1/body-measurements').set(auth).set('Idempotency-Key', randomUUID()).send({ date: today, weightKg: 70 }).expect(201)).body;
+      await engine.idle();
+      expect((await prisma.userBadge.findMany({ where: { userId: id } })).map((b) => b.badgeCode)).toEqual(['FIRST_MEASUREMENT']);
+      // Re-dated 5 days back: the edit time (today) is outside that date's window, so it stops counting...
+      await http().patch(`/api/v1/body-measurements/${m.id}`).set(auth).send({ date: minus(5) }).expect(200);
+      expect((await prisma.bodyMeasurement.findUniqueOrThrow({ where: { id: m.id } })).dateChangedAt).not.toBeNull();
+      expect((await engine.facts(id, new Date())).measurementDates).toEqual([]);
+      // ...a water entry created long ago and re-dated to yesterday doesn't count either...
+      const w = await prisma.waterLog.create({ data: { userId: id, date: d(minus(30)), amountMl: 2500, createdAt: at(minus(30), 9) } });
+      await http().patch(`/api/v1/water-logs/${w.id}`).set(auth).send({ date: minus(10) }).expect(200);
+      expect((await engine.facts(id, new Date())).waterByDate.size).toBe(0);
+      // ...while re-dating to yesterday today is within the window and counts (same rule as logging late).
+      await http().patch(`/api/v1/water-logs/${w.id}`).set(auth).send({ date: minus(1) }).expect(200);
+      expect((await engine.facts(id, new Date())).waterByDate.get(minus(1))).toBe(2500);
+      // Changing only the amount keeps the date window.
+      await http().patch(`/api/v1/water-logs/${w.id}`).set(auth).send({ amountMl: 3000 }).expect(200);
+      expect((await engine.facts(id, new Date())).waterByDate.get(minus(1))).toBe(3000);
+      // Nothing already awarded is revoked.
+      await engine.evaluate(id);
+      expect(await prisma.userBadge.count({ where: { userId: id } })).toBe(1);
     });
 
     it('a hook lost before it ran (e.g. a restart) is caught up by the next evaluation', async () => {

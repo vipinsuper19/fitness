@@ -130,7 +130,11 @@ export class ProgressService {
       }
       const data: Record<string, unknown> = {};
       for (const f of MEASUREMENT_FIELDS) if (dto[f] !== undefined) data[f] = stored(f, dto[f]);
-      if (dto.date !== undefined) data.date = parseIsoDate(dto.date)!;
+      if (dto.date !== undefined) {
+        data.date = parseIsoDate(dto.date)!;
+        // Badges backdating rule: a changed date is checked against the time of the edit.
+        if ((data.date as Date).getTime() !== row.date.getTime()) data.dateChangedAt = new Date();
+      }
       if (MEASUREMENT_FIELDS.every((f) => (f in data ? data[f] : row[f]) === null)) {
         throw invalid(Object.fromEntries(MEASUREMENT_FIELDS.filter((f) => f in data).map((f) => [f, 'the entry must keep at least one measurement'])));
       }

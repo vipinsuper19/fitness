@@ -92,22 +92,22 @@ export class AchievementsService implements OnModuleDestroy {
   /**
    * Loads everything the rules read. Client-dated rows are filtered by the backdating rule.
    * TODO(badges): this reads the user's full history on every evaluation (fine at MVP scale).
-   * Bound it before it grows: aggregate counts in SQL, cap streak/date scans to the windows
-   * the rules need, or keep per-user running counters.
+   * Aggregate the facts in SQL instead (per-day counts/sums with the backdating filter in the
+   * WHERE clause, COUNT/SUM for totals) and bound date scans to the windows the rules need.
    */
   async facts(userId: string, now = new Date()): Promise<Facts> {
     const db = this.prisma;
     const profile = await db.userProfile.findUnique({ where: { userId }, select: { timezone: true, dailyWaterTargetMl: true } });
     const tz = profile?.timezone ?? DEFAULT_TIMEZONE;
     const today = localDate(now, tz);
-    const ok = (r: { date: Date; createdAt: Date }) => counts(day(r.date), r.createdAt, today, tz);
+    const ok = (r: { date: Date; createdAt: Date; dateChangedAt?: Date | null }) => counts(day(r.date), r.dateChangedAt ?? r.createdAt, today, tz);
 
     const sessions = await db.workoutSession.findMany({ where: { userId, status: 'completed', completedAt: { not: null } }, select: { completedAt: true, activeSeconds: true } });
     const completedSets = await db.exerciseSetLog.count({ where: { userId, completed: true, session: { status: 'completed' } } });
     const xp = await db.xPTransaction.aggregate({ where: { userId, sourceType: { in: ['workout_session', 'adjustment'] } }, _sum: { amount: true } });
     const food = await db.foodLog.findMany({ where: { userId }, select: { date: true, createdAt: true } });
-    const water = await db.waterLog.findMany({ where: { userId }, select: { date: true, createdAt: true, amountMl: true } });
-    const measurements = await db.bodyMeasurement.findMany({ where: { userId }, select: { date: true, createdAt: true } });
+    const water = await db.waterLog.findMany({ where: { userId }, select: { date: true, createdAt: true, dateChangedAt: true, amountMl: true } });
+    const measurements = await db.bodyMeasurement.findMany({ where: { userId }, select: { date: true, createdAt: true, dateChangedAt: true } });
 
     const waterByDate = new Map<string, number>();
     for (const w of water.filter(ok)) waterByDate.set(day(w.date), (waterByDate.get(day(w.date)) ?? 0) + w.amountMl);

@@ -42,6 +42,7 @@ describe('time rules', () => {
     expect(counts(d, at('2026-10-20', 23.9), today, tz)).toBe(true); // 23:54 IST next day
     expect(counts(d, startOfLocalDay('2026-10-21', tz), today, tz)).toBe(false); // 00:00 IST two days later
     expect(counts('2026-10-22', at(today), today, tz)).toBe(false); // future date
+    expect(counts('2026-10-20', at('2026-10-19', 23), today, tz)).toBe(false); // logged the day before its date: never counts, even once the day arrives
   });
 });
 

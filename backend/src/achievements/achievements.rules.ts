@@ -49,14 +49,16 @@ export interface BadgeDef {
 }
 
 /**
- * Backdating rule: a client-dated entry counts if its date is not in the future
- * and is no earlier than its createdAt local day minus 1 (profile timezone),
- * i.e. it was created on that local day or the next. Checked against the row's
- * *current* date on every evaluation, so an edit that moves the date earlier
- * stops it counting (anything already awarded stays: nothing is revoked).
+ * Backdating rule (profile timezone): a client-dated entry counts only if the
+ * moment its date was last set (`dateSetAt`: createdAt, or dateChangedAt after a
+ * date edit) falls on that date or the next local day:
+ * startOfLocalDay(date) <= dateSetAt < startOfLocalDay(date + 2).
+ * So future-dated entries never count (even once the day arrives), late entries
+ * don't count, and a PATCH can't re-date an entry into a window where it would.
+ * Checked on every evaluation; anything already awarded stays (never revoked).
  */
-export function counts(date: string, createdAt: Date, today: string, tz: string): boolean {
-  return date <= today && createdAt < startOfLocalDay(nextDate(nextDate(date)), tz);
+export function counts(date: string, dateSetAt: Date, today: string, tz: string): boolean {
+  return date <= today && dateSetAt >= startOfLocalDay(date, tz) && dateSetAt < startOfLocalDay(nextDate(nextDate(date)), tz);
 }
 
 /** Monday (ISO week start) of a local date. */
