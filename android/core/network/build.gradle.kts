@@ -16,8 +16,14 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildTypes {
         debug {
-            // 10.0.2.2 is the dev machine as seen from the emulator (cleartext allowed in debug only).
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000/api/v1/\"")
+            // Staging backend on Render Free (T17). Paths in the Retrofit APIs are relative
+            // ("auth/login"), so the base URL must end in /api/v1/. For a local backend from the
+            // emulator: -Pfitness.debugApiBaseUrl=http://10.0.2.2:3000/api/v1/ (cleartext is
+            // allowed for 10.0.2.2 in debug only).
+            val url = providers.gradleProperty("fitness.debugApiBaseUrl")
+                .getOrElse("https://fitness-api-6pcc.onrender.com/api/v1/")
+            require(url.endsWith("/api/v1/")) { "fitness.debugApiBaseUrl must end with /api/v1/, was $url" }
+            buildConfigField("String", "API_BASE_URL", "\"$url\"")
         }
         release {
             // HTTPS only. T17 passes the real host with -Pfitness.releaseApiBaseUrl=https://...;

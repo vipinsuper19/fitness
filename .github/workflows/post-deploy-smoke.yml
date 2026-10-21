@@ -1,0 +1,36 @@
+name: post-deploy-smoke
+
+# Manual smoke test against a deployed API: health + DB, then a throwaway
+# account is registered, deleted, and login is confirmed to fail.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: API origin (no /api/v1)
+        default: https://fitness-api-6pcc.onrender.com
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-deploy-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke test (always cleans up its user on exit)
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          SMOKE_STATE: ${{ runner.temp }}/smoke-user
+        run: scripts/post-deploy-smoke.sh
+      - name: Cleanup leftover smoke user
+        if: always()
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+          SMOKE_STATE: ${{ runner.temp }}/smoke-user
+        run: scripts/post-deploy-smoke.sh cleanup
