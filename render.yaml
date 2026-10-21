@@ -9,7 +9,9 @@ services:
     region: singapore
     rootDir: backend
     branch: main
-    autoDeploy: false
+    # Every merge to main that touches backend/ or render.yaml deploys;
+    # post-deploy-smoke then waits for the restart and smoke-tests it.
+    autoDeploy: true
     # --include=dev: prisma CLI + typescript are devDependencies and are
     # needed at build time even though NODE_ENV=production.
     buildCommand: npm ci --include=dev --no-audit --no-fund && npm run build
@@ -19,6 +21,7 @@ services:
     buildFilter:
       paths:
         - backend/**
+        - render.yaml
     envVars:
       - key: NODE_VERSION
         value: "22"
