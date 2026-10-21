@@ -171,11 +171,9 @@ fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit) {
 
 /** "10 × 20 kg", "45 s", "1.2 km"; whatever the set recorded. */
 internal fun PastSet.summary(): String = listOfNotNull(
-    when {
-        reps != null && weightKg != null -> "$reps × ${trimNumber(weightKg)} kg"
-        reps != null -> "$reps reps"
-        weightKg != null -> "${trimNumber(weightKg)} kg"
-        else -> null
+    when (val kg = weightKg) {
+        null -> reps?.let { "$it reps" }
+        else -> if (reps != null) "$reps × ${trimNumber(kg)} kg" else "${trimNumber(kg)} kg"
     },
     durationSeconds?.let { if (it >= 60) formatClock(it.toLong()) else "$it s" },
     distanceM?.let { if (it >= 1000) "${trimNumber(it / 1000)} km" else "${trimNumber(it)} m" },
