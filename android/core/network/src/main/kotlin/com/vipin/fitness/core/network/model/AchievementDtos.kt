@@ -60,6 +60,8 @@ data class ChallengeDto(
     val completedAt: String? = null,
     val leftAt: String? = null,
     val xpAwarded: Int = 0,
+    /** Local join date in [timezone] (added to the contract by #49; required there, lenient here). */
+    val joinDate: String? = null,
 )
 
 @Serializable

@@ -1,0 +1,99 @@
+{
+  "items": [
+    {
+      "code": "WEEKLY_WORKOUTS",
+      "type": "weekly",
+      "title": "Workouts this week",
+      "description": "Complete the target number of workouts this week (Monday to Sunday).",
+      "metric": "completed_workouts",
+      "unit": "workouts",
+      "targets": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "deadlineDays": null,
+      "bonusXp": 30
+    },
+    {
+      "code": "WEEKLY_ACTIVE_MINUTES",
+      "type": "weekly",
+      "title": "Active minutes this week",
+      "description": "Reach the target active minutes this week.",
+      "metric": "active_minutes",
+      "unit": "minutes",
+      "targets": [
+        60,
+        90,
+        150
+      ],
+      "deadlineDays": null,
+      "bonusXp": 30
+    },
+    {
+      "code": "WEEKLY_WATER_DAYS",
+      "type": "weekly",
+      "title": "Hydration days",
+      "description": "Reach your water goal on the target number of days this week.",
+      "metric": "water_goal_days",
+      "unit": "days",
+      "targets": [
+        3,
+        5,
+        7
+      ],
+      "deadlineDays": null,
+      "bonusXp": 20
+    },
+    {
+      "code": "WEEKLY_FOOD_LOG_DAYS",
+      "type": "weekly",
+      "title": "Food diary days",
+      "description": "Log food on the target number of days this week.",
+      "metric": "food_log_days",
+      "unit": "days",
+      "targets": [
+        3,
+        5,
+        7
+      ],
+      "deadlineDays": null,
+      "bonusXp": 20
+    },
+    {
+      "code": "PERSONAL_WORKOUTS_N",
+      "type": "personal",
+      "title": "Workout goal",
+      "description": "Complete the target number of workouts after joining, before the deadline (30, 60 or 90 days).",
+      "metric": "completed_workouts",
+      "unit": "workouts",
+      "targets": [
+        10,
+        20,
+        30
+      ],
+      "deadlineDays": [
+        30,
+        60,
+        90
+      ],
+      "bonusXp": 50
+    },
+    {
+      "code": "PERSONAL_STREAK_N",
+      "type": "personal",
+      "title": "Streak goal",
+      "description": "Build a streak of the target length, counting only days from the day you join. No end date.",
+      "metric": "streak_days",
+      "unit": "days",
+      "targets": [
+        7,
+        14,
+        30
+      ],
+      "deadlineDays": null,
+      "bonusXp": 50
+    }
+  ]
+}
