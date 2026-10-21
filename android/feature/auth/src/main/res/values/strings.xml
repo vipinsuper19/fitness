@@ -31,4 +31,18 @@
     <string name="delete_account_wrong_password">That password isn\'t right. Your account was not deleted.</string>
     <string name="delete_account_offline">Couldn\'t reach the server, so your account was not deleted yet. Check your connection and try again.</string>
     <string name="delete_account_server">The server had a problem, so your account was not deleted yet. Please try again.</string>
+    <string name="export_title">Export my data</string>
+    <string name="export_body">Download everything we store about you (profile, plans, workouts, food and water logs, measurements, XP, badges and challenges) as a JSON file.</string>
+    <string name="export_start">Export</string>
+    <string name="export_retry">Try again</string>
+    <string name="export_ready">Your export is ready. Share it or save it to a file.</string>
+    <string name="export_saved">Saved.</string>
+    <string name="export_share">Share</string>
+    <string name="export_save">Save to file</string>
+    <string name="export_share_title">Share your Fitness data</string>
+    <string name="export_rate_limited">You can export your data a few times an hour. Try again later.</string>
+    <string name="export_offline">Can\'t reach the server. Check your connection and try again.</string>
+    <string name="export_failed">The export didn\'t work. Please try again.</string>
+    <string name="export_save_failed">Couldn\'t write the file. Please try again.</string>
+    <string name="export_privacy_note">The file contains personal health data. Only share it with people and apps you trust.</string>
 </resources>
