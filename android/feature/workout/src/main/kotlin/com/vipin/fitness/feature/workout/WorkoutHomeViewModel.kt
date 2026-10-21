@@ -111,10 +111,7 @@ class WorkoutHomeViewModel @Inject constructor(
         _state.update { it.copy(starting = true) }
         viewModelScope.launch {
             // Names and tracking types; offline and uncached, the session falls back to the plan's targets.
-            val exercises = workout.exercises.map { it.exerciseId }.distinct()
-                .mapNotNull { id -> (repo.exercise(id) as? ApiResult.Success)?.value }
-                .associateBy { it.id }
-            sessions.start(plan, workout, exercises)
+            sessions.start(plan, workout, repo.exerciseDetails(workout))
             _state.update { it.copy(starting = false, openSession = true) }
         }
     }

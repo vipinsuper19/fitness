@@ -264,6 +264,9 @@ class DefaultWorkoutSessionRepository @Inject constructor(
      */
     override suspend fun onSignedIn(userId: String) {
         db.withTransaction {
+            // Includes ownerless writes queued before owner_user_id existed. They are deliberately
+            // not backfilled: there are no real users yet, only test installs, so deleting them on
+            // the next sign-in is intentional.
             outbox.deleteNotOwnedBy(userId)
             dao.deleteNotOwnedBy(userId)
             dao.setCurrentAccount(CurrentAccountEntity(userId = userId))

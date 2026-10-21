@@ -14,6 +14,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
+import android.util.Log
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -93,13 +94,16 @@ class OutboxProcessor @Inject constructor(
         val code = r.code()
         if (r.isSuccessful) {
             val text = r.body()?.string().orEmpty()
-            runCatching {
-                when {
-                    w.path == START_PATH -> sessions.setServerId(w.idempotencyKey, json.decodeFromString<WorkoutSessionDto>(text).id)
-                    w.path.endsWith("/complete") ->
-                        sessions.setXpAwarded(w.idempotencyKey, json.decodeFromString<SessionCompleteResultDto>(text).xpAwarded)
-                    else -> Unit
-                }
+            if (w.path == START_PATH) {
+                val id = runCatching { json.decodeFromString<WorkoutSessionDto>(text).id }
+                    .onFailure { Log.w(TAG, "Unparseable start response for ${w.idempotencyKey}", it) }
+                    .getOrNull()
+                    // Accepted but we can't learn the server id, so nothing after it can sync: flag it.
+                    ?: return drop(w, localId, BAD_RESPONSE)
+                sessions.setServerId(w.idempotencyKey, id)
+            } else if (w.path.endsWith("/complete")) {
+                runCatching { sessions.setXpAwarded(w.idempotencyKey, json.decodeFromString<SessionCompleteResultDto>(text).xpAwarded) }
+                    .onFailure { Log.w(TAG, "Unparseable complete response for ${w.idempotencyKey}", it) }
             }
             pending.delete(w.id)
             return true
@@ -111,6 +115,8 @@ class OutboxProcessor @Inject constructor(
                 pending.markFailed(w.id, error ?: "HTTP_$code")
                 false
             }
+            // Other 409s (e.g. IDEMPOTENCY_KEY_REUSED, a conflicting state) are deliberately not
+            // retried: the same request would get the same answer, so they fall through to drop.
             // Signed out or the refresh failed: keep the write; the session-expired flow takes over.
             code == 401 -> {
                 pending.markFailed(w.id, "UNAUTHORIZED")
@@ -150,6 +156,8 @@ class OutboxProcessor @Inject constructor(
     }
 
     companion object {
+        const val BAD_RESPONSE = "BAD_RESPONSE"
+        private const val TAG = "OutboxProcessor"
         const val START_PATH = "workout-sessions"
         private const val BATCH = 50
         private val JSON = "application/json".toMediaType()

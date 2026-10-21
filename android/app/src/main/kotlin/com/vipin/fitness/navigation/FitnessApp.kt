@@ -71,7 +71,11 @@ fun FitnessApp(
 /** The real screen for each tab. Tests can pass their own [FitnessApp] tabContent to stay free of Hilt. */
 @Composable
 private fun TabContent(dest: TopLevelDestination, modifier: Modifier, onWorkoutNavigate: (WorkoutDestination) -> Unit) = when (dest) {
-    TopLevelDestination.HOME -> HomeScreen(modifier)
+    TopLevelDestination.HOME -> HomeScreen(
+        modifier,
+        planDayContent = { WorkoutPlanDayContent(it, onOpenSession = { onWorkoutNavigate(WorkoutDestination.ActiveSession) }) },
+        extraSlots = { workoutHomeSlots(it, onOpenSession = { onWorkoutNavigate(WorkoutDestination.ActiveSession) }) },
+    )
     TopLevelDestination.WORKOUT -> WorkoutHomeRoute(onWorkoutNavigate, modifier)
     TopLevelDestination.NUTRITION -> NutritionScreen(modifier)
     TopLevelDestination.PROGRESS -> ProgressScreen(modifier)

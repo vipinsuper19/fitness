@@ -339,4 +339,22 @@ class WorkoutTrackingTest {
         repo.dismissFlag(id)
         assertTrue(repo.flagged.first().isEmpty())
     }
+
+    @Test fun unparseableStartResponseDropsAndFlagsTheSession() = runTest {
+        val id = start()
+        repo.setCompleted(session().exercises[0].sets[0].clientSetId, true)
+        server.enqueue(MockResponse(code = 201, body = "<html>proxy</html>"))
+        assertEquals(DrainResult.Done, outbox.drain())
+        assertTrue(queued().isEmpty()) // the set write can never sync without a server id
+        assertEquals("BAD_RESPONSE", repo.session(id).first()!!.syncError)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test fun otherConflictsAreNotRetried() = runTest {
+        val id = start()
+        server.enqueue(MockResponse(code = 409, body = """{"code":"IDEMPOTENCY_KEY_REUSED","message":"x"}"""))
+        assertEquals(DrainResult.Done, outbox.drain())
+        assertTrue(queued().isEmpty())
+        assertEquals("IDEMPOTENCY_KEY_REUSED", repo.session(id).first()!!.syncError)
+    }
 }
