@@ -24,6 +24,9 @@ import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
 
+// TODO: switch to com.vipin.fitness.core.common.time.today (AppTime.kt) once #31 merges.
+private fun Clock.today(): LocalDate = LocalDate.now(this.withZone(NutritionFormat.ZONE))
+
 data class DiaryState(
     val date: LocalDate,
     val today: LocalDate,
@@ -47,6 +50,8 @@ data class FoodLogForm(
     val editMacros: Boolean = log.nutrientsEdited,
     val macros: MacroForm = MacroForm.from(log.nutrients),
     val restoreComputed: Boolean = false,
+    /** True once a macro field was actually typed in; only then is an override sent. */
+    val macrosEdited: Boolean = false,
     val errors: Set<String> = emptySet(),
 )
 
@@ -82,10 +87,10 @@ internal fun parseServings(s: String): Double? = s.toDecimalOrNull()?.takeIf { i
 @HiltViewModel
 class DiaryViewModel @Inject constructor(
     private val repo: NutritionRepository,
-    clock: Clock,
+    private val clock: Clock,
 ) : ViewModel() {
-    private val today = LocalDate.now(clock.withZone(NutritionFormat.ZONE))
-    private val _state = MutableStateFlow(DiaryState(date = today, today = today))
+
+    private val _state = MutableStateFlow(clock.today().let { DiaryState(date = it, today = it) })
     val state: StateFlow<DiaryState> = _state.asStateFlow()
 
     internal var newKey: () -> String = ::newIdempotencyKey
@@ -112,9 +117,27 @@ class DiaryViewModel @Inject constructor(
 
     fun previousDay() = goTo(_state.value.date.minusDays(1))
     fun nextDay() {
+        refreshToday()
         if (_state.value.canGoForward) goTo(_state.value.date.plusDays(1))
     }
-    fun goToToday() = goTo(today)
+    fun goToToday() {
+        refreshToday()
+        goTo(_state.value.today)
+    }
+
+    /** Called when the screen resumes: if the date rolled over and the user was on the old today, move them to the new one. */
+    fun onResume() {
+        val wasOnToday = _state.value.date == _state.value.today
+        if (refreshToday() && wasOnToday) goTo(_state.value.today)
+    }
+
+    /** Updates [DiaryState.today] from the clock; true when it changed. */
+    private fun refreshToday(): Boolean {
+        val now = clock.today()
+        if (now == _state.value.today) return false
+        _state.update { it.copy(today = now) }
+        return true
+    }
 
     private fun goTo(date: LocalDate) {
         if (date == _state.value.date) return
@@ -149,10 +172,11 @@ class DiaryViewModel @Inject constructor(
     fun saveEdit() {
         val form = _state.value.editing ?: return
         val servings = parseServings(form.servings)
-        val macros = if (form.editMacros && !form.restoreComputed) form.macros.parse() else null
+        val overriding = form.editMacros && !form.restoreComputed && form.macrosEdited
+        val macros = if (overriding) form.macros.parse() else null
         val errors = buildSet {
             if (servings == null) add(FIELD_SERVINGS)
-            if (form.editMacros && !form.restoreComputed && macros == null) add(FIELD_MACROS)
+            if (overriding && macros == null) add(FIELD_MACROS)
         }
         if (errors.isNotEmpty()) {
             _state.update { it.copy(editing = form.copy(errors = errors)) }

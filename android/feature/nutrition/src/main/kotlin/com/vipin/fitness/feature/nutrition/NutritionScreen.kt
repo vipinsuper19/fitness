@@ -33,6 +33,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.data.DailyNutrition
 import com.vipin.fitness.core.data.FoodLog
@@ -68,6 +70,7 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
 private fun DiaryScreen(vm: DiaryViewModel, onAdd: (MealType) -> Unit, modifier: Modifier) {
     val s by vm.state.collectAsStateWithLifecycle()
     var editingWater by remember { mutableStateOf<WaterLog?>(null) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
     Column(modifier.fillMaxSize()) {
         DateBar(s, vm)
         when {
@@ -98,6 +101,7 @@ private fun DiaryScreen(vm: DiaryViewModel, onAdd: (MealType) -> Unit, modifier:
     editingWater?.let { w ->
         WaterDialog(
             log = w,
+            saving = s.saving,
             onSave = { ml -> vm.updateWater(w.id, ml); editingWater = null },
             onDelete = { vm.deleteWater(w.id); editingWater = null },
             onDismiss = { editingWater = null },
@@ -204,7 +208,7 @@ private fun EditEntryDialog(form: FoodLogForm, saving: Boolean, vm: DiaryViewMod
                     vm.onEdit { it.copy(editMacros = on, restoreComputed = !on && it.log.nutrientsEdited) }
                 }
                 if (form.editMacros && !form.restoreComputed) {
-                    MacroFields(form.macros, { m -> vm.onEdit { it.copy(macros = m) } }, DiaryViewModel.FIELD_MACROS in form.errors)
+                    MacroFields(form.macros, { m -> vm.onEdit { it.copy(macros = m, macrosEdited = true) } }, DiaryViewModel.FIELD_MACROS in form.errors)
                 }
                 if (form.log.nutrientsEdited && form.restoreComputed) Text(stringResource(R.string.restore_computed), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { vm.deleteLog(form.log.id) }, enabled = !saving) {
@@ -218,7 +222,7 @@ private fun EditEntryDialog(form: FoodLogForm, saving: Boolean, vm: DiaryViewMod
 }
 
 @Composable
-private fun WaterDialog(log: WaterLog, onSave: (Int) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
+private fun WaterDialog(log: WaterLog, saving: Boolean, onSave: (Int) -> Unit, onDelete: () -> Unit, onDismiss: () -> Unit) {
     var text by rememberSaveable(log.id) { mutableStateOf(log.amountMl.toString()) }
     val ml = text.toIntOrNull()?.takeIf { it in 1..MAX_WATER_ML }
     AlertDialog(
@@ -230,7 +234,7 @@ private fun WaterDialog(log: WaterLog, onSave: (Int) -> Unit, onDelete: () -> Un
                     text, { text = it.replace(",", "") }, stringResource(R.string.water_amount_ml), Modifier.fillMaxWidth(),
                     error = if (ml == null) stringResource(R.string.water_invalid) else null, decimal = false,
                 )
-                TextButton(onClick = onDelete) { Text(stringResource(R.string.nutrition_delete), color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onDelete, enabled = !saving) { Text(stringResource(R.string.nutrition_delete), color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = { Button(onClick = { ml?.let(onSave) }, enabled = ml != null) { Text(stringResource(R.string.nutrition_save)) } },

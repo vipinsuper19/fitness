@@ -61,7 +61,7 @@ class FoodSearchViewModelTest {
     @Test fun addWithEditedMacrosSendsOverride() {
         val vm = vm()
         vm.select(food())
-        vm.onPortion { it.copy(editMacros = true, macros = MacroForm("210", "6", "30", "4.5")) }
+        vm.onPortion { it.copy(editMacros = true, macros = MacroForm("210", "6", "30", "4.5"), macrosEdited = true) }
         vm.add()
         assertEquals(Nutrients(210.0, 6.0, 30.0, 4.5), repo.lastLog!![4])
     }
@@ -115,5 +115,38 @@ class FoodSearchViewModelTest {
         // Grouping style (lakh vs thousand) depends on the platform locale data; digits and decimals do not.
         assertEquals("123456.5", NutritionFormat.number(123456.5).replace(",", ""))
         assertEquals("2", NutritionFormat.number(2.0))
+    }
+
+    @Test fun loadMorePagesTheSearchedQueryNotTheEditedText() {
+        val vm = vm()
+        vm.onQuery("poha")
+        vm.search()
+        vm.onQuery("poha ")  // same query once trimmed: paging stays available
+        assertEquals("c2", vm.state.value.nextCursor)
+        vm.loadMore()
+        assertEquals("poha" to "c2", repo.searches.last())
+        vm.onQuery("poha")
+        vm.search()
+        vm.onQuery("upma")
+        assertNull(vm.state.value.nextCursor)
+        vm.loadMore()
+        assertEquals(3, repo.searches.size)
+        assertTrue(repo.searches.none { it.first == "upma" })
+    }
+
+    @Test fun macroToggleWithoutEditingThenServingsChangeSendsNoOverride() {
+        val vm = vm()
+        vm.select(food())
+        vm.onPortion { it.copy(editMacros = true, macros = MacroForm.from(it.food.nutrients)) }
+        vm.onPortion { it.copy(servings = "2") }
+        assertEquals(200.0, vm.state.value.portion!!.preview()!!.energyKcal, 0.0)
+        vm.add()
+        assertEquals(listOf("f1", day, MealType.LUNCH, 2.0, null), repo.lastLog)
+    }
+
+    @Test fun formattingRoundsHalfUp() {
+        assertEquals("3", NutritionFormat.number(2.5, 0))
+        assertEquals("3 kcal", NutritionFormat.kcal(2.5))
+        assertEquals("1.5", NutritionFormat.number(1.45))
     }
 }

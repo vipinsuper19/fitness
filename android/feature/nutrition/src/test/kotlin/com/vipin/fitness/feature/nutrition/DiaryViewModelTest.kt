@@ -90,11 +90,11 @@ class DiaryViewModelTest {
     @Test fun editMacrosSendsOverrideAndValidates() {
         val vm = vm()
         vm.startEdit(repo.logs.first())
-        vm.onEdit { it.copy(editMacros = true, macros = MacroForm("abc", "1", "2", "3")) }
+        vm.onEdit { it.copy(editMacros = true, macros = MacroForm("abc", "1", "2", "3"), macrosEdited = true) }
         vm.saveEdit()
         assertEquals(setOf(DiaryViewModel.FIELD_MACROS), vm.state.value.editing!!.errors)
         assertTrue(repo.writes.isEmpty())
-        vm.onEdit { it.copy(macros = MacroForm("150", "5", "25", "3")) }
+        vm.onEdit { it.copy(macros = MacroForm("150", "5", "25", "3"), macrosEdited = true) }
         vm.saveEdit()
         assertEquals(Field.Set(Nutrients(150.0, 5.0, 25.0, 3.0)), repo.lastChanges!!.nutrients)
     }
@@ -133,5 +133,47 @@ class DiaryViewModelTest {
         assertTrue(vm.state.value.day!!.foodLogs.isEmpty())
         assertEquals(0, vm.state.value.day!!.daily.waterMl)
         assertEquals(listOf("deleteFoodLog", "updateWater", "deleteWater"), repo.writes.map { it.first })
+    }
+
+    @Test fun todayFollowsClockAcrossMidnightInIndia() {
+        // 23:50 IST on 21 Oct, then 00:10 IST on 22 Oct.
+        val c = MutableClock(Instant.parse("2026-10-21T18:20:00Z"))
+        val vm = DiaryViewModel(repo, c).also { it.newKey = { "k${++n}" } }
+        assertEquals(LocalDate.of(2026, 10, 21), vm.state.value.date)
+        c.instant = Instant.parse("2026-10-21T18:40:00Z")
+        vm.onResume()
+        assertEquals(LocalDate.of(2026, 10, 22), vm.state.value.today)
+        assertEquals(LocalDate.of(2026, 10, 22), vm.state.value.date)
+        assertEquals(LocalDate.of(2026, 10, 22), repo.dayCalls.last())
+    }
+
+    @Test fun resumeAfterMidnightKeepsAPastDayTheUserChose() {
+        val c = MutableClock(Instant.parse("2026-10-21T18:20:00Z"))
+        val vm = DiaryViewModel(repo, c)
+        vm.previousDay()
+        c.instant = Instant.parse("2026-10-21T18:40:00Z")
+        vm.onResume()
+        assertEquals(LocalDate.of(2026, 10, 20), vm.state.value.date)
+        assertEquals(LocalDate.of(2026, 10, 22), vm.state.value.today)
+        vm.nextDay(); vm.nextDay()
+        assertEquals(LocalDate.of(2026, 10, 22), vm.state.value.date)
+    }
+
+    @Test fun goToTodayAfterMidnightWithoutResumeUsesTheNewDay() {
+        val c = MutableClock(Instant.parse("2026-10-21T18:20:00Z"))
+        val vm = DiaryViewModel(repo, c)
+        c.instant = Instant.parse("2026-10-21T18:40:00Z")
+        vm.goToToday()
+        assertEquals(LocalDate.of(2026, 10, 22), vm.state.value.date)
+    }
+
+    @Test fun macroToggleWithoutEditingThenServingsChangeSendsNoOverride() {
+        val vm = vm()
+        vm.startEdit(repo.logs.first())
+        vm.onEdit { it.copy(editMacros = true) }
+        vm.onEdit { it.copy(servings = "2") }
+        vm.saveEdit()
+        assertEquals(2.0, repo.lastChanges!!.servings)
+        assertEquals(Field.Unchanged, repo.lastChanges!!.nutrients)
     }
 }

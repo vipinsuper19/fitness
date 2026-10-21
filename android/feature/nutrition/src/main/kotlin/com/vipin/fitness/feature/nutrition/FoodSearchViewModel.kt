@@ -23,17 +23,24 @@ import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
 
+// TODO: switch to com.vipin.fitness.core.common.time.today (AppTime.kt) once #31 merges.
+private fun Clock.today(): LocalDate = LocalDate.now(this.withZone(NutritionFormat.ZONE))
+
 /** Picking a food and its quantity before it goes into the diary. */
 data class PortionForm(
     val food: Food,
     val servings: String = "1",
     val editMacros: Boolean = false,
     val macros: MacroForm = MacroForm.from(food.nutrients),
+    /** True once a macro field was actually typed in; only then is an override sent. */
+    val macrosEdited: Boolean = false,
     val errors: Set<String> = emptySet(),
 ) {
     /** Live preview: computed macros for the typed servings, or the hand-edited values. */
     fun preview(): Nutrients? =
-        if (editMacros) macros.parse() else parseServings(servings)?.let { food.nutrients.times(it) }
+        if (overriding) macros.parse() else parseServings(servings)?.let { food.nutrients.times(it) }
+
+    val overriding: Boolean get() = editMacros && macrosEdited
 
     /** Grams for the typed servings when the food knows its serving weight. */
     fun grams(): Double? = food.gramsPerServing?.let { g -> parseServings(servings)?.let { it * g } }
@@ -81,6 +88,8 @@ data class FoodSearchState(
     val query: String = "",
     val results: List<Food> = emptyList(),
     val nextCursor: String? = null,
+    /** The query that produced [results] and [nextCursor]; Load more pages this, not the edited text. */
+    val searchedQuery: String? = null,
     val searching: Boolean = false,
     val searched: Boolean = false,
     val portion: PortionForm? = null,
@@ -95,9 +104,10 @@ data class FoodSearchState(
 @HiltViewModel
 class FoodSearchViewModel @Inject constructor(
     private val repo: NutritionRepository,
-    clock: Clock,
+    private val clock: Clock,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(FoodSearchState(date = LocalDate.now(clock.withZone(NutritionFormat.ZONE))))
+
+    private val _state = MutableStateFlow(FoodSearchState(date = clock.today()))
     val state: StateFlow<FoodSearchState> = _state.asStateFlow()
 
     internal var newKey: () -> String = ::newIdempotencyKey
@@ -107,10 +117,14 @@ class FoodSearchViewModel @Inject constructor(
     /** Called when the screen opens for a given day and meal; resets a finished flow. */
     fun start(date: LocalDate, meal: MealType) = _state.update {
         if (it.date == date && it.meal == meal && !it.added) it
-        else FoodSearchState(date = date, meal = meal, query = it.query, results = it.results, nextCursor = it.nextCursor, searched = it.searched)
+        else FoodSearchState(date = date, meal = meal, query = it.query, results = it.results, nextCursor = it.nextCursor, searchedQuery = it.searchedQuery, searched = it.searched)
     }
 
-    fun onQuery(q: String) = _state.update { it.copy(query = q.take(100)) }
+    fun onQuery(q: String) = _state.update {
+        val query = q.take(100)
+        // A changed query must not page with the old search's cursor.
+        if (query.trim() == it.searchedQuery) it.copy(query = query) else it.copy(query = query, nextCursor = null)
+    }
 
     fun search() {
         val q = _state.value.query.trim()
@@ -120,7 +134,7 @@ class FoodSearchViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             when (val r = repo.searchFoods(q)) {
                 is ApiResult.Success -> _state.update {
-                    it.copy(searching = false, searched = true, results = r.value.items, nextCursor = r.value.nextCursor)
+                    it.copy(searching = false, searched = true, results = r.value.items, nextCursor = r.value.nextCursor, searchedQuery = q)
                 }
                 is ApiResult.Failure -> _state.update { it.copy(searching = false, error = UiText.Raw(r.error.userMessage())) }
             }
@@ -130,12 +144,13 @@ class FoodSearchViewModel @Inject constructor(
     fun loadMore() {
         val s = _state.value
         val cursor = s.nextCursor ?: return
+        val query = s.searchedQuery ?: return
         if (s.searching) return
         _state.update { it.copy(searching = true) }
         searchJob = viewModelScope.launch {
-            when (val r = repo.searchFoods(s.query.trim(), cursor)) {
+            when (val r = repo.searchFoods(query, cursor)) {
                 is ApiResult.Success -> _state.update {
-                    it.copy(searching = false, results = (it.results + r.value.items).distinctBy { f -> f.id }, nextCursor = r.value.nextCursor)
+                    if (it.searchedQuery != query) it else it.copy(searching = false, results = (it.results + r.value.items).distinctBy { f -> f.id }, nextCursor = r.value.nextCursor)
                 }
                 is ApiResult.Failure -> _state.update { it.copy(searching = false, error = UiText.Raw(r.error.userMessage())) }
             }
@@ -154,10 +169,10 @@ class FoodSearchViewModel @Inject constructor(
         val p = s.portion ?: return
         if (s.saving) return
         val servings = parseServings(p.servings)
-        val override = if (p.editMacros) p.macros.parse() else null
+        val override = if (p.overriding) p.macros.parse() else null
         val errors = buildSet {
             if (servings == null) add(DiaryViewModel.FIELD_SERVINGS)
-            if (p.editMacros && override == null) add(DiaryViewModel.FIELD_MACROS)
+            if (p.overriding && override == null) add(DiaryViewModel.FIELD_MACROS)
         }
         if (errors.isNotEmpty()) {
             _state.update { it.copy(portion = p.copy(errors = errors)) }

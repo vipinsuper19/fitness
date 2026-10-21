@@ -12,7 +12,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.LocalDate
-import kotlin.math.roundToLong
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 enum class MealType(val wire: String) {
     BREAKFAST("breakfast"), LUNCH("lunch"), DINNER("dinner"), SNACK("snack");
@@ -58,7 +59,7 @@ data class Nutrients(
     }
 }
 
-private fun r1(v: Double) = (v * 10).roundToLong() / 10.0
+private fun r1(v: Double) = BigDecimal.valueOf(v).setScale(1, RoundingMode.HALF_UP).toDouble()
 
 data class Food(
     val id: String,

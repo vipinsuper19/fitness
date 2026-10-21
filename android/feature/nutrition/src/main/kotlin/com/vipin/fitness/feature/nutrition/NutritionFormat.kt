@@ -1,6 +1,8 @@
 package com.vipin.fitness.feature.nutrition
 
 import com.vipin.fitness.core.data.Nutrients
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.ZoneId
@@ -17,7 +19,8 @@ internal object NutritionFormat {
         NumberFormat.getNumberInstance(LOCALE).apply {
             maximumFractionDigits = maxDecimals
             minimumFractionDigits = 0
-        }.format(v)
+            roundingMode = RoundingMode.HALF_UP
+        }.format(BigDecimal.valueOf(v)) // decimal value, so 1.45 rounds to 1.5 rather than the double 1.4499…
 
     fun kcal(v: Double) = "${number(v, 0)} kcal"
     fun grams(v: Double) = "${number(v)} g"

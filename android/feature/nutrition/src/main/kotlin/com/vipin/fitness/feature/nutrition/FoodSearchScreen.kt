@@ -134,7 +134,7 @@ private fun PortionPanel(p: PortionForm, s: FoodSearchState, vm: FoodSearchViewM
                 f.copy(editMacros = on, macros = if (on) MacroForm.from(base.rounded1dp()) else f.macros)
             }
         }
-        if (p.editMacros) MacroFields(p.macros, { m -> vm.onPortion { it.copy(macros = m) } }, DiaryViewModel.FIELD_MACROS in p.errors)
+        if (p.editMacros) MacroFields(p.macros, { m -> vm.onPortion { it.copy(macros = m, macrosEdited = true) } }, DiaryViewModel.FIELD_MACROS in p.errors)
         p.preview()?.let { n ->
             Text(stringResource(R.string.portion_total), style = MaterialTheme.typography.titleSmall)
             Text("${NutritionFormat.kcal(n.energyKcal)} · ${NutritionFormat.macros(n)}")
