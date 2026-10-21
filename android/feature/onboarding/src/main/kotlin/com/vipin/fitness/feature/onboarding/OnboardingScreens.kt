@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.testTag
+import com.vipin.fitness.core.designsystem.AccountEntryTags
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.LaunchedEffect
@@ -94,7 +95,7 @@ fun ProfileEditRoute(
                 Text(stringResource(R.string.profile_sign_out))
             }
             if (onDeleteAccount != null) {
-                TextButton(onClick = onDeleteAccount, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth().testTag("open_delete_account")) {
+                TextButton(onClick = onDeleteAccount, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth().testTag(AccountEntryTags.OPEN_DELETE_ACCOUNT)) {
                     Text(stringResource(R.string.profile_delete_account), color = MaterialTheme.colorScheme.error)
                 }
             }

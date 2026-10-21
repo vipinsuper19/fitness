@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vipin.fitness.core.designsystem.DeleteAccountTags
 
 @Composable
 fun DeleteAccountRoute(onDeleted: () -> Unit, onCancel: () -> Unit, viewModel: DeleteAccountViewModel = hiltViewModel()) {
@@ -37,7 +38,7 @@ fun DeleteAccountRoute(onDeleted: () -> Unit, onCancel: () -> Unit, viewModel: D
 @Composable
 fun DeleteAccountContent(s: DeleteAccountState, onPassword: (String) -> Unit, onDelete: () -> Unit, onCancel: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag(DeleteAccountTags.SCREEN),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(stringResource(R.string.delete_account_title), style = MaterialTheme.typography.headlineSmall)
@@ -51,33 +52,33 @@ fun DeleteAccountContent(s: DeleteAccountState, onPassword: (String) -> Unit, on
             enabled = !s.submitting,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            isError = s.error == DeleteAccountError.WRONG_PASSWORD || s.error == DeleteAccountError.PASSWORD_REQUIRED,
-            modifier = Modifier.fillMaxWidth().testTag("delete_account_password"),
+            isError = s.error == DeleteAccountError.WRONG_PASSWORD,
+            modifier = Modifier.fillMaxWidth().testTag(DeleteAccountTags.PASSWORD),
         )
         s.error?.let {
             Text(
                 stringResource(
                     when (it) {
-                        DeleteAccountError.PASSWORD_REQUIRED -> R.string.auth_error_password_required
                         DeleteAccountError.WRONG_PASSWORD -> R.string.delete_account_wrong_password
                         DeleteAccountError.OFFLINE -> R.string.delete_account_offline
+                        DeleteAccountError.SERVER -> R.string.delete_account_server
                         DeleteAccountError.RATE_LIMITED -> R.string.auth_error_rate_limited
                         DeleteAccountError.FAILED -> R.string.auth_error_generic
                     },
                 ),
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.testTag("delete_account_error"),
+                modifier = Modifier.testTag(DeleteAccountTags.ERROR),
             )
         }
         Button(
             onClick = onDelete,
-            enabled = !s.submitting,
+            enabled = s.canConfirm,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
-            modifier = Modifier.fillMaxWidth().testTag("delete_account_confirm"),
+            modifier = Modifier.fillMaxWidth().testTag(DeleteAccountTags.CONFIRM),
         ) {
-            if (s.submitting) CircularProgressIndicator(Modifier.padding(2.dp), strokeWidth = 2.dp) else Text(stringResource(R.string.delete_account_confirm))
+            if (s.submitting) CircularProgressIndicator(Modifier.padding(2.dp).testTag(DeleteAccountTags.PROGRESS), strokeWidth = 2.dp) else Text(stringResource(R.string.delete_account_confirm))
         }
-        TextButton(onClick = onCancel, enabled = !s.submitting, modifier = Modifier.fillMaxWidth().testTag("delete_account_cancel")) {
+        TextButton(onClick = onCancel, enabled = !s.submitting, modifier = Modifier.fillMaxWidth().testTag(DeleteAccountTags.CANCEL)) {
             Text(stringResource(R.string.delete_account_cancel))
         }
     }
