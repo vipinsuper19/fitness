@@ -86,6 +86,9 @@ class DefaultSessionRepository @Inject constructor(
         when (val r = apiCall(json, call)) {
             is ApiResult.Success -> {
                 withContext(Dispatchers.IO) { tokens.save(r.value.toAuthTokens(clock.millis())) }
+                // New session, possibly a different user: forget the previous account's cached
+                // flags so launch can't skip onboarding on their behalf. Onboarding refills it.
+                cache.clear()
                 AuthOutcome.Success
             }
             is ApiResult.Failure -> AuthOutcome.Failure(r.error.toAuthFailure())

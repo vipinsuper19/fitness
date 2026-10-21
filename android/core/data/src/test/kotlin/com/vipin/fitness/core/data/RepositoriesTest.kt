@@ -68,6 +68,27 @@ class RepositoriesTest {
         assertNull(req.headers["Idempotency-Key"])
     }
 
+    @Test fun successfulAuthClearsPreviousAccountsCache() = runTest {
+        cache.completed = true
+        cache.units = UnitSystem.IMPERIAL
+        server.enqueue(MockResponse(code = 200, body = authBody))
+        assertEquals(AuthOutcome.Success, session.signIn("other@x.in", "pw"))
+        assertEquals(false, cache.onboardingCompleted())
+        assertNull(cache.units)
+
+        cache.completed = true
+        server.enqueue(MockResponse(code = 201, body = authBody))
+        assertEquals(AuthOutcome.Success, session.register("new@x.in", "password1", null, "k"))
+        assertEquals(false, cache.onboardingCompleted())
+    }
+
+    @Test fun failedAuthKeepsCache() = runTest {
+        cache.completed = true
+        server.enqueue(MockResponse(code = 401, body = """{"code":"INVALID_CREDENTIALS","message":"no","requestId":"q"}"""))
+        session.signIn("v@x.in", "bad")
+        assertEquals(true, cache.onboardingCompleted())
+    }
+
     @Test fun registerSendsIdempotencyKeyAndMapsEmailTaken() = runTest {
         server.enqueue(MockResponse(code = 409, body = """{"code":"EMAIL_TAKEN","message":"exists","requestId":"q"}"""))
         assertEquals(AuthOutcome.Failure(AuthFailure.EmailTaken), session.register("v@x.in", "password1", " ", "key-1"))
