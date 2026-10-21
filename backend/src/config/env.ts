@@ -32,6 +32,8 @@ export const envSchema = z.object({
   LOGIN_MAX_FAILURES_PER_ACCOUNT: z.coerce.number().int().positive().default(5),
   /** Proxy hops in front of the app (Render: 1, per Render's docs). Sets Express `trust proxy`. */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
+  /** Background badge/challenge evaluation after writes. `off` only for tests that assert exact XP. */
+  ACHIEVEMENTS_HOOKS: z.enum(['on', 'off']).default('on'),
   CORS_ORIGINS: z.string().optional(),
   /** Enables Swagger UI at /docs. Defaults on outside production. */
   SWAGGER_ENABLED: z

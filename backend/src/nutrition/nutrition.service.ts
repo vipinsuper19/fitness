@@ -1,5 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
+import { AchievementsService } from '../achievements/achievements.service';
+import { EvaluatesAchievements } from '../achievements/evaluates-achievements.decorator';
 import { ApiError } from '../common/api-error';
 
 import { decodeCursor, encodeCursor } from '../common/cursor';
@@ -196,7 +198,10 @@ const ownedBy = (userId: string): Prisma.FoodItemWhereInput => ({ deletedAt: nul
 
 @Injectable()
 export class NutritionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    readonly achievements: AchievementsService,
+  ) {}
 
   async searchFoods(userId: string, q: FoodSearchQuery): Promise<{ items: FoodView[]; nextCursor: string | null }> {
     const limit = q.limit ?? 20;
@@ -297,6 +302,7 @@ export class NutritionService {
     return { items: rows.map(toLogView) };
   }
 
+  @EvaluatesAchievements()
   async createFoodLog(userId: string, dto: FoodLogCreateDto): Promise<FoodLogView> {
     const food = await this.prisma.foodItem.findFirst({ where: { id: dto.foodId, ...visibleTo(userId) } });
     if (!food) throw notFound('Food');
@@ -314,6 +320,7 @@ export class NutritionService {
    * entry is recomputed from the food for the new servings. A null override
    * restores the computed values.
    */
+  @EvaluatesAchievements()
   async updateFoodLog(userId: string, id: string, dto: FoodLogUpdateDto): Promise<FoodLogView> {
     const log = await this.prisma.foodLog.findFirst({ where: { id, userId }, include: { food: true } });
     if (!log) throw notFound('Food log');
@@ -338,6 +345,7 @@ export class NutritionService {
     return toLogView(await this.prisma.foodLog.findUniqueOrThrow({ where: { id }, include: withFood }));
   }
 
+  @EvaluatesAchievements()
   async deleteFoodLog(userId: string, id: string): Promise<void> {
     const { count } = await this.prisma.foodLog.deleteMany({ where: { id, userId } });
     if (count !== 1) throw notFound('Food log');
@@ -351,11 +359,13 @@ export class NutritionService {
     return { items: rows.map(toWaterView) };
   }
 
+  @EvaluatesAchievements()
   async createWater(userId: string, dto: WaterLogDto): Promise<WaterLogView> {
     return toWaterView(await this.prisma.waterLog.create({ data: { userId, date: parseIsoDate(dto.date)!, amountMl: dto.amountMl } }));
   }
 
   /** Partial: a missing field stays unchanged; an empty body is 400. */
+  @EvaluatesAchievements()
   async updateWater(userId: string, id: string, dto: WaterLogUpdateDto): Promise<WaterLogView> {
     if (dto.date === undefined && dto.amountMl === undefined) throw invalid({ body: 'send date and/or amountMl' });
     const { count } = await this.prisma.waterLog.updateMany({
@@ -366,6 +376,7 @@ export class NutritionService {
     return toWaterView(await this.prisma.waterLog.findUniqueOrThrow({ where: { id } }));
   }
 
+  @EvaluatesAchievements()
   async deleteWater(userId: string, id: string): Promise<void> {
     const { count } = await this.prisma.waterLog.deleteMany({ where: { id, userId } });
     if (count !== 1) throw notFound('Water log');
