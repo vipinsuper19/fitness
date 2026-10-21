@@ -2232,12 +2232,12 @@ components:
         proteinPct: { type: [number, 'null'], minimum: 0 }
         carbsPct: { type: [number, 'null'], minimum: 0 }
         fatPct: { type: [number, 'null'], minimum: 0 }
-        waterPct: { type: [number, 'null'], minimum: 0, description: Average water per day with any water logged, against waterMl }
+        waterPct: { type: [number, 'null'], minimum: 0, description: 'Average water per day with any water logged, against waterMl' }
     NutritionSummaryPoint:
       type: object
       required: [period, daysInPeriod, daysLogged, totals, avgPerLoggedDay, waterMl, adherence, entryCount, entriesMissing]
       properties:
-        period: { type: string, format: date, description: First date of the period, clipped to `from` }
+        period: { type: string, format: date, description: 'First date of the period, clipped to `from`' }
         daysInPeriod: { type: integer, minimum: 1, description: Days of the period inside from..to }
         daysLogged: { type: integer, minimum: 0, description: Days in the period with at least one food log }
         totals:
@@ -2272,7 +2272,7 @@ components:
         from: { type: string, format: date }
         to: { type: string, format: date }
         bucket: { type: string, enum: [day, week, month] }
-        timezone: { type: string, description: Profile timezone used for local dates (IANA, e.g. Asia/Kolkata) }
+        timezone: { type: string, description: 'Profile timezone used for local dates (IANA, e.g. Asia/Kolkata)' }
         targets:
           description: Null when the user has set no nutrition or water target
           oneOf:
