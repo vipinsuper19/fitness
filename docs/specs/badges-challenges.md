@@ -69,7 +69,7 @@ Constants live in one `badges.rules.ts` (like `xp.rules.ts`), and the catalog is
 | `WEEKLY_WATER_DAYS` | weekly | dates with water ≥ the water goal | 3, 5, 7 |
 | `WEEKLY_FOOD_LOG_DAYS` | weekly | dates with ≥ 1 food log | 3, 5, 7 |
 | `PERSONAL_WORKOUTS_N` | personal | completed sessions since join | 10, 20, 30 (deadline 30/60/90 days) |
-| `PERSONAL_STREAK_N` | personal | best streak reached since join | 7, 14, 30 |
+| `PERSONAL_STREAK_N` | personal | longest run of consecutive workout days **on or after the join date** | 7, 14, 30 |
 
 **Lifecycle** (`status`): `active` → `completed` (target reached inside the window) | `expired` (window ended, target not reached) | `left` (user left).
 - **Join**: at most one *active* challenge per template per user. Weekly instances are unique per (user, template, week start). Limit: 5 active challenges in total.
@@ -112,7 +112,8 @@ user_challenges
   user_id uuid fk -> users.id ON DELETE CASCADE
   template_code varchar(40)
   target int CHECK (target > 0)
-  window_start date, window_end date  -- local dates, inclusive; personal: end = start + deadline - 1 (null = none)
+  window_start date, window_end date? -- local dates, inclusive; personal: end = start + deadlineDays[i] - 1; NULL = no end date
+  join_date date                      -- local day of joining; PERSONAL_STREAK_N counts only streak days on or after it
   timezone varchar(64)                -- snapshot at join
   water_goal_ml int?                  -- snapshot at join (water templates only)
   status enum(active, completed, expired, left)
@@ -169,10 +170,11 @@ components:
     Badge:      { code, title, description, family: workout|streak|nutrition|hydration|measurement|level,
                   bonusXp: integer, earnedAt: date-time|null, progress: { current: int, target: int }|null }
     BadgeList:  { items: Badge[], earnedCount: int }
-    ChallengeTemplate: { code, type: weekly|personal, title, metric, unit, targets: int[], deadlineDays: int|null }
+    ChallengeTemplate: { code, type: weekly|personal, title, metric, unit, targets: int[], deadlineDays: int[]|null,   # one entry per target; null = no end date (weekly, or open-ended personal)
+                         bonusXp: int }   # before the weekly cap
     ChallengeView: { id, templateCode, type, title, target, progress, unit,
                      windowStart: date, windowEnd: date|null, timezone, waterGoalMl: int|null, status,
-                     joinedAt, completedAt|null, leftAt|null, bonusXp, xpAwarded: int }
+                     joinedAt, completedAt|null, leftAt|null, xpAwarded: int }   # bonus XP actually awarded, after the cap
 ```
 
 Responses that complete something are side effects of other writes, so existing responses (e.g. session complete) **may** gain an optional `newBadges: Badge[]` in a later, additive contract PR. v1 apps poll `GET /badges` after a completion.

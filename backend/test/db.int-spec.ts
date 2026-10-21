@@ -235,6 +235,10 @@ describeDb('database schema (migrated Postgres)', () => {
     });
     await prisma.waterLog.create({ data: { userId: other.id, date: new Date('2026-10-20'), amountMl: 500 } });
 
+    const badge = await prisma.userBadge.create({ data: { userId: user.id, badgeCode: 'FIRST_WORKOUT', catalogVersion: 1 } });
+    await prisma.userChallenge.create({ data: { userId: user.id, templateCode: 'WEEKLY_WORKOUTS', type: 'weekly', target: 3, windowStart: new Date('2026-10-19'), windowEnd: new Date('2026-10-25'), joinDate: new Date('2026-10-21'), timezone: 'Asia/Kolkata' } });
+    await prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'badge', sourceId: badge.id, amount: 10, reason: 'Badge: first workout' } });
+
     // A logged custom food cannot be deleted on its own (diary history is kept)...
     await expect(prisma.foodItem.delete({ where: { id: customFood.id } })).rejects.toThrow();
     // ...but deleting the account removes it together with its logs.
@@ -254,6 +258,8 @@ describeDb('database schema (migrated Postgres)', () => {
       prisma.waterLog.count({ where: { userId: user.id } }),
       prisma.bodyMeasurement.count({ where: { userId: user.id } }),
       prisma.xPTransaction.count({ where: { userId: user.id } }),
+      prisma.userBadge.count({ where: { userId: user.id } }),
+      prisma.userChallenge.count({ where: { userId: user.id } }),
       prisma.idempotencyKey.count({ where: { OR: [{ userId: user.id }, { scope: `user:${user.id}` }] } }),
     ]);
     expect(counts).toEqual(new Array(counts.length).fill(0));
@@ -261,5 +267,51 @@ describeDb('database schema (migrated Postgres)', () => {
     expect(await prisma.foodItem.count({ where: { id: catalogFood.id } })).toBe(1);
     expect(await prisma.exercise.count({ where: { id: exercise.id } })).toBe(1);
     expect(await prisma.waterLog.count({ where: { userId: other.id } })).toBe(1);
+  });
+
+  describe('badges & challenges', () => {
+    const week = { templateCode: 'WEEKLY_WORKOUTS', type: 'weekly' as const, target: 3, windowEnd: new Date('2026-10-25'), joinDate: new Date('2026-10-21'), timezone: 'Asia/Kolkata' };
+
+    it('awards a badge and its bonus XP at most once (insert-first unique keys)', async () => {
+      const user = await newUser('badge');
+      const b = await prisma.userBadge.create({ data: { userId: user.id, badgeCode: 'STREAK_7', catalogVersion: 1 } });
+      await expect(prisma.userBadge.create({ data: { userId: user.id, badgeCode: 'STREAK_7', catalogVersion: 1 } })).rejects.toThrow();
+      const inserted = await prisma.$executeRaw`INSERT INTO user_badges (id, user_id, badge_code, catalog_version) VALUES (gen_random_uuid(), ${user.id}::uuid, 'STREAK_7', 1) ON CONFLICT DO NOTHING`;
+      expect(inserted).toBe(0);
+      await prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'badge', sourceId: b.id, amount: 30, reason: 'Badge' } });
+      await expect(prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'badge', sourceId: b.id, amount: 30, reason: 'Badge' } })).rejects.toThrow();
+      // Same id under another source type is a different award.
+      await prisma.xPTransaction.create({ data: { userId: user.id, sourceType: 'challenge', sourceId: b.id, amount: 0, reason: 'Challenge (capped)' } });
+    });
+
+    it('allows one weekly instance per week and one active challenge per template', async () => {
+      const user = await newUser('challenge');
+      const c = await prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-19') } });
+      expect(c).toMatchObject({ status: 'active', progress: 0, waterGoalMl: null });
+      // Same week again (even after leaving): unique (user, template, window_start).
+      await prisma.userChallenge.update({ where: { id: c.id }, data: { status: 'left', leftAt: new Date() } });
+      await expect(prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-19') } })).rejects.toThrow();
+      // Next week is fine; a second *active* one for the template is not.
+      await prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-26'), windowEnd: new Date('2026-11-01') } });
+      await expect(prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-11-02'), windowEnd: new Date('2026-11-08') } })).rejects.toThrow();
+    });
+
+    it('stores an open-ended personal challenge with the water goal and join date, and enforces checks', async () => {
+      const user = await newUser('challenge-checks');
+      const base = { userId: user.id, templateCode: 'PERSONAL_STREAK_N', type: 'personal' as const, target: 7, windowStart: new Date('2026-10-21'), joinDate: new Date('2026-10-21'), timezone: 'Asia/Kolkata' };
+      const c = await prisma.userChallenge.create({ data: { ...base, windowEnd: null, waterGoalMl: 2500 } });
+      expect(c.windowEnd).toBeNull();
+      expect(c.joinDate.toISOString().slice(0, 10)).toBe('2026-10-21');
+      await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { progress: 8 } })).rejects.toThrow();
+      await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { status: 'completed' } })).rejects.toThrow();
+      await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { windowEnd: new Date('2026-10-20') } })).rejects.toThrow();
+      await expect(prisma.userChallenge.update({ where: { id: c.id }, data: { waterGoalMl: 50 } })).rejects.toThrow();
+      await expect(prisma.userChallenge.create({ data: { ...base, templateCode: 'WEEKLY_WATER_DAYS', target: 0 } })).rejects.toThrow();
+    });
+
+    it('defaults badges_evaluated_version to 0 on profiles', async () => {
+      const user = await newUser('badge-version');
+      expect((await prisma.userProfile.create({ data: { userId: user.id } })).badgesEvaluatedVersion).toBe(0);
+    });
   });
 });
