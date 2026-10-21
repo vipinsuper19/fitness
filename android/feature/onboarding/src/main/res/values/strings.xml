@@ -66,4 +66,5 @@
     <string name="sync_now">Sync</string>
     <string name="cancel">Cancel</string>
     <string name="profile_delete_account">Delete account</string>
+    <string name="profile_export_data">Export my data</string>
 </resources>
