@@ -3,6 +3,7 @@ package com.vipin.fitness.feature.workout
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.data.userMessage
+import com.vipin.fitness.core.data.session.WorkoutSessionRepository
 import com.vipin.fitness.core.data.workout.Equipment
 import com.vipin.fitness.core.data.workout.Exercise
 import com.vipin.fitness.core.data.workout.ExerciseFilter
@@ -35,6 +36,8 @@ data class LibraryState(
     val loadedFilter: ExerciseFilter? = null,
     /** Pick mode: tapping an exercise adds it to this day of the custom plan. */
     val pickDay: DayOfWeek? = null,
+    /** Replace mode: tapping swaps the exercise in this slot of the active session. */
+    val replacePosition: Int? = null,
     val picked: Boolean = false,
 )
 
@@ -43,6 +46,7 @@ data class LibraryState(
 class ExerciseLibraryViewModel @Inject constructor(
     private val repo: WorkoutRepository,
     private val store: PlanBuilderStore,
+    private val sessions: WorkoutSessionRepository,
 ) : ViewModel() {
     private val query = MutableStateFlow("")
     private val chips = MutableStateFlow<Pair<MuscleGroup?, Equipment?>>(null to null)
@@ -60,6 +64,7 @@ class ExerciseLibraryViewModel @Inject constructor(
     }
 
     fun setPickDay(day: DayOfWeek?) = _state.update { it.copy(pickDay = day) }
+    fun setReplacePosition(position: Int?) = _state.update { it.copy(replacePosition = position) }
 
     fun onQuery(q: String) {
         val text = q.take(100)
@@ -97,11 +102,17 @@ class ExerciseLibraryViewModel @Inject constructor(
         }
     }
 
-    /** Pick mode only. */
+    /** Pick or replace mode only. */
     fun pick(exercise: Exercise) {
-        val day = _state.value.pickDay ?: return
-        if (_state.value.picked) return
-        store.addExercise(day, exercise, day.fullName())
+        val s = _state.value
+        if (s.picked) return
+        val replace = s.replacePosition
+        val day = s.pickDay
+        when {
+            replace != null -> viewModelScope.launch { sessions.replaceExercise(replace, exercise) }
+            day != null -> store.addExercise(day, exercise, day.fullName())
+            else -> return
+        }
         _state.update { it.copy(picked = true) }
     }
 

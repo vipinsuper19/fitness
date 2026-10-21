@@ -15,6 +15,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -37,6 +39,7 @@ sealed interface WorkoutDestination {
     data object NewPlan : WorkoutDestination
     data object Library : WorkoutDestination
     data class ExerciseDetail(val id: String) : WorkoutDestination
+    data object ActiveSession : WorkoutDestination
 }
 
 @Composable
@@ -52,6 +55,12 @@ fun WorkoutHomeRoute(
         if (resumedOnce) viewModel.onResume() else resumedOnce = true
         onPauseOrDispose { }
     }
+    LaunchedEffect(s.openSession) {
+        if (s.openSession) {
+            viewModel.onSessionOpened()
+            onNavigate(WorkoutDestination.ActiveSession)
+        }
+    }
     Column(modifier.fillMaxSize()) {
         when {
             s.loading -> LoadingBox()
@@ -60,6 +69,24 @@ fun WorkoutHomeRoute(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                s.flagged.forEach { f ->
+                    Card(Modifier.fillMaxWidth().testTag("flagged_${f.localId}")) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(stringResource(R.string.flagged_title, f.name), color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.flagged_body), style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { viewModel.dismissFlag(f.localId) }) { Text(stringResource(R.string.dismiss)) }
+                        }
+                    }
+                }
+                s.unfinishedSession?.let { u ->
+                    Card(onClick = viewModel::startWorkout, modifier = Modifier.fillMaxWidth().testTag("resume_session")) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(stringResource(R.string.session_unfinished), style = MaterialTheme.typography.labelLarge)
+                            Text(u.name, style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.resume_workout), color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
                 val plan = s.plan
                 if (plan == null) {
                     Text(stringResource(R.string.no_plan_title), style = MaterialTheme.typography.headlineSmall)
@@ -73,6 +100,13 @@ fun WorkoutHomeRoute(
                     val sel = s.selected
                     if (sel?.workout != null) {
                         WorkoutDayList(sel.workout, s.exerciseNames) { onNavigate(WorkoutDestination.ExerciseDetail(it)) }
+                        if (s.unfinishedSession == null) {
+                            Button(
+                                onClick = viewModel::startWorkout,
+                                enabled = !s.starting,
+                                modifier = Modifier.fillMaxWidth().testTag("start_workout"),
+                            ) { Text(stringResource(R.string.start_workout)) }
+                        }
                     } else {
                         Text(stringResource(R.string.rest_day_body))
                     }

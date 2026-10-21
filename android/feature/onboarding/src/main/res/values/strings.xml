@@ -57,4 +57,12 @@
     <string name="diet_non_vegetarian">Non-vegetarian</string>
     <string name="diet_vegan">Vegan</string>
     <string name="diet_jain">Jain</string>
+    <string name="sign_out_unsynced_title">Unsynced workouts</string>
+    <plurals name="sign_out_unsynced">
+        <item quantity="one">%1$d unsynced workout will be lost if you sign out now.</item>
+        <item quantity="other">%1$d unsynced workouts will be lost if you sign out now.</item>
+    </plurals>
+    <string name="sign_out_anyway">Sign out anyway</string>
+    <string name="sync_now">Sync</string>
+    <string name="cancel">Cancel</string>
 </resources>

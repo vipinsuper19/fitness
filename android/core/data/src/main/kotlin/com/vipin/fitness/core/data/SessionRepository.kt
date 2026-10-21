@@ -91,7 +91,7 @@ class DefaultSessionRepository @Inject constructor(
                 // New session, possibly a different user: forget the previous account's cached
                 // flags so launch can't skip onboarding on their behalf. Onboarding refills it.
                 cache.clear()
-                userState.forEach { it.clearUserState() }
+                userState.forEach { it.onSignedIn(r.value.user.id) }
                 AuthOutcome.Success
             }
             is ApiResult.Failure -> AuthOutcome.Failure(r.error.toAuthFailure())

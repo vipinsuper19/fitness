@@ -16,8 +16,11 @@ sealed interface Route : NavKey {
     // Workout (feature:workout). pickDay is a DayOfWeek value (1 = Monday) when picking for a custom plan.
     @Serializable data object WorkoutNewPlan : Route
     @Serializable data object PlanPreview : Route
-    @Serializable data class ExerciseLibrary(val pickDay: Int? = null) : Route
+    /** [replacePosition]: swap that exercise slot of the active session. */
+    @Serializable data class ExerciseLibrary(val pickDay: Int? = null, val replacePosition: Int? = null) : Route
     @Serializable data class ExerciseDetail(val id: String) : Route
+    @Serializable data object ActiveSession : Route
+    @Serializable data class SessionSummary(val localId: String) : Route
 }
 
 /** Back-stack moves, kept pure so they can be unit tested. */
@@ -78,4 +81,12 @@ object AppNavigation {
     fun pop(stack: MutableList<Any>) {
         if (stack.size > 1) stack.removeAt(stack.lastIndex)
     }
+
+    /** Finished: the summary takes the session's place, so Back doesn't reopen it. */
+    fun onSessionFinished(stack: MutableList<Any>, localId: String) {
+        if (stack.lastOrNull() == Route.ActiveSession) stack.removeAt(stack.lastIndex)
+        stack.add(Route.SessionSummary(localId))
+    }
+
+    fun backToMain(stack: MutableList<Any>) = onPlanActivated(stack)
 }

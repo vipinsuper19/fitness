@@ -3,6 +3,8 @@ package com.vipin.fitness.feature.workout
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.common.time.today
+import com.vipin.fitness.core.data.session.WorkoutSession
+import com.vipin.fitness.core.data.session.WorkoutSessionRepository
 import com.vipin.fitness.core.data.userMessage
 import com.vipin.fitness.core.data.workout.ActivePlan
 import com.vipin.fitness.core.data.workout.PlannedWorkout
@@ -34,6 +36,13 @@ data class WorkoutHomeState(
     val week: List<DayCell> = emptyList(),
     val selectedDay: DayOfWeek = DayOfWeek.MONDAY,
     val exerciseNames: Map<String, String> = emptyMap(),
+    /** A session in progress or paused: the tab offers Resume instead of Start. */
+    val unfinishedSession: WorkoutSession? = null,
+    /** Workouts the server rejected for good: shown until dismissed. */
+    val flagged: List<WorkoutSession> = emptyList(),
+    val starting: Boolean = false,
+    /** One-shot: open the active session screen, then call [WorkoutHomeViewModel.onSessionOpened]. */
+    val openSession: Boolean = false,
 ) {
     val hasNoPlan get() = !loading && error == null && plan == null
     val selected get() = week.firstOrNull { it.day == selectedDay }
@@ -44,6 +53,7 @@ data class WorkoutHomeState(
 class WorkoutHomeViewModel @Inject constructor(
     private val repo: WorkoutRepository,
     private val clock: Clock,
+    private val sessions: WorkoutSessionRepository,
 ) : ViewModel() {
     /** The date the week was built for; a new day (app left open overnight) rebuilds it. */
     private var shownDate: LocalDate = clock.today()
@@ -53,6 +63,8 @@ class WorkoutHomeViewModel @Inject constructor(
     init {
         // Activation elsewhere (preview screen) updates the repository; follow it.
         viewModelScope.launch { repo.activePlan.filterNotNull().collect { show(it) } }
+        viewModelScope.launch { sessions.unfinished.collect { u -> _state.update { it.copy(unfinishedSession = u) } } }
+        viewModelScope.launch { sessions.flagged.collect { f -> _state.update { it.copy(flagged = f) } } }
         refresh()
     }
 
@@ -85,6 +97,30 @@ class WorkoutHomeViewModel @Inject constructor(
             )
         }
     }
+
+    /** Start the selected day's workout, or resume the unfinished session (one at a time). */
+    fun startWorkout() {
+        val s = _state.value
+        if (s.starting) return
+        if (s.unfinishedSession != null) {
+            _state.update { it.copy(openSession = true) }
+            return
+        }
+        val plan = s.plan ?: return
+        val workout = s.selected?.workout ?: return
+        _state.update { it.copy(starting = true) }
+        viewModelScope.launch {
+            // Names and tracking types; offline and uncached, the session falls back to the plan's targets.
+            sessions.start(plan, workout, repo.exerciseDetails(workout))
+            _state.update { it.copy(starting = false, openSession = true) }
+        }
+    }
+
+    fun dismissFlag(localId: String) {
+        viewModelScope.launch { sessions.dismissFlag(localId) }
+    }
+
+    fun onSessionOpened() = _state.update { it.copy(openSession = false) }
 
     fun select(day: DayOfWeek) = _state.update { it.copy(selectedDay = day) }
 

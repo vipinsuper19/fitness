@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.vipin.fitness.core.database.FitnessDatabase
 import com.vipin.fitness.core.database.outbox.PendingWriteDao
+import com.vipin.fitness.core.database.session.WorkoutSessionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,4 +21,7 @@ object DatabaseModule {
 
     @Provides
     fun pendingWriteDao(db: FitnessDatabase): PendingWriteDao = db.pendingWriteDao()
+
+    @Provides
+    fun workoutSessionDao(db: FitnessDatabase): WorkoutSessionDao = db.workoutSessionDao()
 }
