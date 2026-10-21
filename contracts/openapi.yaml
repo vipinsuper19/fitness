@@ -634,7 +634,12 @@ paths:
       tags: [workout-sessions]
       operationId: upsertSetLog
       summary: Log or correct a set (upsert by the client's set UUID)
-      description: The client-generated `clientSetId` makes this safe to retry from offline sync. Sending the same `clientSetId` again replaces that set.
+      description: |
+        The client-generated `clientSetId` makes this safe to retry from offline sync. Sending the same `clientSetId` again replaces that set.
+        Completed sessions accept corrections too (PRD 5.3, see `docs/specs/session-correction.md`): the server recomputes the
+        session's workout XP and writes the difference as one `adjustment` against the award. On a completed session the response is
+        `SessionCorrectionResult` instead of `SetLog`. A retry with the same Idempotency-Key replays the same body and never adjusts twice.
+        Unchecking the last completed set of a completed session returns `422 SESSION_EMPTY` (discard the session instead).
       parameters:
         - $ref: '#/components/parameters/SessionId'
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
@@ -645,15 +650,85 @@ paths:
             schema: { $ref: '#/components/schemas/SetLogUpsert' }
       responses:
         '200':
-          description: Set stored (created or replaced)
+          description: Set stored (created or replaced). `SetLog` for a session in progress or paused; `SessionCorrectionResult` for a completed session.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SetLog' }
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SetLog'
+                  - $ref: '#/components/schemas/SessionCorrectionResult'
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: '`SESSION_COMPLETED`, `CLIENT_SET_CONFLICT` (the `clientSetId` belongs to a set in another session), or an idempotency conflict'
+          description: '`CLIENT_SET_CONFLICT` (the `clientSetId` belongs to a set in another session), or an idempotency conflict. Completed sessions no longer return `SESSION_COMPLETED` here.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: '`SESSION_EMPTY`: the correction would leave a completed session with no completed sets'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /workout-sessions/{sessionId}/sets/{clientSetId}:
+    delete:
+      tags: [workout-sessions]
+      operationId: deleteSetLog
+      summary: Delete a set, before or after completion
+      description: |
+        On a session in progress or paused, returns `204`. On a completed session this is a correction (PRD 5.3): XP is
+        recomputed and adjusted as for a set upsert, active challenge progress is recomputed, and the response is
+        `SessionCorrectionResult`. Deleting the last completed set of a completed session returns `422 SESSION_EMPTY`.
+        A retry with the same Idempotency-Key replays the original status and body; a second delete with a new key returns `404`.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/ClientSetId'
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      responses:
+        '200':
+          description: Correction applied to a completed session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+        '204': { description: Deleted from a session in progress or paused }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '422':
+          description: '`SESSION_EMPTY`: the session is completed and this is its last completed set'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /workout-sessions/{sessionId}/completion:
+    patch:
+      tags: [workout-sessions]
+      operationId: correctSessionCompletion
+      summary: Fix a completed session's details
+      description: |
+        Only for completed sessions (`409 SESSION_NOT_COMPLETED` otherwise). `completedAt` must fall on today or yesterday
+        as local dates in the profile timezone, must not be in the future, and must be after `startedAt` (`400` otherwise).
+        Changing `completedAt` can change the session's active time and so its XP; the difference is one `adjustment` row.
+        A retry with the same Idempotency-Key replays the same body.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SessionCompletionUpdate' }
+      responses:
+        '200':
+          description: Corrected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`SESSION_NOT_COMPLETED`, or an idempotency conflict'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1307,6 +1382,12 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    ClientSetId:
+      name: clientSetId
+      in: path
+      required: true
+      description: The device-generated set UUID used by the upsert
+      schema: { type: string, format: uuid }
     FoodId:
       name: foodId
       in: path
@@ -1738,6 +1819,27 @@ components:
           minimum: 0
           description: XP from this completion; the original amount on a replay. A reversed award is never re-awarded.
         xpBalance: { $ref: '#/components/schemas/XpBalance' }
+    SessionCompletionUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        completedAt: { type: string, format: date-time, description: 'Today or yesterday (local date, profile timezone), not in the future, after startedAt' }
+        perceivedDifficulty: { type: integer, minimum: 1, maximum: 5 }
+        notes: { type: [string, 'null'], maxLength: 1000 }
+    SessionCorrectionResult:
+      type: object
+      required: [session, xpDelta, xpBalance]
+      description: Result of correcting a completed session (PRD 5.3, `docs/specs/session-correction.md`). Replays return the same body.
+      properties:
+        session: { $ref: '#/components/schemas/WorkoutSession' }
+        xpDelta:
+          type: integer
+          description: XP change from this correction (negative, zero or positive). The session's net XP never goes below 0.
+        xpBalance: { $ref: '#/components/schemas/XpBalance' }
+        newBadges:
+          type: array
+          description: Badges first earned because of this correction. Optional and additive (badges spec §8); clients must tolerate its absence and still poll `GET /badges`.
+          items: { $ref: '#/components/schemas/Badge' }
 
     MealType:
       type: string
