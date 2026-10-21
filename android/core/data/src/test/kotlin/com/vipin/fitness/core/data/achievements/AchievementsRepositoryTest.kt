@@ -120,19 +120,3 @@ class AchievementsRepositoryTest {
         assertNull(c.copy(windowEnd = null).daysLeft(Instant.EPOCH))
     }
 }
-
-class EarnedBadgeTrackerTest {
-    private fun list(vararg earned: String) = BadgeList(
-        listOf("A", "B", "C").map { Badge(it, it, "", BadgeFamily.WORKOUT, 5, if (it in earned) Instant.EPOCH else null, null) },
-        earned.size,
-    )
-
-    @Test fun firstListIsTheBaselineThenOnlyNewOnes() = runTest {
-        val t = EarnedBadgeTracker()
-        assertTrue(t.newlyEarned(list("A")).isEmpty())
-        assertEquals(listOf("B"), t.newlyEarned(list("A", "B")).map { it.code })
-        assertTrue(t.newlyEarned(list("A", "B")).isEmpty())
-        t.clearUserState()
-        assertTrue(t.newlyEarned(list("A", "B", "C")).isEmpty())
-    }
-}

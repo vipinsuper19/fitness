@@ -145,4 +145,7 @@
     <string name="flagged_title">%1$s wasn\'t saved to your account</string>
     <string name="flagged_body">The server rejected part of this workout (for example, it was started over 24 hours before it could sync). It\'s still recorded on this phone.</string>
     <string name="dismiss">Dismiss</string>
+    <string name="badges_earned_title">Badge earned!</string>
+    <string name="badge_bonus_xp">Bonus XP: +%1$d</string>
+    <string name="badges_coming_soon">Badges and challenges are coming soon.</string>
 </resources>

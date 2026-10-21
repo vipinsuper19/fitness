@@ -89,3 +89,17 @@ class FakeAchievementsRepository : AchievementsRepository {
         }
     }
 }
+
+/** In-memory [com.vipin.fitness.core.data.achievements.SeenBadgeStore] with a settable signed-in user. */
+class InMemorySeenBadgeStore(var owner: String? = "u1") : com.vipin.fitness.core.data.achievements.SeenBadgeStore {
+    private val seen = mutableMapOf<String, MutableSet<String>>()
+    override suspend fun currentOwner() = owner
+    override suspend fun recordEarned(owner: String, codes: List<String>): List<String> {
+        val first = owner !in seen
+        val set = seen.getOrPut(owner) { mutableSetOf() }
+        val fresh = codes.distinct().filter { set.add(it) }
+        return if (first) emptyList() else fresh
+    }
+    override suspend fun clearAll() = seen.clear()
+    override suspend fun keepOnly(owner: String) { seen.keys.retainAll(setOf(owner)) }
+}
