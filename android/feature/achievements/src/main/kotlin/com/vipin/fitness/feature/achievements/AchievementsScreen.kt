@@ -121,8 +121,10 @@ fun AchievementsContent(
     val msg = challenges.message?.let { messageText(it) }
     LaunchedEffect(challenges.message) {
         if (msg != null) {
-            challengeActions.messageShown()
+            // Show first, then clear (#52): clearing changes the key and would cancel this effect,
+            // and the snackbar with it, before it ever appeared.
             snackbar.showSnackbar(msg)
+            challengeActions.messageShown()
         }
     }
     Scaffold(modifier = modifier, snackbarHost = { SnackbarHost(snackbar) }) { padding ->

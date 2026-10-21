@@ -12,6 +12,8 @@ import { parse } from 'yaml';
 import { weekStart } from '../src/achievements/achievements.rules';
 import { AchievementsService } from '../src/achievements/achievements.service';
 import { localDate, nextDate } from '../src/common/time';
+import { seed } from '../prisma/seed';
+import { seedId } from '../prisma/seed-data/ids';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './helpers';
 
@@ -46,6 +48,7 @@ describeDb('badges & challenges API (HTTP + Postgres)', () => {
     app = await createTestApp({ env: { ACHIEVEMENTS_HOOKS: 'on' } });
     prisma = app.get(PrismaService);
     engine = app.get(AchievementsService);
+    await seed(prisma);
   });
   afterAll(async () => {
     await engine.idle();
@@ -84,6 +87,51 @@ describeDb('badges & challenges API (HTTP + Postgres)', () => {
       await http().post('/api/v1/challenges').set('Idempotency-Key', randomUUID()).send({ templateCode: 'WEEKLY_WORKOUTS', target: 3 }).expect(401);
       const u = await signUp();
       await as(u.token).post('/api/v1/badges').send({ code: 'STREAK_30' }).expect(404);
+    });
+  });
+
+  describe('newBadges on session complete', () => {
+    const finish = async (token: string, key = randomUUID(), beforeComplete: () => void = () => undefined) => {
+      const s = (await as(token).post('/api/v1/workout-sessions').send({}).expect(201)).body;
+      await as(token).post(`/api/v1/workout-sessions/${s.id}/sets`).send({ clientSetId: randomUUID(), exerciseId: seedId('exercise', 'push-up'), setIndex: 0, reps: 10, completed: true }).expect(200);
+      await engine.idle(); // the set's background evaluation (awards nothing yet)
+      beforeComplete();
+      return { id: s.id as string, key, body: (await as(token).post(`/api/v1/workout-sessions/${s.id}/complete`, key).send({}).expect(200)).body };
+    };
+
+    it('names the badges the completion awarded; replays return the same body', async () => {
+      const u = await signUp();
+      const first = await finish(u.token);
+      expect(first.body.newBadges).toHaveLength(1);
+      const b = first.body.newBadges[0];
+      expect(Object.keys(b)).toEqual(expect.arrayContaining(required('Badge')));
+      expect(b).toMatchObject({ code: 'FIRST_WORKOUT', bonusXp: 10, progress: null, earnedAt: expect.any(String) });
+      expect(first.body.xpBalance.total).toBe(first.body.xpAwarded + 10); // badge XP included
+
+      const replay = (await as(u.token).post(`/api/v1/workout-sessions/${first.id}/complete`, first.key).send({}).expect(200)).body;
+      expect(replay).toEqual(first.body);
+      const again = (await as(u.token).post(`/api/v1/workout-sessions/${first.id}/complete`).send({}).expect(200)).body;
+      expect(again).toMatchObject({ xpAwarded: first.body.xpAwarded, newBadges: [] });
+
+      expect((await finish(u.token)).body.newBadges).toEqual([]); // nothing new on the 2nd workout
+      expect(await prisma.userBadge.count({ where: { userId: u.id } })).toBe(1);
+      expect(await prisma.xPTransaction.count({ where: { userId: u.id, sourceType: 'badge' } })).toBe(1);
+    });
+
+    it('still completes with newBadges [] when the evaluation throws', async () => {
+      const u = await signUp();
+      let boom: jest.SpyInstance | undefined;
+      try {
+        const r = await finish(u.token, randomUUID(), () => {
+          boom = jest.spyOn(engine, 'evaluate').mockRejectedValueOnce(new Error('db hiccup'));
+        });
+        expect(r.body).toMatchObject({ session: { status: 'completed' }, newBadges: [] });
+        expect(boom).toHaveBeenCalled();
+      } finally {
+        boom?.mockRestore();
+      }
+      await engine.idle(); // the fallback background evaluation awards it
+      expect(await prisma.userBadge.count({ where: { userId: u.id, badgeCode: 'FIRST_WORKOUT' } })).toBe(1);
     });
   });
 

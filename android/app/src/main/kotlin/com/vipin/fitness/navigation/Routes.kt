@@ -24,6 +24,8 @@ sealed interface Route : NavKey {
 
     // Badges & challenges (feature:achievements).
     @Serializable data object Achievements : Route
+
+    @Serializable data object DeleteAccount : Route
 }
 
 /** Back-stack moves, kept pure so they can be unit tested. */
