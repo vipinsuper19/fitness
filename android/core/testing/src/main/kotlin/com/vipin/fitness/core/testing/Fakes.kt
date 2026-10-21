@@ -101,3 +101,15 @@ class FakeProfileFlagsCache(var completed: Boolean = false) : ProfileFlagsCache 
         units = UnitSystem.METRIC
     }
 }
+
+class FakeAccountRepository(var result: com.vipin.fitness.core.data.DeleteAccountOutcome = com.vipin.fitness.core.data.DeleteAccountOutcome.Deleted) :
+    com.vipin.fitness.core.data.AccountRepository {
+    /** When set, calls suspend until completed: lets tests observe the in-flight state. */
+    var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+    val calls = mutableListOf<Pair<String, String>>()
+    override suspend fun deleteAccount(password: String, idempotencyKey: String): com.vipin.fitness.core.data.DeleteAccountOutcome {
+        calls += password to idempotencyKey
+        gate?.await()
+        return result
+    }
+}
