@@ -117,3 +117,43 @@ export class WaterLogDto {
   @ApiProperty({ minimum: 1, maximum: 5000 }) @IsInt() @Min(1) @Max(5000)
   amountMl!: number;
 }
+
+/** WaterLogUpdate: partial; a missing field stays unchanged. Neither field can be null; an empty body is 400. */
+export class WaterLogUpdateDto {
+  @ApiPropertyOptional({ format: 'date' }) @IsDefinedWhenPresent() @IsCalendarDate()
+  date?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 5000 }) @IsDefinedWhenPresent() @IsInt() @Min(1) @Max(5000)
+  amountMl?: number;
+}
+
+/**
+ * FoodUpdate: partial edit of the caller's own custom food. A missing field stays
+ * unchanged; brand, gramsPerServing and isVegetarian may be null to clear them;
+ * nutrients, when sent, replace all values. An empty body is 400.
+ */
+export class FoodUpdateDto {
+  @ApiPropertyOptional({ minLength: 1, maxLength: 120 })
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @IsDefinedWhenPresent() @IsString() @MinLength(1) @MaxLength(120)
+  name?: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 80 }) @IsOptional() @IsString() @MaxLength(80)
+  brand?: string | null;
+
+  @ApiPropertyOptional({ minimum: 0, exclusiveMinimum: true, maximum: 10000 }) @IsDefinedWhenPresent() @IsNumber(dp(2)) @Positive() @Max(10000)
+  servingSize?: number;
+
+  @ApiPropertyOptional({ enum: SERVING_UNITS }) @IsDefinedWhenPresent() @IsIn(SERVING_UNITS)
+  servingUnit?: (typeof SERVING_UNITS)[number];
+
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, exclusiveMinimum: true, maximum: 10000 })
+  @IsOptional() @IsNumber(dp(2)) @Positive() @Max(10000)
+  gramsPerServing?: number | null;
+
+  @ApiPropertyOptional({ type: NutrientsDto }) @IsDefinedWhenPresent() @IsObject() @ValidateNested() @Type(() => NutrientsDto)
+  nutrients?: NutrientsDto;
+
+  @ApiPropertyOptional({ type: Boolean, nullable: true }) @IsOptional() @IsBoolean()
+  isVegetarian?: boolean | null;
+}

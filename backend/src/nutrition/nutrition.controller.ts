@@ -6,7 +6,7 @@ import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
-import { DateQuery, FoodCreateDto, FoodLogCreateDto, FoodLogUpdateDto, FoodSearchQuery, WaterLogDto } from './nutrition.dto';
+import { DateQuery, FoodCreateDto, FoodLogCreateDto, FoodLogUpdateDto, FoodSearchQuery, FoodUpdateDto, WaterLogDto, WaterLogUpdateDto } from './nutrition.dto';
 import { DailyNutrition, FoodLogView, FoodView, NutritionService, WaterLogView } from './nutrition.service';
 
 interface Ctx {
@@ -42,6 +42,36 @@ export class NutritionController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<FoodView | undefined> {
     return this.run(userId, key, { req, res }, 201, () => this.nutrition.createFood(userId, dto));
+  }
+
+  @Get('foods/:foodId')
+  getFood(@CurrentUserId() userId: string, @Param('foodId', IdParamPipe) id: string): Promise<FoodView> {
+    return this.nutrition.getFood(userId, id);
+  }
+
+  @Patch('foods/:foodId')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  updateFood(
+    @CurrentUserId() userId: string,
+    @Param('foodId', IdParamPipe) id: string,
+    @Body() dto: FoodUpdateDto,
+    @IdempotencyKeyHeader() key: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<FoodView | undefined> {
+    return this.run(userId, key, { req, res }, 200, () => this.nutrition.updateFood(userId, id, dto));
+  }
+
+  @Delete('foods/:foodId')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  async deleteFood(
+    @CurrentUserId() userId: string,
+    @Param('foodId', IdParamPipe) id: string,
+    @IdempotencyKeyHeader() key: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    await this.run(userId, key, { req, res }, 204, () => this.nutrition.deleteFood(userId, id));
   }
 
   @Get('food-logs')
@@ -108,7 +138,7 @@ export class NutritionController {
   updateWater(
     @CurrentUserId() userId: string,
     @Param('waterLogId', IdParamPipe) id: string,
-    @Body() dto: WaterLogDto,
+    @Body() dto: WaterLogUpdateDto,
     @IdempotencyKeyHeader() key: string | undefined,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,

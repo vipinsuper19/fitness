@@ -724,6 +724,61 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /foods/{foodId}:
+    parameters:
+      - $ref: '#/components/parameters/FoodId'
+    get:
+      tags: [nutrition]
+      operationId: getFood
+      summary: Get a catalog food or one of the caller's own custom foods
+      responses:
+        '200':
+          description: The food
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Food' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [nutrition]
+      operationId: updateCustomFood
+      summary: Edit one of the caller's own custom foods (partial)
+      description: |
+        Catalog foods are read-only, and a catalog food, another user's food or a
+        deleted food is `404`. Existing diary entries keep their snapshotted
+        nutrients and serving; they show the food's current name.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FoodUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Food' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+    delete:
+      tags: [nutrition]
+      operationId: deleteCustomFood
+      summary: Delete one of the caller's own custom foods
+      description: |
+        Soft delete. The food disappears from search, `GET /foods/{foodId}`, new
+        food logs (`404`) and the export's `customFoods`, but existing diary
+        entries stay intact: they keep their food id, name, serving snapshot and
+        nutrients. A catalog food or another user's food is `404`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: 'Deleted. A retry with the same Idempotency-Key replays 204; without a key, an already deleted food is 404.' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /food-logs:
     get:
       tags: [nutrition]
@@ -852,7 +907,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WaterLogCreate' }
+            schema: { $ref: '#/components/schemas/WaterLogUpdate' }
       responses:
         '200':
           description: Updated
@@ -1097,6 +1152,11 @@ components:
       schema: { $ref: '#/components/schemas/Id' }
     SessionId:
       name: sessionId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    FoodId:
+      name: foodId
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
@@ -1413,7 +1473,7 @@ components:
             baseVersion: { type: integer, minimum: 1 }
     WorkoutPlan:
       type: object
-      required: [id, version, name, weeks, workouts, isActive, source, createdAt]
+      required: [id, version, name, weeks, workouts, isActive, source, createdAt, activatedAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         version: { type: integer, minimum: 1 }
@@ -1427,6 +1487,14 @@ components:
         isActive: { type: boolean }
         source: { type: string, enum: [rule_based, custom] }
         createdAt: { type: string, format: date-time }
+        activatedAt:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the plan last became the user's active plan; null if never activated.
+            Re-activating the already active plan keeps it, and it stays set after another
+            plan becomes active (use `isActive` for the current state). Plans that were
+            active before this field existed report their `createdAt` (a lower bound).
 
     SessionStatus:
       type: string
@@ -1541,14 +1609,29 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         brand: { type: [string, 'null'], maxLength: 80 }
-        servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000 }
+        servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         servingUnit: { $ref: '#/components/schemas/ServingUnit' }
-        gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000 }
+        gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
+        nutrients: { $ref: '#/components/schemas/Nutrients' }
+        isVegetarian: { type: [boolean, 'null'] }
+    FoodUpdate:
+      type: object
+      minProperties: 1
+      description: |
+        Partial. A missing field stays unchanged; `brand`, `gramsPerServing` and
+        `isVegetarian` may be null to clear them; `nutrients`, when sent, replaces
+        all values. An empty body is `400 VALIDATION_FAILED`.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        brand: { type: [string, 'null'], maxLength: 80 }
+        servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
+        servingUnit: { $ref: '#/components/schemas/ServingUnit' }
+        gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         nutrients: { $ref: '#/components/schemas/Nutrients' }
         isVegetarian: { type: [boolean, 'null'] }
     FoodLog:
       type: object
-      required: [id, foodId, foodName, date, mealType, servings, nutrients, createdAt]
+      required: [id, foodId, foodName, date, mealType, servings, servingSize, servingUnit, gramsPerServing, nutrients, createdAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         foodId: { $ref: '#/components/schemas/Id' }
@@ -1556,6 +1639,9 @@ components:
         date: { type: string, format: date }
         mealType: { $ref: '#/components/schemas/MealType' }
         servings: { type: number, exclusiveMinimum: 0 }
+        servingSize: { type: number, exclusiveMinimum: 0, description: 'Size of one serving the nutrients were computed from (snapshot at log time; refreshed when servings are recomputed)' }
+        servingUnit: { $ref: '#/components/schemas/ServingUnit' }
+        gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, description: Weight of one serving when known }
         nutrients:
           allOf: [{ $ref: '#/components/schemas/Nutrients' }]
           description: Totals for this entry (servings applied, or the user's edited values)
@@ -1568,13 +1654,13 @@ components:
         foodId: { $ref: '#/components/schemas/Id' }
         date: { type: string, format: date }
         mealType: { $ref: '#/components/schemas/MealType' }
-        servings: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        servings: { type: number, exclusiveMinimum: 0, maximum: 100, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         nutrientsOverride: { $ref: '#/components/schemas/Nutrients' }
     FoodLogUpdate:
       type: object
       properties:
         mealType: { $ref: '#/components/schemas/MealType' }
-        servings: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        servings: { type: number, exclusiveMinimum: 0, maximum: 100, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         nutrientsOverride:
           oneOf: [{ $ref: '#/components/schemas/Nutrients' }, { type: 'null' }]
           description: null restores the computed values
@@ -1589,6 +1675,13 @@ components:
     WaterLogCreate:
       type: object
       required: [date, amountMl]
+      properties:
+        date: { type: string, format: date }
+        amountMl: { type: integer, minimum: 1, maximum: 5000 }
+    WaterLogUpdate:
+      type: object
+      minProperties: 1
+      description: Partial. A missing field stays unchanged; neither field can be null. An empty body is `400 VALIDATION_FAILED`.
       properties:
         date: { type: string, format: date }
         amountMl: { type: integer, minimum: 1, maximum: 5000 }

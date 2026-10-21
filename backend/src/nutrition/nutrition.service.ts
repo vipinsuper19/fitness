@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
+
+import { ApiError } from '../common/api-error';
 
 import { decodeCursor, encodeCursor } from '../common/cursor';
 import { isoDate, num, parseIsoDate } from '../common/decimal';
@@ -6,7 +8,7 @@ import { notFound } from '../common/id-param.pipe';
 import type { FoodItem, FoodLog, Prisma, WaterLog } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MEAL_TYPES, MealTypeValue } from './nutrition.dto';
-import type { FoodCreateDto, FoodLogCreateDto, FoodLogUpdateDto, FoodSearchQuery, NutrientsDto, WaterLogDto } from './nutrition.dto';
+import type { FoodCreateDto, FoodLogCreateDto, FoodLogUpdateDto, FoodSearchQuery, FoodUpdateDto, NutrientsDto, WaterLogDto, WaterLogUpdateDto } from './nutrition.dto';
 
 export interface Nutrients {
   energyKcal: number;
@@ -38,6 +40,10 @@ export interface FoodLogView {
   date: string;
   mealType: string;
   servings: number;
+  /** The serving the entry's nutrients were computed from (snapshot; falls back to the food). */
+  servingSize: number;
+  servingUnit: string;
+  gramsPerServing: number | null;
   nutrients: Nutrients;
   nutrientsEdited: boolean;
   createdAt: string;
@@ -144,17 +150,25 @@ export const toFoodView = (f: FoodItem): FoodView => ({
   source: f.source,
 });
 
-export const toLogView = (l: FoodLog & { food: { name: string } }): FoodLogView => ({
-  id: l.id,
-  foodId: l.foodId,
-  foodName: l.food.name,
-  date: isoDate(l.date)!,
-  mealType: l.mealType,
-  servings: num(l.servings)!,
-  nutrients: nutrientsOf(l),
-  nutrientsEdited: l.nutrientsEdited,
-  createdAt: l.createdAt.toISOString(),
-});
+type LogFood = Pick<FoodItem, 'name' | 'servingSize' | 'servingUnit' | 'gramsPerServing'>;
+
+export const toLogView = (l: FoodLog & { food: LogFood }): FoodLogView => {
+  const snap = l.servingUnit != null && l.servingSize != null;
+  return {
+    id: l.id,
+    foodId: l.foodId,
+    foodName: l.food.name,
+    date: isoDate(l.date)!,
+    mealType: l.mealType,
+    servings: num(l.servings)!,
+    servingSize: num(snap ? l.servingSize : l.food.servingSize)!,
+    servingUnit: snap ? l.servingUnit! : l.food.servingUnit,
+    gramsPerServing: num(snap ? l.gramsPerServing : l.food.gramsPerServing),
+    nutrients: nutrientsOf(l),
+    nutrientsEdited: l.nutrientsEdited,
+    createdAt: l.createdAt.toISOString(),
+  };
+};
 
 export const toWaterView = (w: WaterLog): WaterLogView => ({
   id: w.id,
@@ -163,10 +177,22 @@ export const toWaterView = (w: WaterLog): WaterLogView => ({
   createdAt: w.createdAt.toISOString(),
 });
 
-export const withFood = { food: { select: { name: true } } } as const;
+export const withFood = { food: { select: { name: true, servingSize: true, servingUnit: true, gramsPerServing: true } } } as const;
 
-/** The catalog plus the caller's own custom foods; another user's custom food is invisible. */
-const visibleTo = (userId: string): Prisma.FoodItemWhereInput => ({ OR: [{ source: 'catalog' }, { ownerId: userId }] });
+const servingOf = (f: Pick<FoodItem, 'servingSize' | 'servingUnit' | 'gramsPerServing'>) => ({
+  servingSize: f.servingSize,
+  servingUnit: f.servingUnit,
+  gramsPerServing: f.gramsPerServing,
+});
+
+const invalid = (fields: Record<string, string>) =>
+  new ApiError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Some fields are invalid.', { fields });
+
+/** The catalog plus the caller's own live custom foods; another user's or a deleted custom food is invisible. */
+const visibleTo = (userId: string): Prisma.FoodItemWhereInput => ({ deletedAt: null, OR: [{ source: 'catalog' }, { ownerId: userId }] });
+
+/** Only the caller's own live custom foods can be edited or deleted. */
+const ownedBy = (userId: string): Prisma.FoodItemWhereInput => ({ deletedAt: null, source: 'custom', ownerId: userId });
 
 @Injectable()
 export class NutritionService {
@@ -220,6 +246,38 @@ export class NutritionService {
     return toFoodView(row);
   }
 
+  async getFood(userId: string, id: string): Promise<FoodView> {
+    const row = await this.prisma.foodItem.findFirst({ where: { id, ...visibleTo(userId) } });
+    if (!row) throw notFound('Food');
+    return toFoodView(row);
+  }
+
+  /** Partial edit of the caller's own custom food. Existing diary entries keep their snapshotted nutrients and serving. */
+  async updateFood(userId: string, id: string, dto: FoodUpdateDto): Promise<FoodView> {
+    const keys = ['name', 'brand', 'servingSize', 'servingUnit', 'gramsPerServing', 'nutrients', 'isVegetarian'] as const;
+    if (!keys.some((k) => dto[k] !== undefined)) throw invalid({ body: 'send at least one field to change' });
+    const data: Prisma.FoodItemUpdateManyMutationInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.brand !== undefined) data.brand = dto.brand;
+    if (dto.servingSize !== undefined) data.servingSize = dto.servingSize;
+    if (dto.servingUnit !== undefined) data.servingUnit = dto.servingUnit;
+    if (dto.gramsPerServing !== undefined) data.gramsPerServing = dto.gramsPerServing;
+    if (dto.isVegetarian !== undefined) data.isVegetarian = dto.isVegetarian;
+    if (dto.nutrients !== undefined) Object.assign(data, fromDto(dto.nutrients));
+    const { count } = await this.prisma.foodItem.updateMany({ where: { id, ...ownedBy(userId) }, data });
+    if (count !== 1) throw notFound('Food');
+    return toFoodView(await this.prisma.foodItem.findUniqueOrThrow({ where: { id } }));
+  }
+
+  /**
+   * Soft delete: the food disappears from search, GET and new logs, but existing
+   * diary entries stay intact (they reference it and keep their snapshot).
+   */
+  async deleteFood(userId: string, id: string): Promise<void> {
+    const { count } = await this.prisma.foodItem.updateMany({ where: { id, ...ownedBy(userId) }, data: { deletedAt: new Date() } });
+    if (count !== 1) throw notFound('Food');
+  }
+
   async listFoodLogs(userId: string, date: string): Promise<{ items: FoodLogView[] }> {
     const rows = await this.prisma.foodLog.findMany({
       where: { userId, date: parseIsoDate(date)! },
@@ -235,7 +293,7 @@ export class NutritionService {
     const edited = dto.nutrientsOverride !== undefined;
     const nutrients = edited ? fromDto(dto.nutrientsOverride!) : scale(nutrientsOf(food), dto.servings);
     const row = await this.prisma.foodLog.create({
-      data: { userId, foodId: food.id, date: parseIsoDate(dto.date)!, mealType: dto.mealType, servings: dto.servings, nutrientsEdited: edited, ...nutrients },
+      data: { userId, foodId: food.id, date: parseIsoDate(dto.date)!, mealType: dto.mealType, servings: dto.servings, nutrientsEdited: edited, ...servingOf(food), ...nutrients },
       include: withFood,
     });
     return toLogView(row);
@@ -251,17 +309,20 @@ export class NutritionService {
     if (!log) throw notFound('Food log');
     const servings = dto.servings ?? num(log.servings)!;
     let nutrients: Nutrients | undefined;
+    let serving: ReturnType<typeof servingOf> | undefined;
     let edited = log.nutrientsEdited;
     if (dto.nutrientsOverride) {
       nutrients = fromDto(dto.nutrientsOverride);
       edited = true;
     } else if (dto.nutrientsOverride === null || (!log.nutrientsEdited && dto.servings !== undefined)) {
+      // Recomputed from the food as it is now, so the snapshot follows it.
       nutrients = scale(nutrientsOf(log.food), servings);
+      serving = servingOf(log.food);
       edited = false;
     }
     const { count } = await this.prisma.foodLog.updateMany({
       where: { id, userId },
-      data: { mealType: dto.mealType, servings, nutrientsEdited: edited, ...(nutrients ?? {}) },
+      data: { mealType: dto.mealType, servings, nutrientsEdited: edited, ...(serving ?? {}), ...(nutrients ?? {}) },
     });
     if (count !== 1) throw notFound('Food log');
     return toLogView(await this.prisma.foodLog.findUniqueOrThrow({ where: { id }, include: withFood }));
@@ -284,10 +345,12 @@ export class NutritionService {
     return toWaterView(await this.prisma.waterLog.create({ data: { userId, date: parseIsoDate(dto.date)!, amountMl: dto.amountMl } }));
   }
 
-  async updateWater(userId: string, id: string, dto: WaterLogDto): Promise<WaterLogView> {
+  /** Partial: a missing field stays unchanged; an empty body is 400. */
+  async updateWater(userId: string, id: string, dto: WaterLogUpdateDto): Promise<WaterLogView> {
+    if (dto.date === undefined && dto.amountMl === undefined) throw invalid({ body: 'send date and/or amountMl' });
     const { count } = await this.prisma.waterLog.updateMany({
       where: { id, userId },
-      data: { date: parseIsoDate(dto.date)!, amountMl: dto.amountMl },
+      data: { ...(dto.date !== undefined ? { date: parseIsoDate(dto.date)! } : {}), ...(dto.amountMl !== undefined ? { amountMl: dto.amountMl } : {}) },
     });
     if (count !== 1) throw notFound('Water log');
     return toWaterView(await this.prisma.waterLog.findUniqueOrThrow({ where: { id } }));
