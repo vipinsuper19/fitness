@@ -21,12 +21,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.vipin.fitness.core.common.time.today
 import java.time.Clock
 import java.time.LocalDate
 import javax.inject.Inject
-
-// TODO: switch to com.vipin.fitness.core.common.time.today (AppTime.kt) once #31 merges.
-private fun Clock.today(): LocalDate = LocalDate.now(this.withZone(ProgressFormat.ZONE))
 
 /**
  * Add/edit form. Texts are in the user's units as of opening ([units]). For an edit, only the

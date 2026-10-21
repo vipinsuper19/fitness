@@ -5,6 +5,8 @@ import com.vipin.fitness.core.data.SessionRepository
 import com.vipin.fitness.core.data.HomeRepository
 import com.vipin.fitness.core.data.ProgressRepository
 import com.vipin.fitness.core.data.UnitPreference
+import com.vipin.fitness.core.data.UserScopedState
+import com.vipin.fitness.core.data.workout.WorkoutRepository
 import com.vipin.fitness.core.data.di.DataModule
 import com.vipin.fitness.core.data.di.ProgressDataModule
 import com.vipin.fitness.core.datastore.ProfileFlagsCache
@@ -17,11 +19,13 @@ import com.vipin.fitness.core.testing.FakeProgressRepository
 import com.vipin.fitness.core.testing.FakeUnitPreference
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
+import com.vipin.fitness.core.testing.FakeWorkoutRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.components.SingletonComponent
 import dagger.hilt.testing.TestInstallIn
+import dagger.multibindings.Multibinds
 import javax.inject.Singleton
 
 /** Test-only: repositories are in-memory fakes, so no UI test can reach a real server. */
@@ -30,10 +34,13 @@ import javax.inject.Singleton
 abstract class FakeDataModule {
     @Binds abstract fun session(f: FakeSessionRepository): SessionRepository
     @Binds abstract fun profile(f: FakeProfileRepository): ProfileRepository
+    @Binds abstract fun workout(f: FakeWorkoutRepository): WorkoutRepository
+    @Multibinds abstract fun userScopedState(): Set<UserScopedState>
 
     companion object {
         @Provides @Singleton fun fakeSession() = FakeSessionRepository()
         @Provides @Singleton fun fakeProfile() = FakeProfileRepository()
+        @Provides @Singleton fun fakeWorkout() = FakeWorkoutRepository()
     }
 }
 

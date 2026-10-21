@@ -3,13 +3,16 @@ package com.vipin.fitness.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.common.UnitSystem
-import com.vipin.fitness.core.data.HomePlan
 import com.vipin.fitness.core.data.DailyNutrition
 import com.vipin.fitness.core.data.HomeRepository
-import com.vipin.fitness.core.data.PlanWorkout
 import com.vipin.fitness.core.data.ProgressRepository
 import com.vipin.fitness.core.data.UnitPreference
 import com.vipin.fitness.core.data.XpBalance
+import com.vipin.fitness.core.data.workout.ActivePlan
+import com.vipin.fitness.core.data.workout.PlannedWorkout
+import com.vipin.fitness.core.data.workout.WorkoutPlan
+import com.vipin.fitness.core.data.workout.WorkoutRepository
+import com.vipin.fitness.core.common.time.today
 import com.vipin.fitness.core.data.userMessage
 import com.vipin.fitness.core.network.ApiResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,12 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.LocalDate
-import java.time.ZoneId
 import javax.inject.Inject
-
-// TODO: switch to com.vipin.fitness.core.common.time.APP_ZONE / today (AppTime.kt) once #31 merges.
-private val APP_ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
-private fun Clock.today(): LocalDate = LocalDate.now(this.withZone(APP_ZONE))
 
 /** One dashboard card's state. Each slot loads and fails on its own. */
 sealed interface Slot<out T> {
@@ -36,7 +34,7 @@ sealed interface Slot<out T> {
 }
 
 /** Today's plan day: [workout] null means a rest day; [plan] null means no active plan. */
-data class PlanDay(val plan: HomePlan?, val workout: PlanWorkout?)
+data class PlanDay(val plan: WorkoutPlan?, val workout: PlannedWorkout?)
 
 /** Streak from /progress/summary, plus whether a workout is already done today. */
 data class Streak(val days: Int, val workoutsToday: Int, val xpToday: Int)
@@ -54,6 +52,7 @@ data class HomeState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val home: HomeRepository,
+    private val workouts: WorkoutRepository,
     private val progress: ProgressRepository,
     units: UnitPreference,
     private val clock: Clock,
@@ -87,8 +86,11 @@ class HomeViewModel @Inject constructor(
             if (dayChanged) HomeState(today = today, units = it.units) else it.copy(today = today)
         }
         jobs += viewModelScope.launch {
-            val r = home.activePlan()
-            _state.update { s -> if (s.today != today) s else s.copy(plan = r.toSlot { PlanDay(it, it?.workoutOn(today)) }) }
+            val r = workouts.refreshActivePlan()
+            _state.update { s ->
+                if (s.today != today) s
+                else s.copy(plan = r.toSlot { a -> (a as? ActivePlan.Some)?.plan.let { PlanDay(it, it?.workoutOn(today.dayOfWeek)) } })
+            }
         }
         jobs += viewModelScope.launch {
             val r = home.dailyNutrition(today)

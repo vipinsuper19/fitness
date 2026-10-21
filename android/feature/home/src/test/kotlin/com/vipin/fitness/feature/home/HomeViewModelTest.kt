@@ -1,12 +1,18 @@
 package com.vipin.fitness.feature.home
 
-import com.vipin.fitness.core.data.HomePlan
 import com.vipin.fitness.core.data.DailyNutrition
 import com.vipin.fitness.core.data.MealType
 import com.vipin.fitness.core.data.Nutrients
-import com.vipin.fitness.core.data.PlanWorkout
 import com.vipin.fitness.core.data.ProgressPoint
 import com.vipin.fitness.core.data.XpBalance
+import com.vipin.fitness.core.data.workout.ActivePlan
+import com.vipin.fitness.core.data.workout.PlanSource
+import com.vipin.fitness.core.data.workout.PlannedExercise
+import com.vipin.fitness.core.data.workout.PlannedWorkout
+import com.vipin.fitness.core.data.workout.WorkoutPlan
+import com.vipin.fitness.core.network.ApiResult
+import com.vipin.fitness.core.testing.FakeWorkoutRepository
+import java.time.DayOfWeek
 import com.vipin.fitness.core.testing.FAKE_NETWORK_FAILURE
 import com.vipin.fitness.core.testing.FakeHomeRepository
 import com.vipin.fitness.core.testing.FakeProgressRepository
@@ -24,11 +30,16 @@ class HomeViewModelTest {
     @get:Rule val main = MainDispatcherRule()
     private val home = FakeHomeRepository()
     private val progress = FakeProgressRepository()
+    private val workouts = FakeWorkoutRepository()
     // Wed 21 Oct 2026, 23:50 IST.
     private val clock = MutableClock(Instant.parse("2026-10-21T18:20:00Z"))
     private val oct21 = LocalDate.of(2026, 10, 21)
-    private fun vm() = HomeViewModel(home, progress, FakeUnitPreference(), clock)
+    private fun vm() = HomeViewModel(home, workouts, progress, FakeUnitPreference(), clock)
     private fun <T> Slot<T>.value() = (this as Slot.Ready<T>).value
+
+    private fun plan(name: String, vararg days: Pair<DayOfWeek, String>) = WorkoutPlan(
+        "p1", 1, name, 8, null, days.map { (d, n) -> PlannedWorkout(d, n, listOf(PlannedExercise("e1", 3))) }, true, PlanSource.CUSTOM,
+    )
 
     @Test fun emptyAccountShowsEmptyStatesNotErrors() {
         val s = vm().state.value
@@ -39,10 +50,10 @@ class HomeViewModelTest {
     }
 
     @Test fun showsTodaysPlanDayOrRestDay() {
-        home.plan = HomePlan("p1", "Push Pull Legs", 8, listOf(PlanWorkout(3, "Legs", 5), PlanWorkout(1, "Push", 6)))
+        workouts.refreshResult = { ApiResult.Success(ActivePlan.Some(plan("Push Pull Legs", DayOfWeek.WEDNESDAY to "Legs", DayOfWeek.MONDAY to "Push"))) }
         val d = vm().state.value.plan.value()
         assertEquals("Legs", d.workout!!.name) // 21 Oct 2026 is a Wednesday (ISO 3)
-        home.plan = HomePlan("p1", "PPL", 8, listOf(PlanWorkout(1, "Push", 6)))
+        workouts.refreshResult = { ApiResult.Success(ActivePlan.Some(plan("PPL", DayOfWeek.MONDAY to "Push"))) }
         val rest = vm().state.value.plan.value()
         assertEquals("PPL", rest.plan!!.name)
         assertNull(rest.workout)
@@ -63,9 +74,10 @@ class HomeViewModelTest {
 
     @Test fun eachSlotFailsOnItsOwn() {
         home.xpFailure = FAKE_NETWORK_FAILURE
+        workouts.refreshResult = { FAKE_NETWORK_FAILURE }
         val s = vm().state.value
         assertTrue(s.xp is Slot.Failed)
-        assertTrue(s.plan is Slot.Ready)
+        assertTrue(s.plan is Slot.Failed)
         assertTrue(s.nutrition is Slot.Ready)
     }
 

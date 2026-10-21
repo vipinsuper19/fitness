@@ -1,6 +1,5 @@
 package com.vipin.fitness.core.data
 
-import com.vipin.fitness.core.network.model.ActivePlanDto
 import com.vipin.fitness.core.network.model.BodyMeasurementDto
 import com.vipin.fitness.core.network.model.ProgressSummaryDto
 import com.vipin.fitness.core.network.model.XpBalanceDto
@@ -60,14 +59,6 @@ data class ProgressSummary(val from: LocalDate, val to: LocalDate, val points: L
 
 data class XpBalance(val total: Int, val level: Int, val xpIntoLevel: Int, val xpForNextLevel: Int)
 
-/** The active plan as Home needs it: workouts keyed by ISO weekday (1 = Monday). */
-data class HomePlan(val id: String, val name: String, val weeks: Int, val workouts: List<PlanWorkout>) {
-    /** The workout for [date], or null on a rest day. */
-    fun workoutOn(date: LocalDate): PlanWorkout? = workouts.firstOrNull { it.dayOfWeek == date.dayOfWeek.value }
-}
-
-data class PlanWorkout(val dayOfWeek: Int, val name: String, val exerciseCount: Int)
-
 /** Two decimals, half-up, on the decimal value (same rule as nutrition). Enough for lb/in converted to metric. */
 fun roundMetric(v: Double): Double = BigDecimal.valueOf(v).setScale(2, RoundingMode.HALF_UP).toDouble()
 
@@ -119,5 +110,3 @@ fun ProgressSummaryDto.toDomain(): ProgressSummary {
 }
 
 fun XpBalanceDto.toDomain() = XpBalance(total, level, xpIntoLevel, xpForNextLevel)
-
-fun ActivePlanDto.toDomain() = HomePlan(id, name, weeks, workouts.map { PlanWorkout(it.dayOfWeek, it.name, it.exercises.size) })

@@ -1,6 +1,7 @@
 package com.vipin.fitness.core.common
 
-import kotlin.math.roundToInt
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /** Feet + inches, for showing a height in imperial. */
 data class FeetInches(val feet: Int, val inches: Double)
@@ -29,7 +30,9 @@ object UnitConversion {
     fun cmToFeetInches(cm: Double, inchDecimals: Int = 0): FeetInches {
         require(cm >= 0) { "cm must be >= 0" }
         val scale = pow10(inchDecimals)
-        val totalScaledInches = (cmToInches(cm) * scale).roundToInt()
+        // Decimal arithmetic: 171.45 cm is exactly 67.5 in, which must round up (a double gives 67.4999…).
+        val totalScaledInches = BigDecimal.valueOf(cm).divide(CM_PER_INCH_DEC, 12, RoundingMode.HALF_UP)
+            .setScale(inchDecimals, RoundingMode.HALF_UP).movePointRight(inchDecimals).intValueExact()
         val scaledPerFoot = INCHES_PER_FOOT * scale
         val feet = totalScaledInches / scaledPerFoot
         val inches = (totalScaledInches % scaledPerFoot).toDouble() / scale
@@ -38,8 +41,10 @@ object UnitConversion {
 
     fun feetInchesToCm(feet: Int, inches: Double): Double {
         require(feet >= 0 && inches >= 0) { "feet and inches must be >= 0" }
-        return inchesToCm(feet * INCHES_PER_FOOT + inches)
+        return BigDecimal.valueOf(inches).add(BigDecimal(feet * INCHES_PER_FOOT)).multiply(CM_PER_INCH_DEC).toDouble()
     }
+
+    private val CM_PER_INCH_DEC = BigDecimal("2.54")
 
     fun mlToFlOz(ml: Double): Double = ml / ML_PER_US_FL_OZ
     fun flOzToMl(flOz: Double): Double = flOz * ML_PER_US_FL_OZ

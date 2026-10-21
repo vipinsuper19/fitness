@@ -1,7 +1,6 @@
 package com.vipin.fitness.core.network.model
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
 
 /** Contract `BodyMeasurement`. Metric; a null measurement was not taken. */
 @Serializable
@@ -39,9 +38,3 @@ data class ProgressSummaryDto(val from: String, val to: String, val points: List
 @Serializable
 data class XpBalanceDto(val total: Int, val level: Int, val xpIntoLevel: Int, val xpForNextLevel: Int)
 
-/** The parts of contract `WorkoutPlan` the Home dashboard reads. */
-@Serializable
-data class ActivePlanDto(val id: String, val name: String, val weeks: Int = 0, val workouts: List<ActivePlanWorkoutDto> = emptyList())
-
-@Serializable
-data class ActivePlanWorkoutDto(val dayOfWeek: Int, val name: String, val exercises: List<JsonObject> = emptyList())

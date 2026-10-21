@@ -23,10 +23,8 @@ interface ProgressRepository {
     suspend fun summary(from: LocalDate, to: LocalDate): ApiResult<ProgressSummary>
 }
 
-/** Reads for the Home dashboard. */
+/** Reads for the Home dashboard. The active plan comes from WorkoutRepository. */
 interface HomeRepository {
-    /** Success(null) when the user has no active plan. */
-    suspend fun activePlan(): ApiResult<HomePlan?>
     suspend fun xpBalance(): ApiResult<XpBalance>
     suspend fun dailyNutrition(date: LocalDate): ApiResult<DailyNutrition>
 }
@@ -68,12 +66,6 @@ class DefaultHomeRepository @Inject constructor(
     private val nutrition: NutritionApi,
     private val json: Json,
 ) : HomeRepository {
-    override suspend fun activePlan(): ApiResult<HomePlan?> = apiCall(json) {
-        val r = api.activePlan()
-        if (!r.isSuccessful) throw HttpException(r)
-        if (r.code() == 204) null else r.body()?.toDomain()
-    }
-
     override suspend fun xpBalance() = apiCall(json) { api.xpBalance().toDomain() }
 
     override suspend fun dailyNutrition(date: LocalDate) = apiCall(json) { nutrition.daily(date.toString()).toDomain() }

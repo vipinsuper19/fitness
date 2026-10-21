@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.vipin.fitness.core.designsystem.FitnessTheme
+import androidx.compose.material3.Text
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test

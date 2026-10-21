@@ -1,6 +1,5 @@
 package com.vipin.fitness.core.network
 
-import com.vipin.fitness.core.network.model.ActivePlanDto
 import com.vipin.fitness.core.network.model.BodyMeasurementDto
 import com.vipin.fitness.core.network.model.BodyMeasurementPageDto
 import com.vipin.fitness.core.network.model.ProgressSummaryDto
@@ -16,7 +15,7 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-/** Progress endpoints (contract tags `progress` and `xp`), plus the active-plan read Home needs. */
+/** Progress endpoints (contract tags `progress` and `xp`). */
 interface ProgressApi {
     @GET("body-measurements")
     suspend fun measurements(
@@ -46,8 +45,4 @@ interface ProgressApi {
 
     @GET("xp/balance")
     suspend fun xpBalance(): XpBalanceDto
-
-    /** 204 when there is no active plan. */
-    @GET("workout-plans/active")
-    suspend fun activePlan(): Response<ActivePlanDto>
 }

@@ -2,6 +2,7 @@ package com.vipin.fitness.feature.progress
 
 import com.vipin.fitness.core.common.UnitConversion
 import com.vipin.fitness.core.common.UnitSystem
+import com.vipin.fitness.core.common.time.APP_ZONE
 import com.vipin.fitness.core.data.MeasureDimension
 import com.vipin.fitness.core.data.MeasurementKind
 import java.math.BigDecimal
@@ -15,8 +16,7 @@ import java.util.Locale
 /** India first: en-IN formatting, dates in Asia/Kolkata, half-up rounding (same rules as nutrition). */
 internal object ProgressFormat {
     val LOCALE: Locale = Locale.forLanguageTag("en-IN")
-    // TODO: switch to com.vipin.fitness.core.common.time.APP_ZONE (AppTime.kt) once #31 merges.
-    val ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
+    val ZONE: ZoneId = APP_ZONE
     private val dateFmt = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", LOCALE)
     private val shortDateFmt = DateTimeFormatter.ofPattern("d MMM", LOCALE)
 

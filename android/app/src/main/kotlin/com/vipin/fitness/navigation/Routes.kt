@@ -12,6 +12,12 @@ sealed interface Route : NavKey {
     @Serializable data object Onboarding : Route
     @Serializable data object Main : Route
     @Serializable data object Profile : Route
+
+    // Workout (feature:workout). pickDay is a DayOfWeek value (1 = Monday) when picking for a custom plan.
+    @Serializable data object WorkoutNewPlan : Route
+    @Serializable data object PlanPreview : Route
+    @Serializable data class ExerciseLibrary(val pickDay: Int? = null) : Route
+    @Serializable data class ExerciseDetail(val id: String) : Route
 }
 
 /** Back-stack moves, kept pure so they can be unit tested. */
@@ -60,5 +66,16 @@ object AppNavigation {
         if (stack.lastOrNull() == Route.Register) stack.removeAt(stack.lastIndex)
         if (stack.lastOrNull() is Route.SignIn) stack.removeAt(stack.lastIndex)
         stack.add(Route.SignIn(email = email.ifBlank { null }))
+    }
+
+    /** After a plan is activated, drop the workout sub-flow and land back on the tabs. */
+    fun onPlanActivated(stack: MutableList<Any>) {
+        val main = stack.lastIndexOf(Route.Main)
+        if (main < 0) resetTo(stack, Route.Main) else while (stack.lastIndex > main) stack.removeAt(stack.lastIndex)
+    }
+
+    /** Pop the top entry, e.g. after an exercise is picked. Never empties the stack. */
+    fun pop(stack: MutableList<Any>) {
+        if (stack.size > 1) stack.removeAt(stack.lastIndex)
     }
 }

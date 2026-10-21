@@ -103,7 +103,7 @@ fun DefaultPlanDayContent(d: PlanDay) {
         else -> {
             Text(d.plan.name, style = MaterialTheme.typography.bodySmall)
             Text(d.workout.name, style = MaterialTheme.typography.headlineSmall)
-            Text(stringResource(R.string.home_plan_exercises, d.workout.exerciseCount))
+            Text(stringResource(R.string.home_plan_exercises, d.workout.exercises.size))
         }
     }
 }

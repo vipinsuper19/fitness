@@ -1,7 +1,6 @@
 package com.vipin.fitness.core.testing
 
 import com.vipin.fitness.core.common.UnitSystem
-import com.vipin.fitness.core.data.HomePlan
 import com.vipin.fitness.core.data.BodyMeasurement
 import com.vipin.fitness.core.data.BodyMeasurementPage
 import com.vipin.fitness.core.data.DailyNutrition
@@ -93,15 +92,12 @@ class FakeProgressRepository : ProgressRepository {
 }
 
 class FakeHomeRepository : HomeRepository {
-    var plan: HomePlan? = null
     var xp = XpBalance(0, 1, 0, 100)
     var nutrition: (LocalDate) -> DailyNutrition = { emptyDay(it) }
-    var planFailure: ApiResult.Failure? = null
     var xpFailure: ApiResult.Failure? = null
     var nutritionFailure: ApiResult.Failure? = null
     val nutritionCalls = mutableListOf<LocalDate>()
 
-    override suspend fun activePlan(): ApiResult<HomePlan?> = planFailure ?: ApiResult.Success(plan)
     override suspend fun xpBalance(): ApiResult<XpBalance> = xpFailure ?: ApiResult.Success(xp)
     override suspend fun dailyNutrition(date: LocalDate): ApiResult<DailyNutrition> {
         nutritionCalls += date
