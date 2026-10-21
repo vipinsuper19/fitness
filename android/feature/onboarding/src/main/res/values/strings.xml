@@ -83,4 +83,5 @@
     <string name="settings_help_legal">Help &amp; legal</string>
     <string name="settings_help">Help &amp; FAQ</string>
     <string name="settings_feedback">Send feedback</string>
+    <string name="profile_export_data">Export my data</string>
 </resources>
