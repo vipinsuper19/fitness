@@ -297,6 +297,11 @@ model WorkoutPlan {
   /// Re-activating the already active plan keeps it; it stays set after
   /// another plan becomes active. Backfilled from created_at (a lower bound).
   activatedAt    DateTime?  @map("activated_at") @db.Timestamptz(3)
+  /// Set by deactivate while active (status paused); cleared on activate. Resume shifts
+  /// activatedAt forward by now - pausedAt so the week count continues.
+  pausedAt       DateTime?  @map("paused_at") @db.Timestamptz(3)
+  /// Soft delete (DELETE /workout-plans/{id}); sessions, versions and XP are kept.
+  archivedAt     DateTime?  @map("archived_at") @db.Timestamptz(3)
   updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -304,6 +309,7 @@ model WorkoutPlan {
   activeFor UserProfile?         @relation("ActivePlan")
 
   @@index([userId])
+  @@index([userId, archivedAt])
   @@map("workout_plans")
 }
 
