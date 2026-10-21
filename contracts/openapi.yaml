@@ -46,6 +46,9 @@ info:
       reversed entry. A reversed award is **never re-awarded**: the original
       entry stays in the ledger, so completing, replaying or re-completing
       the same session awards nothing, and an entry can be reversed only once.
+      Session corrections and discards (PRD 5.3) are `session_correction`
+      entries whose `sourceId` is a `session_corrections` row id, one per
+      correction, so a session can be corrected many times.
     - **Ownership:** every user-owned resource is checked; another user's
       id returns `404 NOT_FOUND`, never 403, so ids are not enumerable.
     - **AI:** there is no AI provider in the MVP. "Generate" endpoints use
@@ -621,6 +624,19 @@ paths:
         server writes one negative `adjustment` whose `sourceId` is the award.
         The award stays in the ledger, so the session can never be awarded
         again. The client never writes XP.
+
+        This is also the way to discard a **completed** session (PRD 5.3,
+        `docs/specs/session-correction.md`). Once session correction ships, a
+        discard writes its own ledger row (`source_type` `session_correction`,
+        `source_id` = a new `session_corrections` row of kind `discard`) whose
+        amount is minus the session's current net XP (award plus earlier
+        correction deltas), so the net becomes 0 and a discard after corrections
+        never hits the ledger's unique key. Legacy discard rows (`adjustment`
+        with `sourceId` = the award id) stay valid and still count. A correction that would remove the last completed set
+        returns `422 SESSION_EMPTY`, which points the client here. Earned badges
+        and completed challenges are never revoked; active challenge progress is
+        recomputed. The response stays `204` with no body (unchanged for released
+        clients). Discard is not limited by the correction window.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
       responses:
@@ -634,7 +650,9 @@ paths:
       tags: [workout-sessions]
       operationId: upsertSetLog
       summary: Log or correct a set (upsert by the client's set UUID)
-      description: The client-generated `clientSetId` makes this safe to retry from offline sync. Sending the same `clientSetId` again replaces that set.
+      description: |
+        The client-generated `clientSetId` makes this safe to retry from offline sync. Sending the same `clientSetId` again replaces that set.
+        Unchanged by session correction: on a completed session this returns `409 SESSION_COMPLETED`; use `PUT /workout-sessions/{sessionId}/corrections/sets/{clientSetId}` instead.
       parameters:
         - $ref: '#/components/parameters/SessionId'
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
@@ -686,6 +704,125 @@ paths:
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
         '422':
           description: '`SESSION_EMPTY` (no completed sets)'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /workout-sessions/{sessionId}/corrections/sets/{clientSetId}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/ClientSetId'
+    put:
+      tags: [workout-sessions]
+      operationId: correctSetLog
+      summary: Correct a set on a completed session (upsert by clientSetId)
+      description: |
+        Upserts by `clientSetId`: if the session already has a set with this `clientSetId` it is edited in place;
+        otherwise one set is added. It never creates a duplicate. The body's `clientSetId` must equal the path value (`400` otherwise).
+        A `clientSetId` that belongs to a set in another session returns `409 CLIENT_SET_CONFLICT`.
+        Unchecking or editing so that no completed set is left returns `422 SESSION_EMPTY` (discard with `DELETE /workout-sessions/{sessionId}` instead).
+        Completed sessions only (`409 SESSION_NOT_COMPLETED` otherwise), and only while the session's
+        `completedAt` local date (profile timezone) is today or yesterday (`409 CORRECTION_WINDOW_CLOSED` otherwise).
+        The server recomputes the session's workout XP and writes the difference as one new append-only ledger row
+        (`source_type` `session_correction`, `source_id` = a new `session_corrections` row id), so repeated corrections never
+        collide on the ledger's unique key. Net session XP = award + sum of deltas, never below 0, recomputes active challenge progress and re-evaluates badges.
+        Earned badges and completed challenges are never revoked. A retry with the same Idempotency-Key replays the same body.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetLogUpsert' }
+      responses:
+        '200':
+          description: Corrected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`SESSION_NOT_COMPLETED`, `CORRECTION_WINDOW_CLOSED`, `CLIENT_SET_CONFLICT`, or an idempotency conflict'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: '`SESSION_EMPTY`: no completed set would be left; discard the session instead'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [workout-sessions]
+      operationId: deleteCorrectedSetLog
+      summary: Delete a set from a completed session
+      description: |
+        Deleting the last completed set returns `422 SESSION_EMPTY` (discard with `DELETE /workout-sessions/{sessionId}` instead).
+        A retry with the same key replays the original `200` body. A delete repeated with a new key, or for an unknown
+        `clientSetId`, returns `404 SET_NOT_FOUND`, so an offline outbox can drop it. An unknown session stays `404 NOT_FOUND`.
+        Completed sessions only (`409 SESSION_NOT_COMPLETED` otherwise), and only while the session's
+        `completedAt` local date (profile timezone) is today or yesterday (`409 CORRECTION_WINDOW_CLOSED` otherwise).
+        The server recomputes the session's workout XP and writes the difference as one new append-only ledger row
+        (`source_type` `session_correction`, `source_id` = a new `session_corrections` row id), so repeated corrections never
+        collide on the ledger's unique key. Net session XP = award + sum of deltas, never below 0, recomputes active challenge progress and re-evaluates badges.
+        Earned badges and completed challenges are never revoked. A retry with the same Idempotency-Key replays the same body.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      responses:
+        '200':
+          description: Corrected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: '`SET_NOT_FOUND` (no such set in this session, e.g. already deleted), or `NOT_FOUND` for the session'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: '`SESSION_NOT_COMPLETED`, `CORRECTION_WINDOW_CLOSED`, or an idempotency conflict'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: '`SESSION_EMPTY`: this is the last completed set; discard the session instead'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /workout-sessions/{sessionId}/completion:
+    patch:
+      tags: [workout-sessions]
+      operationId: correctSessionCompletion
+      summary: Fix a completed session's details
+      description: |
+        `completedAt` must fall on today or yesterday (local date, profile timezone), not in the future, and after `startedAt` (`400` otherwise).
+        Changing `completedAt` can change active time and so XP.
+        Completed sessions only (`409 SESSION_NOT_COMPLETED` otherwise), and only while the session's
+        `completedAt` local date (profile timezone) is today or yesterday (`409 CORRECTION_WINDOW_CLOSED` otherwise).
+        The server recomputes the session's workout XP and writes the difference as one new append-only ledger row
+        (`source_type` `session_correction`, `source_id` = a new `session_corrections` row id), so repeated corrections never
+        collide on the ledger's unique key. Net session XP = award + sum of deltas, never below 0, recomputes active challenge progress and re-evaluates badges.
+        Earned badges and completed challenges are never revoked. A retry with the same Idempotency-Key replays the same body.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SessionCompletionUpdate' }
+      responses:
+        '200':
+          description: Corrected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`SESSION_NOT_COMPLETED`, `CORRECTION_WINDOW_CLOSED`, or an idempotency conflict'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1307,6 +1444,12 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    ClientSetId:
+      name: clientSetId
+      in: path
+      required: true
+      description: The device-generated set UUID used by the set upsert
+      schema: { type: string, format: uuid }
     FoodId:
       name: foodId
       in: path
@@ -1749,6 +1892,27 @@ components:
             and the badge still appears on the next `GET /badges`. A replay with the same
             Idempotency-Key returns the stored body unchanged; completing an already-completed
             session with a new key returns `[]`. Clients that ignore this keep polling `GET /badges`.
+    SessionCompletionUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        completedAt: { type: string, format: date-time, description: 'Today or yesterday (local date, profile timezone), not in the future, after startedAt' }
+        perceivedDifficulty: { type: integer, minimum: 1, maximum: 5 }
+        notes: { type: [string, 'null'], maxLength: 1000 }
+    SessionCorrectionResult:
+      type: object
+      required: [session, xpDelta, xpBalance]
+      description: Result of a correction to a completed session (PRD 5.3, `docs/specs/session-correction.md`). Replays return the same body.
+      properties:
+        session: { $ref: '#/components/schemas/WorkoutSession' }
+        xpDelta:
+          type: integer
+          description: XP change from this correction (negative, zero or positive). The session's net XP never goes below 0.
+        xpBalance: { $ref: '#/components/schemas/XpBalance' }
+        newBadges:
+          type: array
+          description: Badges first earned because of this correction, in the same `Badge` shape as `GET /badges`. Optional and additive (badges spec §8); clients must tolerate its absence.
+          items: { $ref: '#/components/schemas/Badge' }
 
     MealType:
       type: string
@@ -2076,15 +2240,17 @@ components:
         xpAwarded: { type: integer, minimum: 0, description: Bonus XP actually awarded (after the weekly cap); 0 until completed }
     XpSourceType:
       type: string
-      enum: [workout_session, adjustment, badge, challenge]
-      description: '`adjustment` is a server-side reversal or correction, never a client write. `badge` and `challenge` are bonus XP (`sourceId` = the earned badge or the challenge id); challenge bonus XP is capped at 150 per ISO week (Monday start, profile timezone), so an award can be smaller than the template''s `bonusXp`, or 0. Clients must accept unknown values.'
+      enum: [workout_session, adjustment, badge, challenge, session_correction]
+      description: '`adjustment` is a server-side reversal or correction, never a client write. `badge` and `challenge` are bonus XP (`sourceId` = the earned badge or the challenge id); challenge bonus XP is capped at 150 per ISO week (Monday start, profile timezone), so an award can be smaller than the template''s `bonusXp`, or 0. `session_correction` is a server-side XP change from correcting or discarding a completed session (positive or negative); its `sourceId` is a `session_corrections` row id, not the session or award id (see docs/specs/session-correction.md). Clients must accept unknown values.'
     XpTransaction:
       type: object
       required: [id, sourceType, sourceId, amount, reason, createdAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         sourceType: { $ref: '#/components/schemas/XpSourceType' }
-        sourceId: { $ref: '#/components/schemas/Id' }
+        sourceId:
+          allOf: [{ $ref: '#/components/schemas/Id' }]
+          description: 'Depends on `sourceType`: the session for `workout_session`, the reversed entry for `adjustment`, the user badge or challenge for `badge`/`challenge`, and a `session_corrections` row id for `session_correction`.'
         amount: { type: integer, description: Negative for reversals }
         reason: { type: string }
         createdAt: { type: string, format: date-time }
