@@ -155,7 +155,8 @@ export class AchievementsApiService {
   }
 
   async leave(userId: string, id: string, now = new Date()): Promise<ChallengeView> {
-    return this.prisma.$transaction(async (tx) => {
+    // The 409 is thrown after commit: throwing inside would roll back a completion settled here.
+    const r = await this.prisma.$transaction(async (tx) => {
       await this.engine.lock(tx, userId);
       const own = await tx.userChallenge.findFirst({ where: { id, userId }, select: { id: true } });
       if (!own) throw notFound('Challenge');
@@ -164,8 +165,10 @@ export class AchievementsApiService {
       await this.engine.settleChallenges(tx, userId, now);
       const c = (await tx.userChallenge.findUnique({ where: { id } }))!;
       if (c.status === 'left') return toChallengeView(c);
-      if (c.status !== 'active') throw new ApiError(HttpStatus.CONFLICT, 'CHALLENGE_NOT_ACTIVE', 'This challenge has already ended.');
+      if (c.status !== 'active') return null;
       return toChallengeView(await tx.userChallenge.update({ where: { id }, data: { status: 'left', leftAt: now } }));
     });
+    if (!r) throw new ApiError(HttpStatus.CONFLICT, 'CHALLENGE_NOT_ACTIVE', 'This challenge has already ended.');
+    return r;
   }
 }
