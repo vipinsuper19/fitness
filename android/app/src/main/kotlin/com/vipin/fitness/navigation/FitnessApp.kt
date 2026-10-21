@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import com.vipin.fitness.R
 import com.vipin.fitness.feature.home.HomeScreen
 import com.vipin.fitness.feature.nutrition.NutritionScreen
+import com.vipin.fitness.feature.achievements.AchievementsHomeCard
 import com.vipin.fitness.feature.progress.ProgressScreen
 import com.vipin.fitness.feature.workout.WorkoutDestination
 import com.vipin.fitness.feature.workout.WorkoutHomeRoute
@@ -33,8 +34,9 @@ fun FitnessApp(
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
     onWorkoutNavigate: (WorkoutDestination) -> Unit = {},
+    onOpenAchievements: () -> Unit = {},
     /** Slot so UI tests can render the shell without Hilt. Defaults to the real screen for each tab. */
-    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m, onWorkoutNavigate) },
+    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m, onWorkoutNavigate, onOpenAchievements) },
 ) {
     var current by rememberSaveable { mutableStateOf(TopLevelDestination.START) }
     Scaffold(
@@ -70,11 +72,14 @@ fun FitnessApp(
 
 /** The real screen for each tab. Tests can pass their own [FitnessApp] tabContent to stay free of Hilt. */
 @Composable
-private fun TabContent(dest: TopLevelDestination, modifier: Modifier, onWorkoutNavigate: (WorkoutDestination) -> Unit) = when (dest) {
+private fun TabContent(dest: TopLevelDestination, modifier: Modifier, onWorkoutNavigate: (WorkoutDestination) -> Unit, onOpenAchievements: () -> Unit) = when (dest) {
     TopLevelDestination.HOME -> HomeScreen(
         modifier,
         planDayContent = { WorkoutPlanDayContent(it, onOpenSession = { onWorkoutNavigate(WorkoutDestination.ActiveSession) }) },
-        extraSlots = { workoutHomeSlots(it, onOpenSession = { onWorkoutNavigate(WorkoutDestination.ActiveSession) }) },
+        extraSlots = {
+            workoutHomeSlots(it, onOpenSession = { onWorkoutNavigate(WorkoutDestination.ActiveSession) })
+            item(key = "achievements") { AchievementsHomeCard(onOpenAchievements) }
+        },
     )
     TopLevelDestination.WORKOUT -> WorkoutHomeRoute(onWorkoutNavigate, modifier)
     TopLevelDestination.NUTRITION -> NutritionScreen(modifier)

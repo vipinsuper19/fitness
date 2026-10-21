@@ -21,6 +21,9 @@ sealed interface Route : NavKey {
     @Serializable data class ExerciseDetail(val id: String) : Route
     @Serializable data object ActiveSession : Route
     @Serializable data class SessionSummary(val localId: String) : Route
+
+    // Badges & challenges (feature:achievements).
+    @Serializable data object Achievements : Route
 }
 
 /** Back-stack moves, kept pure so they can be unit tested. */

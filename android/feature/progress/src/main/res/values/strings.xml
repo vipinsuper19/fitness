@@ -12,7 +12,7 @@
     <string name="chart_weight">Weight (%1$s)</string>
     <string name="chart_body_fat">Body fat (%)</string>
     <string name="chart_waist">Waist (%1$s)</string>
-    <string name="chart_water">Water</string>
+    <string name="chart_water">Water (%1$s)</string>
     <string name="chart_energy">Calories eaten (kcal)</string>
     <string name="chart_active_minutes">Active minutes</string>
     <string name="chart_workouts">Workouts completed</string>

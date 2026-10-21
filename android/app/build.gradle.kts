@@ -63,6 +63,7 @@ dependencies {
     implementation(projects.feature.workout)
     implementation(projects.feature.nutrition)
     implementation(projects.feature.progress)
+    implementation(projects.feature.achievements)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

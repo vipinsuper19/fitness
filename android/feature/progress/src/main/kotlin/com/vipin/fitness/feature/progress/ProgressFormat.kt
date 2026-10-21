@@ -40,6 +40,9 @@ internal object ProgressFormat {
         MeasureDimension.PERCENT -> "%"
     }
 
+    /** The water series' unit, for the chart title: ml (labels may read 2.5 L) or fl oz. */
+    fun waterUnitLabel(units: UnitSystem): String = if (units == UnitSystem.IMPERIAL) "fl oz" else "ml"
+
     /**
      * A chart value (already in display units) with its unit. Body fat and lengths 1 dp; water in
      * ml, or litres from 1,000 ml (2.5 L), or fl oz for imperial; counts as whole numbers.

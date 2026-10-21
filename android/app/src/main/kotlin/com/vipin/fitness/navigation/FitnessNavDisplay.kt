@@ -15,6 +15,7 @@ import com.vipin.fitness.feature.auth.RegisterRoute
 import com.vipin.fitness.feature.auth.SignInRoute
 import com.vipin.fitness.feature.onboarding.OnboardingRoute
 import com.vipin.fitness.feature.onboarding.ProfileEditRoute
+import com.vipin.fitness.feature.achievements.AchievementsRoute
 import com.vipin.fitness.feature.workout.ActiveSessionRoute
 import com.vipin.fitness.feature.workout.ExerciseDetailRoute
 import com.vipin.fitness.feature.workout.ExerciseLibraryRoute
@@ -69,6 +70,7 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                 Route.Main -> NavEntry(key) {
                     FitnessApp(
                         onOpenProfile = { backStack.add(Route.Profile) },
+                        onOpenAchievements = { backStack.add(Route.Achievements) },
                         onWorkoutNavigate = { dest ->
                             backStack.add(
                                 when (dest) {
@@ -117,6 +119,9 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                 }
                 is Route.SessionSummary -> NavEntry(key) {
                     SessionSummaryRoute(route.localId, onDone = { AppNavigation.backToMain(stack) })
+                }
+                Route.Achievements -> NavEntry(key) {
+                    AchievementsRoute()
                 }
             }
         },

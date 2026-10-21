@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="achievements_title">Badges &amp; challenges</string>
+    <string name="tab_badges">Badges</string>
+    <string name="tab_challenges">Challenges</string>
+    <string name="achievements_coming_soon">Badges and challenges are coming soon.</string>
+    <string name="achievements_retry">Retry</string>
+    <string name="achievements_load_failed">Couldn\'t load. Check your connection and try again.</string>
+    <plurals name="badges_earned_count">
+        <item quantity="one">%1$d of %2$d badges earned</item>
+        <item quantity="other">%1$d of %2$d badges earned</item>
+    </plurals>
+    <string name="badge_earned_on">Earned %1$s</string>
+    <string name="badge_locked">Not earned yet</string>
+    <string name="badge_progress">%1$d / %2$d</string>
+    <string name="bonus_xp">Bonus XP: +%1$d</string>
+    <string name="badge_earned_title">Badge earned!</string>
+    <string name="badge_earned_ok">Nice</string>
+    <string name="badges_empty">No badges yet.</string>
+    <string name="challenges_active">Active</string>
+    <string name="challenges_join_section">Join a challenge</string>
+    <string name="challenges_history">History</string>
+    <string name="challenges_none_active">No active challenges. Pick one below.</string>
+    <string name="challenge_progress">%1$d / %2$d %3$s</string>
+    <plurals name="challenge_days_left">
+        <item quantity="one">%d day left</item>
+        <item quantity="other">%d days left</item>
+    </plurals>
+    <string name="challenge_ends_today">Ends today</string>
+    <string name="challenge_no_deadline">No deadline</string>
+    <string name="challenge_join">Join</string>
+    <string name="challenge_joined">Joined</string>
+    <string name="challenge_leave">Leave</string>
+    <string name="challenge_leave_title">Leave this challenge?</string>
+    <string name="challenge_leave_body">You won\'t get bonus XP for it. A weekly challenge can\'t be rejoined this week.</string>
+    <string name="challenge_leave_cancel">Stay</string>
+    <plurals name="target_with_deadline">
+        <item quantity="one">%1$d in %2$d day</item>
+        <item quantity="other">%1$d in %2$d days</item>
+    </plurals>
+    <string name="status_completed">Completed</string>
+    <string name="status_expired">Expired</string>
+    <string name="status_left">Left</string>
+    <string name="status_unknown">Ended</string>
+    <string name="type_weekly">This week</string>
+    <string name="type_personal">Personal</string>
+    <string name="challenges_load_more">Load more</string>
+    <string name="msg_joined">Challenge joined.</string>
+    <string name="msg_left">You left the challenge.</string>
+    <string name="msg_already_joined">You\'ve already joined this one this week.</string>
+    <string name="msg_limit_reached">You can have 5 active challenges. Leave one to join another.</string>
+    <string name="msg_not_active">This challenge has already ended.</string>
+    <string name="msg_offline">You\'re offline. Joining and leaving need a connection.</string>
+    <string name="msg_failed">Something went wrong. Try again.</string>
+    <string name="home_badges_entry">Badges &amp; challenges</string>
+    <string name="home_badges_entry_body">See your badges and join a weekly challenge.</string>
+</resources>
