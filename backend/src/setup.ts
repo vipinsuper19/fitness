@@ -3,6 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 
+import { createClientIpDebugMiddleware } from './common/client-ip-debug';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { requestIdMiddleware } from './common/request-id';
 import { globalValidationPipe } from './common/validation';
@@ -19,6 +20,8 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   // Render terminates TLS in front of the service; trust one proxy hop for req.ip.
   app.set('trust proxy', env.TRUST_PROXY_HOPS);
   app.use(requestIdMiddleware);
+  // TEMPORARY: remove in the TRUST_PROXY_HOPS fix PR.
+  app.use(createClientIpDebugMiddleware(env.DEBUG_CLIENT_IP));
   app.use(helmet());
   app.useBodyParser('json', { limit: BODY_LIMIT });
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: false });
