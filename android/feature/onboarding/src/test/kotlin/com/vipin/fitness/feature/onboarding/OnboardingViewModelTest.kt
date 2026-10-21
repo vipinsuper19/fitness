@@ -11,6 +11,8 @@ import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
 import com.vipin.fitness.core.testing.MainDispatcherRule
+import com.vipin.fitness.core.data.SessionRepository
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -105,6 +107,58 @@ class OnboardingViewModelTest {
         assertEquals(listOf("k1", "k1"), repo.updates.map { it.second })
         assertEquals(OnboardingStep.GOALS, vm.state.value.step)
         assertFalse(vm.state.value.saving)
+    }
+
+    @Test fun editOnLaterStepSurvivesBackAndEarlierSave() {
+        val vm = vm()
+        vm.next() // ABOUT -> BODY (nothing to send)
+        vm.onForm { it.copy(weight = "70") }
+        vm.next() // saves weight, -> ACTIVITY (step 3)
+        vm.onForm { it.copy(activity = ActivityLevel.ACTIVE) }
+        vm.back() // -> BODY, activity edit unsent
+        vm.onForm { it.copy(weight = "71") }
+        vm.next() // saves BODY only
+        vm.next() // ACTIVITY: must still send the step-3 change
+        assertEquals(
+            listOf(
+                ProfileChanges(weightKg = Field.Set(70.0)),
+                ProfileChanges(weightKg = Field.Set(71.0)),
+                ProfileChanges(activityLevel = Field.Set(ActivityLevel.ACTIVE)),
+            ),
+            repo.updates.map { it.first },
+        )
+        assertEquals(OnboardingStep.GOALS, vm.state.value.step)
+    }
+
+    @Test fun editTypedDuringSaveIsNotMarkedSaved() {
+        val gate = CompletableDeferred<Unit>()
+        repo.gate = gate
+        val vm = vm()
+        vm.onForm { it.copy(displayName = "Vi") }
+        vm.next() // in flight
+        vm.onForm { it.copy(displayName = "Vipin") } // typed while saving
+        gate.complete(Unit)
+        repo.gate = null
+        vm.back()
+        vm.next()
+        assertEquals(
+            listOf(Field.Set("Vi"), Field.Set("Vipin")),
+            repo.updates.map { it.first.displayName },
+        )
+    }
+
+    @Test fun signOutDoubleTapSignsOutOnce() {
+        val session = FakeSessionRepository(signedIn = true)
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : SessionRepository by session {
+            override suspend fun signOut() { gate.await(); session.signOut() }
+        }
+        val vm = ProfileEditViewModel(repo, slow, clock)
+        vm.signOut(); vm.signOut()
+        assertTrue(vm.state.value.signingOut)
+        gate.complete(Unit)
+        assertEquals(1, session.signOuts)
+        assertTrue(vm.state.value.signedOut)
     }
 
     @Test fun backGoesToPreviousStep() {

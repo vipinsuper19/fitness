@@ -17,6 +17,7 @@ android {
 dependencies {
     api(projects.core.common)
     api(projects.core.network)
+    api(projects.core.datastore)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.kotlinx.coroutines.core)

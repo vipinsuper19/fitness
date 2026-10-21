@@ -1,6 +1,7 @@
 package com.vipin.fitness.navigation
 
 import androidx.navigation3.runtime.NavKey
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 
 /** Navigation 3 keys. Serializable so the back stack survives process death. */
@@ -15,8 +16,16 @@ sealed interface Route : NavKey {
 
 /** Back-stack moves, kept pure so they can be unit tested. */
 object AppNavigation {
-    /** Signed-in users go through Onboarding, which forwards to Main if it's already complete. */
-    fun startRoute(signedIn: Boolean): Route = if (signedIn) Route.Onboarding else Route.SignIn()
+    /**
+     * Signed out: SignIn. Signed in and known (cached) to have finished onboarding: Main, with no
+     * network needed. Otherwise Onboarding, which loads the profile and forwards to Main if the
+     * server says it's complete.
+     */
+    fun startRoute(signedIn: Boolean, onboardingCompleted: Boolean): Route = when {
+        !signedIn -> Route.SignIn()
+        onboardingCompleted -> Route.Main
+        else -> Route.Onboarding
+    }
 
     fun resetTo(stack: MutableList<Any>, route: Route) {
         stack.clear()
@@ -29,6 +38,21 @@ object AppNavigation {
     fun onSessionExpired(stack: MutableList<Any>) {
         if (stack.lastOrNull() is Route.SignIn) return // already there (e.g. two expiry signals)
         resetTo(stack, Route.SignIn(expired = true))
+    }
+
+    /**
+     * Each time the UI reaches STARTED. Catches an expiry signalled while nothing was collecting
+     * (app in background) and a back stack restored after process death with the session gone.
+     */
+    fun onStarted(stack: MutableList<Any>, signedIn: Boolean) {
+        val top = stack.lastOrNull()
+        if (!signedIn && top !is Route.SignIn && top != Route.Register) onSessionExpired(stack)
+    }
+
+    /** Runs while STARTED: check the session once, then follow live expiry signals. */
+    suspend fun guardSession(stack: MutableList<Any>, isSignedIn: () -> Boolean, expired: Flow<Unit>) {
+        onStarted(stack, isSignedIn())
+        expired.collect { onSessionExpired(stack) }
     }
 
     /** "Sign in instead" from Register: replace Register so Back doesn't return to it. */

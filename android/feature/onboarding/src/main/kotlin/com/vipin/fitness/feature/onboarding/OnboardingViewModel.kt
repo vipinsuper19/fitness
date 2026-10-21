@@ -142,7 +142,9 @@ class OnboardingViewModel @Inject constructor(
             when (val r = profiles.update(changes, key)) {
                 is ApiResult.Success -> {
                     pending = null
-                    if (!skip) initial = _state.value.form // what's on the server now
+                    // Baseline = what the server now holds. Not the live form: edits on other steps
+                    // (made before going Back) or typed during this save must still count as unsent.
+                    initial = ProfileForm.from(r.value)
                     _state.update { it.copy(saving = false) }
                     moveOn(s.step, keepForm = skip)
                 }

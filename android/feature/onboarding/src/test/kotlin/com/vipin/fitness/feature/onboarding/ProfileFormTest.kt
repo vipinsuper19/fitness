@@ -60,6 +60,12 @@ class ProfileFormTest {
         assertTrue(ProfileForm(heightCm = "175,5", weight = "").errors(all, year).isEmpty()) // comma decimal, empty ok
     }
 
+    @Test fun decimalFeetRejected() {
+        val f = ProfileForm(units = UnitSystem.IMPERIAL, heightFt = "5.5", heightIn = "0")
+        assertEquals(FieldError.HEIGHT, f.errors(all, year)[ProfileField.HEIGHT])
+        assertTrue(f.copy(heightFt = "5", heightIn = "6.5").errors(all, year).isEmpty())
+    }
+
     @Test fun onlyRequestedFieldsAreConsidered() {
         val initial = ProfileForm()
         val f = initial.copy(displayName = "A", weight = "70")

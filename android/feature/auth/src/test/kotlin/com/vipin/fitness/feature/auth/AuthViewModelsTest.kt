@@ -99,6 +99,29 @@ class AuthViewModelsTest {
         assertNotEquals(session.registerKeys[0], session.registerKeys[2])
     }
 
+    @Test fun registerIdempotencyConflictsShowFriendlyText() {
+        var n = 0
+        val vm = RegisterViewModel(session).apply { newKey = { "k${++n}" } }
+        vm.onEmail("v@x.in"); vm.onPassword("password1")
+        session.registerResult = AuthOutcome.Failure(AuthFailure.InProgress)
+        vm.submit()
+        assertEquals(UiText.Res(R.string.auth_error_in_progress), vm.state.value.error)
+        session.registerResult = AuthOutcome.Failure(AuthFailure.KeyReused)
+        vm.submit()
+        assertEquals(UiText.Res(R.string.auth_error_try_again), vm.state.value.error)
+        session.registerResult = AuthOutcome.Success
+        vm.submit()
+        assertEquals(listOf("k1", "k1", "k2"), session.registerKeys) // in-progress reuses; reused key renewed
+    }
+
+    @Test fun unexpectedErrorShowsGenericText() {
+        session.signInResult = AuthOutcome.Failure(AuthFailure.Unexpected)
+        val vm = SignInViewModel(session)
+        vm.onEmail("v@x.in"); vm.onPassword("pw")
+        vm.submit()
+        assertEquals(UiText.Res(R.string.auth_error_generic), vm.state.value.error)
+    }
+
     @Test fun registerSuccess() {
         val vm = RegisterViewModel(session)
         vm.onEmail("v@x.in"); vm.onPassword("password1")

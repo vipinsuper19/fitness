@@ -22,4 +22,16 @@ class UserPreferencesRepositoryTest {
         repo.setUnitSystem(UnitSystem.IMPERIAL)
         assertEquals(UnitSystem.IMPERIAL, repo.unitSystem.first())
     }
+
+    @Test fun profileFlagsCacheSavesAndClears() = runTest {
+        val ds = PreferenceDataStoreFactory.create(scope = backgroundScope) { File(tmp.root, "flags.preferences_pb") }
+        val repo = UserPreferencesRepository(ds)
+        assertEquals(false, repo.onboardingCompleted())
+        repo.save(onboardingCompleted = true, units = UnitSystem.IMPERIAL)
+        assertEquals(true, repo.onboardingCompleted())
+        assertEquals(UnitSystem.IMPERIAL, repo.unitSystem.first())
+        repo.clear()
+        assertEquals(false, repo.onboardingCompleted())
+        assertEquals(UnitSystem.METRIC, repo.unitSystem.first())
+    }
 }

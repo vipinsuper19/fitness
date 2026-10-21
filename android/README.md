@@ -15,7 +15,7 @@ Networking (Retrofit 3 + OkHttp 5 + kotlinx.serialization), encrypted token stor
 - `core:database` – `FitnessDatabase` (Room, schemas exported to `core/database/schemas/`), `pending_writes` outbox.
 - `core:designsystem` – `FitnessTheme` (Material 3, light/dark, optional dynamic color), typography, shared placeholder.
 - `feature:auth` – sign-in and registration.
-- `feature:onboarding` – resumable 4-step onboarding and profile edit.
+- `feature:onboarding` – resumable 4-step onboarding **and the profile edit screen** (`ProfileEditRoute`/`ProfileEditViewModel`), which lives here because it reuses the onboarding `ProfileForm`. Move it to a `feature:profile` module if it grows.
 - `feature:home`, `feature:workout`, `feature:nutrition`, `feature:progress` – tab screen stubs.
 
 ## Build (JDK 21)

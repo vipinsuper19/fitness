@@ -84,6 +84,7 @@ data class ProfileForm(
             val ft = num(heightFt); val inch = num(heightIn)
             if (ft is Parsed.Bad || inch is Parsed.Bad) return Parsed.Bad
             val f = (ft as Parsed.Ok).value; val i = (inch as Parsed.Ok).value
+            if (f != null && f % 1.0 != 0.0) return Parsed.Bad // whole feet only; fractions go in inches
             if (f == null && i == null) null else UnitConversion.feetInchesToCm((f ?: 0.0).toInt(), i ?: 0.0)
         }
         return if (cm == null || cm in 50.0..272.0) Parsed.Ok(cm?.let { round(it, 1) }) else Parsed.Bad

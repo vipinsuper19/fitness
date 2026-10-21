@@ -83,7 +83,7 @@ fun ProfileEditRoute(onSignedOut: () -> Unit, viewModel: ProfileEditViewModel = 
             Button(onClick = viewModel::save, enabled = !s.saving, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.profile_save))
             }
-            OutlinedButton(onClick = viewModel::signOut, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = viewModel::signOut, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.profile_sign_out))
             }
         }

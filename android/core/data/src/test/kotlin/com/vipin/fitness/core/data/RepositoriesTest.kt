@@ -1,5 +1,8 @@
 package com.vipin.fitness.core.data
 
+import com.vipin.fitness.core.common.UnitSystem
+import com.vipin.fitness.core.datastore.ProfileFlagsCache
+import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.ProfileApi
 import com.vipin.fitness.core.network.auth.AuthApi
@@ -28,6 +31,15 @@ class RepositoriesTest {
         override fun clear() { tokens = null }
     }
 
+    private class MemoryCache : ProfileFlagsCache {
+        var completed: Boolean? = null
+        var units: UnitSystem? = null
+        override suspend fun onboardingCompleted() = completed ?: false
+        override suspend fun save(onboardingCompleted: Boolean, units: UnitSystem) { completed = onboardingCompleted; this.units = units }
+        override suspend fun clear() { completed = null; units = null }
+    }
+
+    private val cache = MemoryCache()
     private val server = MockWebServer()
     private val json = fitnessJson()
     private val store = MemoryTokenStore()
@@ -38,8 +50,8 @@ class RepositoriesTest {
         server.start()
         val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         val clock = Clock.fixed(Instant.ofEpochMilli(0), ZoneOffset.UTC)
-        session = DefaultSessionRepository(r.create(AuthApi::class.java), store, SessionEvents(), json, clock)
-        profiles = DefaultProfileRepository(r.create(ProfileApi::class.java), json)
+        session = DefaultSessionRepository(r.create(AuthApi::class.java), store, SessionEvents(), json, clock, cache)
+        profiles = DefaultProfileRepository(r.create(ProfileApi::class.java), json, cache)
     }
 
     @After fun tearDown() = server.close()
@@ -74,9 +86,11 @@ class RepositoriesTest {
 
     @Test fun signOutClearsLocallyEvenIfServerFails() = runTest {
         store.tokens = AuthTokens("a", "r", 0)
+        cache.completed = true
         server.enqueue(MockResponse(code = 500, body = ""))
         session.signOut()
         assertNull(store.tokens)
+        assertNull(cache.completed)
         assertEquals("""{"refreshToken":"r"}""", server.takeRequest().body?.utf8())
     }
 
@@ -94,5 +108,30 @@ class RepositoriesTest {
         assertEquals("PUT", req.method)
         assertEquals("k-9", req.headers["Idempotency-Key"])
         assertEquals("""{"birthYear":null,"heightCm":180.0}""", req.body?.utf8())
+        assertEquals(false, cache.completed)
+    }
+
+    @Test fun profileLoadRefreshesLaunchCache() = runTest {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"userId":"u","unitSystem":"imperial","timezone":"Asia/Kolkata",
+                    "locale":"en-IN","currency":"INR","onboardingCompleted":true,"updatedAt":"t"}""",
+            ),
+        )
+        server.enqueue(MockResponse(code = 503, body = ""))
+        profiles.get()
+        assertEquals(true, cache.completed)
+        assertEquals(UnitSystem.IMPERIAL, cache.units)
+        profiles.get() // failure leaves the cache alone
+        assertEquals(true, cache.completed)
+    }
+
+    @Test fun idempotencyConflictsAndUnexpectedMapped() = runTest {
+        server.enqueue(MockResponse(code = 409, body = """{"code":"IDEMPOTENCY_IN_PROGRESS","message":"busy","requestId":"q"}"""))
+        server.enqueue(MockResponse(code = 409, body = """{"code":"IDEMPOTENCY_KEY_REUSED","message":"reused","requestId":"q"}"""))
+        assertEquals(AuthOutcome.Failure(AuthFailure.InProgress), session.register("v@x.in", "password1", null, "k"))
+        assertEquals(AuthOutcome.Failure(AuthFailure.KeyReused), session.register("v@x.in", "password1", null, "k"))
+        assertEquals(AuthFailure.Unexpected, ApiError.Unexpected(IllegalStateException("secret detail")).toAuthFailure())
     }
 }

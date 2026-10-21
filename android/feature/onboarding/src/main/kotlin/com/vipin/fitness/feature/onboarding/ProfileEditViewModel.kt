@@ -28,6 +28,7 @@ data class ProfileEditState(
     val saving: Boolean = false,
     val error: UiText? = null,
     val saved: Boolean = false,
+    val signingOut: Boolean = false,
     val signedOut: Boolean = false,
 )
 
@@ -100,10 +101,12 @@ class ProfileEditViewModel @Inject constructor(
     }
 
     fun signOut() {
-        if (_state.value.signedOut) return
+        val s = _state.value
+        if (s.signedOut || s.signingOut) return
+        _state.update { it.copy(signingOut = true) } // set before launch: a double tap signs out once
         viewModelScope.launch {
             session.signOut()
-            _state.update { it.copy(signedOut = true) }
+            _state.update { it.copy(signingOut = false, signedOut = true) }
         }
     }
 }

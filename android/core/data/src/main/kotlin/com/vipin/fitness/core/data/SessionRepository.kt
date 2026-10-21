@@ -1,5 +1,6 @@
 package com.vipin.fitness.core.data
 
+import com.vipin.fitness.core.datastore.ProfileFlagsCache
 import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.apiCall
@@ -28,6 +29,12 @@ sealed interface AuthFailure {
     data class Validation(val message: String) : AuthFailure
     data object RateLimited : AuthFailure
     data object Network : AuthFailure
+    /** Register: the same sign-up is still being processed (409 IDEMPOTENCY_IN_PROGRESS). */
+    data object InProgress : AuthFailure
+    /** Register: the key was used with different details (409 IDEMPOTENCY_KEY_REUSED). Retry with a new key. */
+    data object KeyReused : AuthFailure
+    /** Client-side or unknown failure; the UI shows generic text, never the exception message. */
+    data object Unexpected : AuthFailure
     data class Other(val message: String) : AuthFailure
 }
 
@@ -53,6 +60,7 @@ class DefaultSessionRepository @Inject constructor(
     private val events: SessionEvents,
     private val json: Json,
     private val clock: Clock,
+    private val cache: ProfileFlagsCache,
 ) : SessionRepository {
     override fun isSignedIn() = tokens.get() != null
     override val sessionExpired: Flow<Unit> = events.expired
@@ -71,6 +79,7 @@ class DefaultSessionRepository @Inject constructor(
         // Best effort: revoke on the server, but always forget locally.
         if (refresh != null) apiCall(json) { api.logout(RefreshRequestDto(refresh)) }
         withContext(Dispatchers.IO) { tokens.clear() }
+        cache.clear()
     }
 
     private suspend fun authenticate(call: suspend () -> AuthResponseDto): AuthOutcome =
@@ -85,10 +94,12 @@ class DefaultSessionRepository @Inject constructor(
 
 internal fun ApiError.toAuthFailure(): AuthFailure = when (this) {
     ApiError.Network -> AuthFailure.Network
-    is ApiError.Unexpected -> AuthFailure.Other(cause.message ?: "Unexpected error")
+    is ApiError.Unexpected -> AuthFailure.Unexpected
     is ApiError.Http -> when {
         code == "INVALID_CREDENTIALS" -> AuthFailure.InvalidCredentials
         code == "EMAIL_TAKEN" -> AuthFailure.EmailTaken
+        code == "IDEMPOTENCY_IN_PROGRESS" -> AuthFailure.InProgress
+        code == "IDEMPOTENCY_KEY_REUSED" -> AuthFailure.KeyReused
         status == 429 -> AuthFailure.RateLimited
         status == 400 -> AuthFailure.Validation(message)
         else -> AuthFailure.Other(message)

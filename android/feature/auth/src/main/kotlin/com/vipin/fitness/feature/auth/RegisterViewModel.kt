@@ -66,12 +66,16 @@ class RegisterViewModel @Inject constructor(private val session: SessionReposito
         viewModelScope.launch {
             when (val r = session.register(s.email, s.password, s.displayName, key)) {
                 AuthOutcome.Success -> _state.update { it.copy(submitting = false, registered = true, password = "") }
-                is AuthOutcome.Failure -> _state.update {
-                    it.copy(
-                        submitting = false,
-                        error = r.reason.toUiText(),
-                        emailTaken = r.reason == AuthFailure.EmailTaken,
-                    )
+                is AuthOutcome.Failure -> {
+                    // A reused key can never succeed; the next attempt must use a fresh one.
+                    if (r.reason == AuthFailure.KeyReused) idempotencyKey = null
+                    _state.update {
+                        it.copy(
+                            submitting = false,
+                            error = r.reason.toUiText(),
+                            emailTaken = r.reason == AuthFailure.EmailTaken,
+                        )
+                    }
                 }
             }
         }

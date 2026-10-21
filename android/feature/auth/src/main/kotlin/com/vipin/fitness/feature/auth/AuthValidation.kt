@@ -16,6 +16,9 @@ internal fun AuthFailure.toUiText(): UiText = when (this) {
     AuthFailure.EmailTaken -> UiText.Res(R.string.auth_error_email_taken)
     AuthFailure.RateLimited -> UiText.Res(R.string.auth_error_rate_limited)
     AuthFailure.Network -> UiText.Res(R.string.auth_error_network)
+    AuthFailure.InProgress -> UiText.Res(R.string.auth_error_in_progress)
+    AuthFailure.KeyReused -> UiText.Res(R.string.auth_error_try_again)
+    AuthFailure.Unexpected -> UiText.Res(R.string.auth_error_generic)
     is AuthFailure.Validation -> UiText.Raw(message)
     is AuthFailure.Other -> UiText.Raw(message)
 }

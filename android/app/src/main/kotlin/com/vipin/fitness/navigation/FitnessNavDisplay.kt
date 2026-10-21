@@ -21,14 +21,14 @@ import kotlinx.coroutines.flow.Flow
 private fun MutableList<NavKey>.asAny() = this as MutableList<Any>
 
 @Composable
-fun FitnessNavDisplay(startRoute: Route, sessionExpired: Flow<Unit>) {
+fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpired: Flow<Unit>) {
     val backStack = rememberNavBackStack(startRoute)
     val stack = backStack.asAny()
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(sessionExpired, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            sessionExpired.collect { AppNavigation.onSessionExpired(stack) }
+            AppNavigation.guardSession(stack, isSignedIn, sessionExpired)
         }
     }
 

@@ -18,5 +18,8 @@
     <string name="auth_error_email_taken">An account with this email already exists.</string>
     <string name="auth_error_rate_limited">Too many attempts. Wait a minute and try again.</string>
     <string name="auth_error_network">Can\'t reach the server. Check your connection and try again.</string>
+    <string name="auth_error_in_progress">We\'re still creating your account. Wait a moment, then try again.</string>
+    <string name="auth_error_try_again">That didn\'t go through. Please try again.</string>
+    <string name="auth_error_generic">Something went wrong. Please try again.</string>
     <string name="auth_session_expired">Your session ended. Please sign in again.</string>
 </resources>
