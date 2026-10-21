@@ -40,7 +40,7 @@ internal fun ErrorBox(message: String, onRetry: () -> Unit) = Centered {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun <T> ChipRow(title: String?, options: List<T>, isSelected: (T) -> Boolean, label: (T) -> String, onClick: (T) -> Unit) {
+internal fun <T> ChipRow(title: String?, options: List<T>, isSelected: (T) -> Boolean, label: @Composable (T) -> String, onClick: (T) -> Unit) {
     Column {
         title?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

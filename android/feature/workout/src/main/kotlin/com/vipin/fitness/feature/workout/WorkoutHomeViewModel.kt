@@ -2,6 +2,7 @@ package com.vipin.fitness.feature.workout
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vipin.fitness.core.common.time.today
 import com.vipin.fitness.core.data.userMessage
 import com.vipin.fitness.core.data.workout.ActivePlan
 import com.vipin.fitness.core.data.workout.PlannedWorkout
@@ -44,8 +45,9 @@ class WorkoutHomeViewModel @Inject constructor(
     private val repo: WorkoutRepository,
     private val clock: Clock,
 ) : ViewModel() {
-    private val today get() = LocalDate.now(clock)
-    private val _state = MutableStateFlow(WorkoutHomeState(selectedDay = LocalDate.now(clock).dayOfWeek))
+    /** The date the week was built for; a new day (app left open overnight) rebuilds it. */
+    private var shownDate: LocalDate = clock.today()
+    private val _state = MutableStateFlow(WorkoutHomeState(selectedDay = shownDate.dayOfWeek))
     val state: StateFlow<WorkoutHomeState> = _state.asStateFlow()
 
     init {
@@ -54,7 +56,11 @@ class WorkoutHomeViewModel @Inject constructor(
         refresh()
     }
 
+    /** Screen resumed: the date may have changed since the week was built. */
+    fun onResume() = refresh()
+
     fun refresh() {
+        rebuildWeekIfNewDay()
         _state.update { it.copy(loading = it.plan == null, error = null, stale = false) }
         viewModelScope.launch {
             when (val r = repo.refreshActivePlan()) {
@@ -63,6 +69,20 @@ class WorkoutHomeViewModel @Inject constructor(
                     if (it.plan != null) it.copy(loading = false, stale = true) else it.copy(loading = false, error = r.error.userMessage())
                 }
             }
+        }
+    }
+
+    private fun rebuildWeekIfNewDay() {
+        val now = clock.today()
+        if (now == shownDate) return
+        val old = shownDate
+        shownDate = now
+        _state.update {
+            it.copy(
+                week = if (it.week.isEmpty()) it.week else week(it.plan),
+                // Follow "today" unless the user picked another day.
+                selectedDay = if (it.selectedDay == old.dayOfWeek) now.dayOfWeek else it.selectedDay,
+            )
         }
     }
 
@@ -80,7 +100,7 @@ class WorkoutHomeViewModel @Inject constructor(
     }
 
     private fun week(plan: WorkoutPlan?): List<DayCell> {
-        val t = today
+        val t = shownDate
         val monday = t.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
         return DayOfWeek.entries.map { d ->
             val date = monday.plusDays((d.value - 1).toLong())

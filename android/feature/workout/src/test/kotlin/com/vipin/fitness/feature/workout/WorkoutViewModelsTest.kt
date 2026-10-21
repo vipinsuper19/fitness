@@ -35,6 +35,14 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
+import com.vipin.fitness.core.data.workout.ExerciseFilter
+
+private class MutableClock(var now: Instant) : Clock() {
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(now, zone)
+    override fun instant(): Instant = now
+}
 
 private val draft = PlanDraft(
     "Starter", 4, PlanSource.RULE_BASED, "Because",
@@ -75,6 +83,36 @@ class WorkoutHomeViewModelTest {
         vm.refresh()
         assertTrue(vm.state.value.stale)
         assertEquals("p1", vm.state.value.plan?.id)
+    }
+
+    @Test fun todayIsInIndiaNotUtc() {
+        // 20:00 UTC on the 20th is 01:30 IST on Wednesday the 21st.
+        val utc = Clock.fixed(Instant.parse("2026-10-20T20:00:00Z"), ZoneOffset.UTC)
+        val s = WorkoutHomeViewModel(repo, utc).state.value
+        assertEquals(LocalDate.of(2026, 10, 21), s.week.single { it.isToday }.date)
+        assertEquals(DayOfWeek.WEDNESDAY, s.selectedDay)
+    }
+
+    @Test fun resumeOnANewDayRebuildsWeekAndToday() {
+        val clock = MutableClock(Instant.parse("2026-10-25T10:00:00Z")) // Sunday IST
+        val vm = WorkoutHomeViewModel(repo, clock)
+        assertEquals(LocalDate.of(2026, 10, 19), vm.state.value.week.first().date)
+        clock.now = Instant.parse("2026-10-25T19:00:00Z") // 00:30 IST Monday 26th
+        vm.onResume()
+        val s = vm.state.value
+        assertEquals(LocalDate.of(2026, 10, 26), s.week.first().date)
+        assertEquals(DayOfWeek.MONDAY, s.selectedDay)
+        assertTrue(s.week.first().isToday)
+    }
+
+    @Test fun resumeKeepsAPickedDay() {
+        val clock = MutableClock(Instant.parse("2026-10-21T10:00:00Z"))
+        val vm = WorkoutHomeViewModel(repo, clock)
+        vm.select(DayOfWeek.FRIDAY)
+        clock.now = Instant.parse("2026-10-22T10:00:00Z")
+        vm.onResume()
+        assertEquals(DayOfWeek.FRIDAY, vm.state.value.selectedDay)
+        assertEquals(DayOfWeek.THURSDAY, vm.state.value.week.single { it.isToday }.day)
     }
 
     @Test fun followsActivationElsewhere() {
@@ -123,6 +161,19 @@ class ExerciseLibraryViewModelTest {
         assertEquals(2, repo.exerciseCalls.size)
         vm.loadMore(); runCurrent()
         assertEquals(2, repo.exerciseCalls.size)
+    }
+
+    @Test fun loadMoreDuringDebounceUsesTheLoadedFilter() = runTest(main.dispatcher) {
+        repo.pages = { _, c -> ApiResult.Success(ExercisePage(listOf(testExercise(c ?: "a")), if (c == null) "n1" else null)) }
+        val vm = ExerciseLibraryViewModel(repo, store)
+        vm.onQuery("squat")
+        advanceTimeBy(301); runCurrent()
+        vm.onQuery("bench") // still inside the debounce window
+        vm.loadMore(); runCurrent()
+        assertEquals(ExerciseFilter(query = "squat") to "n1", repo.exerciseCalls.last())
+        advanceTimeBy(301); runCurrent()
+        assertEquals(ExerciseFilter(query = "bench") to null, repo.exerciseCalls.last())
+        assertEquals(ExerciseFilter(query = "bench"), vm.state.value.loadedFilter)
     }
 
     @Test fun pickAddsOnceToTheDay() = runTest(main.dispatcher) {
@@ -240,6 +291,28 @@ class PlanPreviewViewModelTest {
         vm.saveAndActivate()
         assertEquals(listOf("k1", "k1"), repo.createKeys)
         assertEquals("p9", repo.activateCalls.single().first)
+    }
+
+    @Test fun reopenedPreviewAfterActivateFailureOnlyActivates() {
+        var fail = true
+        repo.activateResult = { if (fail) networkFailure else null }
+        vm().saveAndActivate() // created p1, activate failed; user leaves Preview
+        fail = false
+        val reopened = vm() // a new ViewModel, same store
+        reopened.saveAndActivate()
+        assertEquals(listOf("k1"), repo.createKeys)
+        assertEquals(listOf("p1" to "k2", "p1" to "k2"), repo.activateCalls)
+        assertTrue(reopened.state.value.done)
+        assertEquals(SaveProgress(), store.saveProgress.value)
+    }
+
+    @Test fun newDraftStartsANewSave() {
+        repo.activateResult = { networkFailure }
+        vm().saveAndActivate()
+        store.setPreview(draft.copy(name = "Other"))
+        repo.activateResult = { null }
+        vm().saveAndActivate()
+        assertEquals(2, repo.createKeys.distinct().size)
     }
 
     @Test fun doubleTapCreatesOnce() {

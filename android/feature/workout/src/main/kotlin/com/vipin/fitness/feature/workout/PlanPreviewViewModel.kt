@@ -27,8 +27,9 @@ data class PlanPreviewState(
 
 /**
  * Preview, then save as version 1 and activate. Two calls: if create succeeds and activate
- * fails, the created plan id is kept so a retry only activates (no duplicate plan). Each call has
- * its own Idempotency-Key, reused across retries.
+ * fails, the created plan id is kept (in [PlanBuilderStore.saveProgress], so it outlives this
+ * ViewModel) and a retry only activates: no duplicate plan. Each call has its own
+ * Idempotency-Key, reused across retries.
  */
 @HiltViewModel
 class PlanPreviewViewModel @Inject constructor(
@@ -39,9 +40,6 @@ class PlanPreviewViewModel @Inject constructor(
     val state: StateFlow<PlanPreviewState> = _state.asStateFlow()
 
     internal var newKey: () -> String = ::newIdempotencyKey
-    private var createKey: String? = null
-    private var activateKey: String? = null
-    private var createdPlanId: String? = null
 
     init {
         val draft = _state.value.draft
@@ -59,14 +57,15 @@ class PlanPreviewViewModel @Inject constructor(
         if (s.saving || s.done) return
         _state.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
-            val planId = createdPlanId ?: when (val c = repo.create(draft, createKey ?: newKey().also { createKey = it })) {
-                is ApiResult.Success -> c.value.id.also { createdPlanId = it }
+            val p = store.saveProgress.value
+            val planId = p.createdPlanId ?: when (val c = repo.create(draft, p.createKey ?: newKey().also { k -> store.updateSaveProgress { it.copy(createKey = k) } })) {
+                is ApiResult.Success -> c.value.id.also { id -> store.updateSaveProgress { it.copy(createdPlanId = id) } }
                 is ApiResult.Failure -> {
                     _state.update { it.copy(saving = false, error = c.error.userMessage()) }
                     return@launch
                 }
             }
-            when (val a = repo.activate(planId, activateKey ?: newKey().also { activateKey = it })) {
+            when (val a = repo.activate(planId, store.saveProgress.value.activateKey ?: newKey().also { k -> store.updateSaveProgress { it.copy(activateKey = k) } })) {
                 is ApiResult.Success -> {
                     store.clearPreview()
                     if (draft.source == PlanSource.CUSTOM) store.resetCustom()

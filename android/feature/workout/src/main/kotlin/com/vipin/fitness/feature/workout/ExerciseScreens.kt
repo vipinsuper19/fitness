@@ -70,7 +70,7 @@ fun ExerciseLibraryRoute(
                     ListItem(
                         headlineContent = { Text(e.name) },
                         supportingContent = {
-                            Text(listOfNotNull(e.primaryMuscle?.label(), e.equipment.joinToString { it.label() }.ifEmpty { null }).joinToString(" · "))
+                            Text(listOfNotNull(e.primaryMuscle?.label(), e.equipment.map { it.label() }.joinToString().ifEmpty { null }).joinToString(" · "))
                         },
                         modifier = Modifier.clickable { if (pickDay != null) viewModel.pick(e) else onOpen(e.id) }.testTag("exercise_${e.id}"),
                     )
@@ -112,8 +112,8 @@ fun ExerciseDetailRoute(
                 Text(e.name, style = MaterialTheme.typography.headlineSmall)
                 e.nameHi?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
                 e.primaryMuscle?.let { Text(stringResource(R.string.primary_muscle, it.label())) }
-                if (e.secondaryMuscles.isNotEmpty()) Text(stringResource(R.string.secondary_muscles, e.secondaryMuscles.joinToString { it.label() }))
-                if (e.equipment.isNotEmpty()) Text(stringResource(R.string.equipment_list, e.equipment.joinToString { it.label() }))
+                if (e.secondaryMuscles.isNotEmpty()) Text(stringResource(R.string.secondary_muscles, e.secondaryMuscles.map { it.label() }.joinToString()))
+                if (e.equipment.isNotEmpty()) Text(stringResource(R.string.equipment_list, e.equipment.map { it.label() }.joinToString()))
                 e.difficulty?.let { Text(stringResource(R.string.difficulty, it.label())) }
                 if (e.instructions.isNotEmpty()) {
                     Text(stringResource(R.string.instructions), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))

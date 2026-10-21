@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.time.DayOfWeek
 import javax.inject.Inject
+import com.vipin.fitness.core.data.UserScopedState
 import javax.inject.Singleton
 
 /** One exercise in the custom builder. Reps or duration applies depending on the exercise's tracking type. */
@@ -31,6 +32,13 @@ data class CustomPlan(
     val days: Map<DayOfWeek, CustomDay> = emptyMap(),
 )
 
+/**
+ * Progress of saving the preview draft. Kept with the draft (not in the ViewModel) so that
+ * leaving and reopening Preview after "created but activate failed" only activates, and every
+ * retry reuses the same Idempotency-Keys.
+ */
+data class SaveProgress(val createKey: String? = null, val activateKey: String? = null, val createdPlanId: String? = null)
+
 enum class CustomPlanError { NAME, NO_DAYS, EMPTY_DAY, BAD_SETS, BAD_REPS, BAD_DURATION }
 
 /**
@@ -38,7 +46,7 @@ enum class CustomPlanError { NAME, NO_DAYS, EMPTY_DAY, BAD_SETS, BAD_REPS, BAD_D
  * adds to it in pick mode) and the draft shown in preview. In memory only.
  */
 @Singleton
-class PlanBuilderStore @Inject constructor() {
+class PlanBuilderStore @Inject constructor() : UserScopedState {
     private val _custom = MutableStateFlow(CustomPlan())
     val custom: StateFlow<CustomPlan> = _custom.asStateFlow()
 
@@ -88,12 +96,26 @@ class PlanBuilderStore @Inject constructor() {
         _custom.value = CustomPlan()
     }
 
+    private val _saveProgress = MutableStateFlow(SaveProgress())
+    val saveProgress: StateFlow<SaveProgress> = _saveProgress.asStateFlow()
+
+    /** A new draft starts a new save: progress belongs to the draft it was made for. */
     fun setPreview(draft: PlanDraft) {
         _preview.value = draft
+        _saveProgress.value = SaveProgress()
     }
+
+    fun updateSaveProgress(f: (SaveProgress) -> SaveProgress) = _saveProgress.update(f)
 
     fun clearPreview() {
         _preview.value = null
+        _saveProgress.value = SaveProgress()
+    }
+
+    /** Sign-out / sign-in: nothing here belongs to the next user. */
+    override fun clearUserState() {
+        resetCustom()
+        clearPreview()
     }
 
     companion object {

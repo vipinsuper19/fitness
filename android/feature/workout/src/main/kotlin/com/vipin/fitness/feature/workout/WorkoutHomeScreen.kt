@@ -25,6 +25,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.DayOfWeek
 
@@ -42,6 +46,12 @@ fun WorkoutHomeRoute(
     viewModel: WorkoutHomeViewModel = hiltViewModel(),
 ) {
     val s by viewModel.state.collectAsStateWithLifecycle()
+    var resumedOnce by remember { mutableStateOf(false) }
+    LifecycleResumeEffect(Unit) {
+        // The first resume is covered by the ViewModel's own initial load.
+        if (resumedOnce) viewModel.onResume() else resumedOnce = true
+        onPauseOrDispose { }
+    }
     Column(modifier.fillMaxSize()) {
         when {
             s.loading -> LoadingBox()

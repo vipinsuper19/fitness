@@ -56,6 +56,13 @@ class WorkoutRepositoryTest {
         assertEquals(ActivePlan.None, repo.activePlan.value)
     }
 
+    @Test fun clearUserStateForgetsThePlan() = runTest {
+        server.enqueue(MockResponse(code = 200, body = planJson()))
+        repo.refreshActivePlan()
+        repo.clearUserState()
+        assertNull(repo.activePlan.value)
+    }
+
     @Test fun activePlanSortedByDayAndOrder() = runTest {
         server.enqueue(MockResponse(code = 200, body = planJson()))
         val plan = ((repo.refreshActivePlan() as ApiResult.Success).value as ActivePlan.Some).plan

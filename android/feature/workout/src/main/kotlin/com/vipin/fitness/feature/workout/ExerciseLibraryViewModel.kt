@@ -31,6 +31,8 @@ data class LibraryState(
     val loadingMore: Boolean = false,
     val error: String? = null,
     val nextCursor: String? = null,
+    /** The filter [items] and [nextCursor] were loaded with; [filter] is the live input, ahead during the debounce. */
+    val loadedFilter: ExerciseFilter? = null,
     /** Pick mode: tapping an exercise adds it to this day of the custom plan. */
     val pickDay: DayOfWeek? = null,
     val picked: Boolean = false,
@@ -81,9 +83,9 @@ class ExerciseLibraryViewModel @Inject constructor(
     fun loadMore() {
         val s = _state.value
         val cursor = s.nextCursor ?: return
+        val filter = s.loadedFilter ?: return
         if (s.loading || s.loadingMore) return
         _state.update { it.copy(loadingMore = true, error = null) }
-        val filter = currentFilter()
         loadJob = viewModelScope.launch {
             when (val r = repo.exercises(filter, cursor)) {
                 is ApiResult.Success -> _state.update {
@@ -107,7 +109,7 @@ class ExerciseLibraryViewModel @Inject constructor(
 
     private fun load(filter: ExerciseFilter) {
         loadJob?.cancel() // a newer filter wins; stale pages are dropped
-        _state.update { it.copy(loading = true, loadingMore = false, error = null) }
+        _state.update { it.copy(loading = true, loadingMore = false, error = null, nextCursor = null, loadedFilter = filter) }
         loadJob = viewModelScope.launch {
             when (val r = repo.exercises(filter)) {
                 is ApiResult.Success -> _state.update { it.copy(items = r.value.items, nextCursor = r.value.nextCursor, loading = false) }

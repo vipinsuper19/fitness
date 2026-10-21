@@ -1,5 +1,6 @@
 package com.vipin.fitness.core.data.workout
 
+import com.vipin.fitness.core.data.UserScopedState
 import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.WorkoutApi
@@ -40,10 +41,15 @@ sealed interface ActivePlan {
 class DefaultWorkoutRepository @Inject constructor(
     private val api: WorkoutApi,
     private val json: Json,
-) : WorkoutRepository {
+) : WorkoutRepository, UserScopedState {
     private val _active = MutableStateFlow<ActivePlan?>(null)
     override val activePlan: StateFlow<ActivePlan?> = _active.asStateFlow()
     private val exerciseCache = ConcurrentHashMap<String, Exercise>()
+
+    /** The catalog is shared, so the exercise cache stays; the plan is the user's. */
+    override fun clearUserState() {
+        _active.value = null
+    }
 
     override suspend fun refreshActivePlan(): ApiResult<ActivePlan> = apiCall(json) {
         val r = api.active()

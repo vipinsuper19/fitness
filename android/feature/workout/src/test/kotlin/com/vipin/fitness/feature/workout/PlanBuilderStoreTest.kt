@@ -67,6 +67,17 @@ class PlanBuilderStoreTest {
         assertEquals(60, e.durationSeconds)
     }
 
+    @Test fun clearUserStateDropsDraftPreviewAndProgress() {
+        store.setName("Mine")
+        store.addExercise(MONDAY, testExercise("a"), "Monday")
+        store.setPreview(store.custom.value.toDraft())
+        store.updateSaveProgress { it.copy(createdPlanId = "p1") }
+        store.clearUserState()
+        assertEquals(CustomPlan(), store.custom.value)
+        assertNull(store.preview.value)
+        assertEquals(SaveProgress(), store.saveProgress.value)
+    }
+
     @Test fun cappedAtThirtyExercises() {
         repeat(35) { store.addExercise(MONDAY, testExercise("e$it"), "Monday") }
         assertEquals(PlanBuilderStore.MAX_EXERCISES, store.custom.value.days[MONDAY]!!.exercises.size)
