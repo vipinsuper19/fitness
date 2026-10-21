@@ -5,4 +5,5 @@
     <string name="tab_workout">Workout</string>
     <string name="tab_nutrition">Nutrition</string>
     <string name="tab_progress">Progress</string>
+    <string name="open_profile">Profile</string>
 </resources>

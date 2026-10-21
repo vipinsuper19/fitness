@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="onb_step_about">About you</string>
+    <string name="onb_step_body">Your body</string>
+    <string name="onb_step_activity">Activity</string>
+    <string name="onb_step_goals">Food and goals</string>
+    <string name="onb_step_of">Step %1$d of %2$d</string>
+    <string name="onb_optional_note">Everything here is optional. You can change it later in your profile.</string>
+    <string name="onb_next">Next</string>
+    <string name="onb_finish">Finish</string>
+    <string name="onb_skip">Skip</string>
+    <string name="onb_back">Back</string>
+    <string name="retry">Try again</string>
+
+    <string name="profile_title">Profile</string>
+    <string name="profile_save">Save</string>
+    <string name="profile_saved">Saved</string>
+    <string name="profile_sign_out">Sign out</string>
+
+    <string name="field_name">Name</string>
+    <string name="field_birth_year">Birth year</string>
+    <string name="field_sex">Sex</string>
+    <string name="field_units">Units</string>
+    <string name="field_height_cm">Height (cm)</string>
+    <string name="field_height_ft">Height (ft)</string>
+    <string name="field_height_in">(in)</string>
+    <string name="field_weight_kg">Weight (kg)</string>
+    <string name="field_weight_lb">Weight (lb)</string>
+    <string name="field_activity">Activity level</string>
+    <string name="field_experience">Training experience</string>
+    <string name="field_diet">Diet</string>
+    <string name="field_calories">Daily calorie target (kcal)</string>
+    <string name="field_water">Daily water target (ml)</string>
+
+    <string name="err_birth_year">Enter a year between 1900 and this year</string>
+    <string name="err_height">Height must be between 50 and 272 cm (1 ft 8 in to 8 ft 11 in)</string>
+    <string name="err_weight">Weight must be between 20 and 400 kg (44 to 882 lb)</string>
+    <string name="err_calories">Between 800 and 6000 kcal</string>
+    <string name="err_water">Between 250 and 10000 ml</string>
+
+    <string name="units_metric">Metric (kg, cm)</string>
+    <string name="units_imperial">Imperial (lb, ft/in)</string>
+    <string name="sex_male">Male</string>
+    <string name="sex_female">Female</string>
+    <string name="sex_other">Other</string>
+    <string name="sex_prefer_not">Prefer not to say</string>
+    <string name="activity_sedentary">Sedentary</string>
+    <string name="activity_light">Light</string>
+    <string name="activity_moderate">Moderate</string>
+    <string name="activity_active">Active</string>
+    <string name="activity_very_active">Very active</string>
+    <string name="exp_beginner">Beginner</string>
+    <string name="exp_intermediate">Intermediate</string>
+    <string name="exp_advanced">Advanced</string>
+    <string name="diet_vegetarian">Vegetarian</string>
+    <string name="diet_eggetarian">Eggetarian</string>
+    <string name="diet_non_vegetarian">Non-vegetarian</string>
+    <string name="diet_vegan">Vegan</string>
+    <string name="diet_jain">Jain</string>
+</resources>
