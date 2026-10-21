@@ -1,6 +1,6 @@
 # Badges & Challenges — task spec (P1, proposal)
 
-Status: **draft, not approved.** P1 needs Vipin's go-ahead. This PR is docs only: no code, no migration, no `contracts/openapi.yaml` change. Implementation starts with the contract PR (§12) after approval.
+Status: **approved** (Vipin, via Tech Lead, 2026-10-21); the §13 decisions are locked. This PR is docs only. Implementation follows the PR split in §12, starting with the contract PR.
 
 ## 1. Goals and scope
 
@@ -25,7 +25,9 @@ Out of scope: leaderboards, friends, shared or group challenges, sponsored rewar
 | `water_logs` | `SUM(amountMl)` per `date` | `date` (client) | **Yes** |
 | `body_measurements` | row with any value | `date` (client) | **Yes** |
 
-**Local day** means the profile timezone (`user_profiles.timezone`, default `Asia/Kolkata`), with the same helpers as the summary (`localDate`, `startOfLocalDay`). A **week** is ISO Monday 00:00 to Sunday 24:00 in that timezone. The tz is snapshotted on the challenge row at join, so a later tz change doesn't move an open window.
+**Local day** means the profile timezone (`user_profiles.timezone`, default `Asia/Kolkata`), with the same helpers as the summary (`localDate`, `startOfLocalDay`). A **week** is ISO Monday 00:00 to Sunday 24:00 in that timezone (decided). The tz is snapshotted on the challenge row at join, so a later tz change doesn't move an open window.
+
+**Water goal** = `user_profiles.dailyWaterTargetMl` (the existing profile field, API `dailyWaterTargetMl`, 250–10 000) when set, otherwise **2000 ml**. Badges use the goal at evaluation time. A weekly challenge snapshots it at join (`waterGoalMl` on the row), so editing the goal mid-week doesn't change that week's target.
 
 ## 3. Starter badge catalog
 
@@ -45,7 +47,7 @@ Codes are stable identifiers (UPPER_SNAKE). Titles and descriptions live server-
 | `LONG_SESSION_60` | one completed session with `activeSeconds` ≥ 3 600 | 20 |
 | `FIRST_FOOD_LOG` | count(food_logs) ≥ 1 | 5 |
 | `FOOD_LOG_7_DAYS` | ≥ 7 distinct `food_logs.date` within any 7 consecutive local dates ending ≤ today | 20 |
-| `HYDRATED_2L_7` | 7 distinct dates with SUM(`amountMl`) ≥ 2000, each date ≤ today | 20 |
+| `HYDRATED_7` | 7 distinct dates with SUM(`amountMl`) ≥ the water goal (§2), each date ≤ today | 20 |
 | `FIRST_MEASUREMENT` | count(body_measurements) ≥ 1 | 5 |
 | `MEASURE_4_WEEKS` | measurements in 4 distinct ISO weeks | 20 |
 | `LEVEL_5` | `balanceFor(net XP).level` ≥ 5, computed **excluding badge/challenge bonus XP** | 0 |
@@ -64,7 +66,7 @@ Constants live in one `badges.rules.ts` (like `xp.rules.ts`), and the catalog is
 |---|---|---|---|
 | `WEEKLY_WORKOUTS` | weekly | completed sessions | 2, 3, 4, 5 |
 | `WEEKLY_ACTIVE_MINUTES` | weekly | SUM(activeSeconds)/60 | 60, 90, 150 |
-| `WEEKLY_WATER_DAYS` | weekly | dates with water ≥ 2000 ml | 3, 5, 7 |
+| `WEEKLY_WATER_DAYS` | weekly | dates with water ≥ the water goal | 3, 5, 7 |
 | `WEEKLY_FOOD_LOG_DAYS` | weekly | dates with ≥ 1 food log | 3, 5, 7 |
 | `PERSONAL_WORKOUTS_N` | personal | completed sessions since join | 10, 20, 30 (deadline 30/60/90 days) |
 | `PERSONAL_STREAK_N` | personal | best streak reached since join | 7, 14, 30 |
@@ -81,7 +83,7 @@ Constants live in one `badges.rules.ts` (like `xp.rules.ts`), and the catalog is
 - The badge or challenge row and its XP row are inserted in **one transaction**. If the badge insert hits its unique key, no XP is written.
 - Workout XP is unchanged. Bonus XP never feeds back into rules except `LEVEL_5`, which excludes bonus XP so there's no cascade.
 - Reversals: none in v1 (§9). Ledger `reason` is e.g. `Badge: 7-day streak` / `Challenge: 3 workouts this week`.
-- Weekly cap: total challenge bonus XP ≤ 150 per user per ISO week (an open question for Vipin, §13).
+- **Weekly cap (decided):** total *challenge* bonus XP ≤ 150 per user per ISO week (Monday start, profile tz, keyed by the week of `completed_at`). An award that would exceed the cap is cut down to the remainder, and may be 0. A 0 award still inserts the ledger row (amount 0), so it can never be paid later. Badge XP is not capped.
 
 ## 6. Awarding: server-side only, idempotent
 
@@ -112,6 +114,7 @@ user_challenges
   target int CHECK (target > 0)
   window_start date, window_end date  -- local dates, inclusive; personal: end = start + deadline - 1 (null = none)
   timezone varchar(64)                -- snapshot at join
+  water_goal_ml int?                  -- snapshot at join (water templates only)
   status enum(active, completed, expired, left)
   progress int default 0
   joined_at, completed_at?, left_at?, updated_at timestamptz(3)
@@ -168,7 +171,7 @@ components:
     BadgeList:  { items: Badge[], earnedCount: int }
     ChallengeTemplate: { code, type: weekly|personal, title, metric, unit, targets: int[], deadlineDays: int|null }
     ChallengeView: { id, templateCode, type, title, target, progress, unit,
-                     windowStart: date, windowEnd: date|null, timezone, status,
+                     windowStart: date, windowEnd: date|null, timezone, waterGoalMl: int|null, status,
                      joinedAt, completedAt|null, leftAt|null, bonusXp, xpAwarded: int }
 ```
 
@@ -176,10 +179,10 @@ Responses that complete something are side effects of other writes, so existing 
 
 ## 9. Anti-abuse
 
-- **Backdating** (food, water and measurement `date` is client-supplied): rows count only if `date ≤ today` and the row was created no more than 1 local day after `date` (`createdAt < startOfLocalDay(date + 2)`). Late entries still show in the diary but don't earn badges or challenge progress. Workout rules use server timestamps only.
+- **Backdating** (food, water and measurement `date` is client-supplied): rows count only if `date ≤ today` and the row was created on that local day or the next (`createdAt < startOfLocalDay(date + 2)`, decided). Late entries still show in the diary but don't earn badges or challenge progress. Workout rules use server timestamps only.
 - **Delete and re-log**: badges and completed challenges are never revoked, and the unique keys make a second award impossible. Progress on *active* challenges is recomputed from source data, so deleting logs lowers it.
 - **Discarded sessions** (correction path) no longer count for active progress. Already-earned items stay, and the XP rule is unchanged.
-- **Water spam**: only daily sums ≥ 2000 ml count; the existing per-entry validation bounds still apply. Optionally cap a day's countable water at 10 L.
+- **Water spam**: only daily sums ≥ the water goal count; the existing per-entry validation bounds still apply. Optionally cap a day's countable water at 10 L.
 - **Leave/rejoin churn**: same-week rejoin is blocked; at most 5 active.
 - **Rate limits**: the existing per-user throttler applies to the join and leave writes.
 
@@ -225,15 +228,15 @@ Responses that complete something are side effects of other writes, so existing 
 
 Each PR stays small and additive, and the backend PRs merge in order.
 
-## 13. Open questions for Vipin
+## 13. Decisions (approved by Vipin via Tech Lead, 2026-10-21)
 
-1. Approve P1 badges and challenges now, with leaderboards and social still out?
-2. Bonus XP values in §3 and §5, and the weekly cap of 150 challenge XP? Should badges grant XP at all, or be cosmetic only?
-3. Should the backdating cut-off be 1 day or 0 (same day only)? Strict is fairer; lenient suits people who log dinner the next morning.
-4. Should earned badges be revocable when the underlying data is deleted? The proposal is never, for simplicity and goodwill.
-5. Should existing users be backfilled (earning many badges at once on release), or count only from release day?
-6. Is the hydration goal fixed at 2 L, or taken from a per-user water goal (which doesn't exist yet)?
-7. Is the week Monday-start (ISO)? India commonly uses Monday; confirm.
+1. **Scope:** P1 badges and challenges are approved. Leaderboards, social, sponsored rewards and redemption stay out.
+2. **XP:** badges and challenges grant bonus XP as in §3 and §4. Challenge bonus XP is capped at **150 per user per ISO week** (§5).
+3. **Backdating:** a client-dated food, water or measurement entry counts if it was created **on the same local day or the next one** (`createdAt < startOfLocalDay(date + 2)`), with `date ≤ today` (§9).
+4. **Revocation:** **never.** Earned badges and completed challenges stay, even if the underlying data is deleted or a session is discarded.
+5. **Backfill:** **at release**, for existing users, via the lazy check on `GET /badges` plus the locally run script (§6). Existing history counts, subject to the backdating rule.
+6. **Water goal:** the profile's `dailyWaterTargetMl` if set, else 2000 ml (§2).
+7. **Week:** starts **Monday** in the profile timezone (default `Asia/Kolkata`).
 
 ## 14. Risks
 
