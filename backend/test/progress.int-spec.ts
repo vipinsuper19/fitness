@@ -147,10 +147,63 @@ describeDb('T15: body measurements and progress summary (HTTP + Postgres)', () =
       const s = (await api(u.token).get('/api/v1/progress/summary?from=2026-10-01&to=2026-10-03').expect(200)).body;
       expect(s).toMatchObject({ from: '2026-10-01', to: '2026-10-03' });
       expect(s.points).toEqual([
-        { date: '2026-10-01', weightKg: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 },
-        { date: '2026-10-02', weightKg: 70.1, workoutsCompleted: 1, activeMinutes: 45, energyKcal: 240, xpEarned: w1.xp },
-        { date: '2026-10-03', weightKg: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 },
+        { date: '2026-10-01', weightKg: null, bodyFatPct: null, waistCm: null, waterMl: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 },
+        { date: '2026-10-02', weightKg: 70.1, bodyFatPct: null, waistCm: null, waterMl: null, workoutsCompleted: 1, activeMinutes: 45, energyKcal: 240, xpEarned: w1.xp },
+        { date: '2026-10-03', weightKg: null, bodyFatPct: null, waistCm: 80, waterMl: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 },
       ]);
+    });
+
+    it('fills every day in the range; water, body fat and waist series; latest entry per day wins per series', async () => {
+      const u = await signUp();
+      const m = (body: object) => api(u.token).post('/api/v1/body-measurements').send(body).expect(201);
+      await m({ date: '2026-09-02', weightKg: 80, bodyFatPct: 25, waistCm: 90 });
+      await m({ date: '2026-09-02', bodyFatPct: 24.5 }); // later: body fat wins, weight and waist come from the earlier entry
+      await m({ date: '2026-09-02', waistCm: 89.5 });
+      await m({ date: '2026-09-05', weightKg: 79.6 });
+      await api(u.token).post('/api/v1/water-logs').send({ date: '2026-09-02', amountMl: 250 }).expect(201);
+      await api(u.token).post('/api/v1/water-logs').send({ date: '2026-09-02', amountMl: 500 }).expect(201);
+      await api(u.token).post('/api/v1/water-logs').send({ date: '2026-09-04', amountMl: 300 }).expect(201);
+
+      const s = (await api(u.token).get('/api/v1/progress/summary?from=2026-09-01&to=2026-09-06').expect(200)).body;
+      expect(s.points.map((p: { date: string }) => p.date)).toEqual(['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06']);
+      const pick = (p: Record<string, unknown>) => [p.date, p.weightKg, p.bodyFatPct, p.waistCm, p.waterMl];
+      expect(s.points.map(pick)).toEqual([
+        ['2026-09-01', null, null, null, null],
+        ['2026-09-02', 80, 24.5, 89.5, 750],
+        ['2026-09-03', null, null, null, null],
+        ['2026-09-04', null, null, null, 300],
+        ['2026-09-05', 79.6, null, null, null],
+        ['2026-09-06', null, null, null, null],
+      ]);
+      // A single-day range still returns that day.
+      expect((await api(u.token).get('/api/v1/progress/summary?from=2026-09-03&to=2026-09-03').expect(200)).body.points).toHaveLength(1);
+    });
+
+    it('accepts up to two decimals and stores weight at 2 dp, other measurements rounded half-up to 1 dp', async () => {
+      const u = await signUp();
+      const made = (await api(u.token).post('/api/v1/body-measurements').send({ date: '2026-09-10', weightKg: 72.35, bodyFatPct: 18.25, waistCm: 84.24, chestCm: 99.95, armCm: 30.05 }).expect(201)).body;
+      expect(made).toMatchObject({ weightKg: 72.35, bodyFatPct: 18.3, waistCm: 84.2, chestCm: 100, armCm: 30.1 });
+      const edited = (await api(u.token).patch(`/api/v1/body-measurements/${made.id}`).send({ hipCm: 95.55, thighCm: 55.04 }).expect(200)).body;
+      expect(edited).toMatchObject({ hipCm: 95.6, thighCm: 55, weightKg: 72.35 });
+      await api(u.token).post('/api/v1/body-measurements').send({ date: '2026-09-10', waistCm: 84.255 }).expect(400);
+      await api(u.token).post('/api/v1/body-measurements').send({ date: '2026-09-10', weightKg: 72.355 }).expect(400);
+      // 69.96 % is within the range and is stored rounded to 70.
+      expect((await api(u.token).post('/api/v1/body-measurements').send({ date: '2026-09-11', bodyFatPct: 69.96 }).expect(201)).body.bodyFatPct).toBe(70);
+    });
+
+    it('PATCH and DELETE take an optional Idempotency-Key and replay with it', async () => {
+      const u = await signUp();
+      const made = (await api(u.token).post('/api/v1/body-measurements').send({ date: '2026-09-12', weightKg: 70 }).expect(201)).body;
+      const url = `/api/v1/body-measurements/${made.id}`;
+      await api(u.token).patch(url).send({ weightKg: 70.5 }).expect(200);
+      const k = randomUUID();
+      await api(u.token).patch(url, k).send({ weightKg: 71 }).expect(200);
+      expect((await api(u.token).patch(url, k).send({ weightKg: 71 }).expect(200)).headers['idempotent-replayed']).toBe('true');
+      expect((await api(u.token).patch(url, k).send({ weightKg: 72 }).expect(409)).body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+      const d = randomUUID();
+      await api(u.token).delete(url, d).expect(204);
+      expect((await api(u.token).delete(url, d).expect(204)).headers['idempotent-replayed']).toBe('true');
+      await api(u.token).delete(url).expect(404);
     });
 
     it('validates the range', async () => {

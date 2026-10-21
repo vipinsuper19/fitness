@@ -3,6 +3,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { ApiError } from '../common/api-error';
 import { num } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
+import { daySpan, localDate } from '../common/time';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogExercise, generatePlan, WorkoutPlanDraft } from './generator';
@@ -35,6 +36,21 @@ export interface PlanView {
   createdAt: string;
   /** When the plan last became active; null if never activated. */
   activatedAt: string | null;
+  /** 1-based week of the active plan, capped at `weeks`; null unless this is the active plan. */
+  currentWeek: number | null;
+  /** True once the active plan's last week is over; null unless this is the active plan. */
+  planEnded: boolean | null;
+}
+
+/**
+ * Week of a plan activated at [activatedAt], counted in local calendar days of [tz]:
+ * the activation day starts week 1, every 7 local days add a week. Capped at [weeks];
+ * planEnded is true from the day after the last week.
+ */
+export function planWeek(activatedAt: Date, now: Date, tz: string, weeks: number): { currentWeek: number; planEnded: boolean } {
+  const days = Math.max(0, daySpan(localDate(activatedAt, tz), localDate(now, tz)) - 1);
+  const week = Math.floor(days / 7) + 1;
+  return { currentWeek: Math.min(week, weeks), planEnded: week > weeks };
 }
 
 export const versionInclude = {
@@ -71,6 +87,8 @@ export function toPlanView(plan: PlanRow, v: VersionRow, activePlanId: string | 
     source: plan.source,
     createdAt: plan.createdAt.toISOString(),
     activatedAt: plan.activatedAt?.toISOString() ?? null,
+    currentWeek: null,
+    planEnded: null,
   };
 }
 
@@ -108,7 +126,13 @@ export class PlansService {
       include: versionInclude,
     });
     if (!v) throw notFound('Plan version');
-    return toPlanView(plan, v, await this.activePlanId(userId));
+    const profile = await this.prisma.userProfile.findUnique({ where: { userId }, select: { activePlanId: true, timezone: true } });
+    const view = toPlanView(plan, v, profile?.activePlanId ?? null);
+    if (view.isActive && plan.activatedAt) {
+      // Same timezone rule as the progress summary: the profile's, defaulting to Asia/Kolkata.
+      Object.assign(view, planWeek(plan.activatedAt, new Date(), profile?.timezone ?? 'Asia/Kolkata', v.weeks));
+    }
+    return view;
   }
 
   async active(userId: string): Promise<PlanView | null> {
