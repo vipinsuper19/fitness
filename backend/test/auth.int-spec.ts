@@ -165,6 +165,15 @@ describeDb('auth (HTTP + Postgres)', () => {
     await http().post('/api/v1/auth/refresh').send({ refreshToken: me.refreshToken }).expect(401);
   });
 
+  it('DELETE /me without a password is 400 with "password is required"', async () => {
+    const me = (await register()).body;
+    const res = await http().delete('/api/v1/me').set('Authorization', `Bearer ${me.accessToken}`).send({}).expect(400);
+    expect(res.body.code).toBe('VALIDATION_FAILED');
+    expect(res.body.details.fields.password).toBe('password is required');
+    const empty = await http().delete('/api/v1/me').set('Authorization', `Bearer ${me.accessToken}`).send({ password: '' }).expect(400);
+    expect(empty.body.details.fields.password).toBe('password is required');
+  });
+
   it('rejects a deleted user’s still-unexpired access token with 401 UNAUTHENTICATED', async () => {
     const me = (await register()).body;
     await http().delete('/api/v1/me').set('Authorization', `Bearer ${me.accessToken}`).send({ password }).expect(204);

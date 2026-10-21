@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsDefined, IsEmail, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 const normalizeEmail = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toLowerCase() : value);
 
@@ -49,8 +49,9 @@ export class RefreshDto {
 
 export class DeleteAccountDto {
   @ApiProperty({ minLength: 1, maxLength: 128 })
-  @IsString()
-  @IsNotEmpty()
+  @IsDefined({ message: 'password is required' })
+  @IsString({ message: 'password is required' })
+  @IsNotEmpty({ message: 'password is required' })
   @MaxLength(128)
   password!: string;
 }

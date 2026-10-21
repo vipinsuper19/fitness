@@ -7,13 +7,13 @@ import { ApiError } from '../common/api-error';
 import { decodeTimeCursor, encodeCursor } from '../common/cursor';
 import { num } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
-import { clientTime, nextDate, startOfLocalDay } from '../common/time';
+import { clientTime, localDate, nextDate, prevDate, startOfLocalDay } from '../common/time';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { XpBalance } from '../xp/xp.rules';
 import { workoutXp } from '../xp/xp.rules';
 import { XpService } from '../xp/xp.service';
-import type { HistoryQuery, SessionCompleteDto, SessionStartDto, SessionUpdateDto, SetLogUpsertDto } from './sessions.dto';
+import type { HistoryQuery, SessionCompleteDto, SessionCompletionUpdateDto, SessionStartDto, SessionUpdateDto, SetLogUpsertDto } from './sessions.dto';
 
 type Tx = Prisma.TransactionClient;
 
@@ -65,6 +65,16 @@ export interface CompleteResult {
   newBadges: EarnedBadge[];
 }
 
+/** Result of a correction to a completed session (PRD 5.3). */
+export interface CorrectionResult {
+  session: SessionView;
+  xpDelta: number;
+  xpBalance: XpBalance;
+  newBadges: EarnedBadge[];
+}
+
+const DEFAULT_TZ = 'Asia/Kolkata';
+
 const toSetView = (s: SetRow): SetLogView => ({
   id: s.id,
   clientSetId: s.clientSetId,
@@ -105,6 +115,8 @@ const invalid = (field: string, message: string) =>
   new ApiError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Some fields are invalid.', { fields: { [field]: message } });
 const sessionCompleted = () =>
   new ApiError(HttpStatus.CONFLICT, 'SESSION_COMPLETED', 'This workout is finished and can no longer be changed.');
+const sessionEmpty = () =>
+  new ApiError(HttpStatus.UNPROCESSABLE_ENTITY, 'SESSION_EMPTY', 'A finished workout needs at least one completed set. Discard the workout instead.');
 
 @Injectable()
 export class SessionsService {
@@ -252,21 +264,169 @@ export class SessionsService {
    * ledger, so the session can never be awarded again.
    */
   @EvaluatesAchievements()
-  async discard(userId: string, id: string): Promise<void> {
+  async discard(userId: string, id: string, key: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      await this.lock(tx, userId, id);
-      const award = await this.xp.findAward(tx, userId, id);
-      if (award) await this.xp.reverse(tx, award, 'Workout discarded');
+      const s = await this.lock(tx, userId, id);
+      // A completed session's net XP (award + earlier corrections) goes to 0 through its own
+      // session_corrections row, so a discard after corrections never hits the ledger key.
+      // The award stays, so the session can never be awarded again. Not limited by the window.
+      if (s.status === 'completed') await this.writeCorrection(tx, userId, id, 'discard', key, 0);
       await tx.workoutSession.delete({ where: { id } });
     });
+  }
+
+  // ---------- corrections (PRD 5.3, docs/specs/session-correction.md) ----------
+
+  /**
+   * PUT /workout-sessions/{id}/corrections/sets/{clientSetId}: upsert by clientSetId on a
+   * completed session (edits the set in place, or adds it; never a duplicate).
+   */
+  async correctSet(userId: string, sessionId: string, pathClientSetId: string, dto: SetLogUpsertDto, key: string): Promise<CorrectionResult> {
+    const clientSetId = dto.clientSetId.toLowerCase();
+    if (clientSetId !== pathClientSetId.toLowerCase()) throw invalid('clientSetId', 'clientSetId must match the path');
+    const loggedAt = clientTime(dto.loggedAt, 'loggedAt', new Date());
+    const exercise = await this.prisma.exercise.findUnique({ where: { id: dto.exerciseId }, select: { id: true } });
+    if (!exercise) throw invalid('exerciseId', 'exerciseId is not in the exercise catalog');
+    const fields = {
+      exerciseId: exercise.id,
+      setIndex: dto.setIndex,
+      reps: dto.reps ?? null,
+      weightKg: dto.weightKg ?? null,
+      durationSeconds: dto.durationSeconds ?? null,
+      distanceM: dto.distanceM ?? null,
+      completed: dto.completed,
+      ...(loggedAt ? { loggedAt } : {}),
+    };
+    try {
+      return await this.correct(userId, sessionId, key, async (tx) => {
+        const existing = await tx.exerciseSetLog.findUnique({ where: { userId_clientSetId: { userId, clientSetId } } });
+        if (existing && existing.sessionId !== sessionId) throw clientSetConflict();
+        if (existing) await tx.exerciseSetLog.update({ where: { id: existing.id }, data: fields });
+        else await tx.exerciseSetLog.create({ data: { userId, sessionId, clientSetId, ...fields } });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && String(error.meta?.target ?? '').includes('client_set')) {
+        throw clientSetConflict();
+      }
+      throw error;
+    }
+  }
+
+  /** DELETE /workout-sessions/{id}/corrections/sets/{clientSetId}. */
+  async deleteCorrectedSet(userId: string, sessionId: string, clientSetId: string, key: string): Promise<CorrectionResult> {
+    return this.correct(userId, sessionId, key, async (tx) => {
+      const set = await tx.exerciseSetLog.findFirst({ where: { userId, sessionId, clientSetId: clientSetId.toLowerCase() } });
+      if (!set) throw new ApiError(HttpStatus.NOT_FOUND, 'SET_NOT_FOUND', 'This set is not in the workout (it may already be deleted).');
+      await tx.exerciseSetLog.delete({ where: { id: set.id } });
+    });
+  }
+
+  /** PATCH /workout-sessions/{id}/completion: fix completedAt, difficulty or notes. */
+  async correctCompletion(userId: string, sessionId: string, dto: SessionCompletionUpdateDto, key: string): Promise<CorrectionResult> {
+    if (dto.completedAt === undefined && dto.perceivedDifficulty === undefined && dto.notes === undefined) {
+      throw invalid('body', 'send at least one of completedAt, perceivedDifficulty or notes');
+    }
+    const now = new Date();
+    const completedAt = clientTime(dto.completedAt, 'completedAt', now);
+    return this.correct(userId, sessionId, key, async (tx, s, tz) => {
+      const data: Prisma.WorkoutSessionUpdateInput = {};
+      if (completedAt) {
+        // Same local day and never later: a fix can't move a workout into another day,
+        // week or challenge window (or add active time).
+        const current = s.completedAt!;
+        if (localDate(completedAt, tz) !== localDate(current, tz)) {
+          throw invalid('completedAt', 'completedAt must be on the same day as the current completedAt');
+        }
+        if (completedAt > current) throw invalid('completedAt', 'completedAt cannot be later than the current completedAt');
+        if (completedAt < s.startedAt) throw invalid('completedAt', 'completedAt must be after startedAt');
+        // Moving completion earlier can only shorten active time; it never adds time.
+        const span = Math.floor((completedAt.getTime() - s.startedAt.getTime()) / 1000);
+        Object.assign(data, { completedAt, activeSeconds: Math.min(s.activeSeconds, span) });
+      }
+      if (dto.perceivedDifficulty !== undefined) data.perceivedDifficulty = dto.perceivedDifficulty;
+      if (dto.notes !== undefined) data.notes = dto.notes;
+      await tx.workoutSession.update({ where: { id: sessionId }, data });
+    });
+  }
+
+  /**
+   * Runs one correction under the session row lock in one transaction: checks the
+   * session is completed and inside the window, applies `change`, requires a
+   * completed set, then writes the XP difference as its own ledger row. After
+   * commit, badges and challenges are evaluated and newBadges returned.
+   */
+  private async correct(
+    userId: string,
+    sessionId: string,
+    key: string,
+    change: (tx: Tx, s: Prisma.WorkoutSessionGetPayload<object>, tz: string) => Promise<void>,
+  ): Promise<CorrectionResult> {
+    const { session, xpDelta } = await this.prisma.$transaction(async (tx) => {
+      const s = await this.lock(tx, userId, sessionId);
+      if (s.status !== 'completed' || !s.completedAt) {
+        throw new ApiError(HttpStatus.CONFLICT, 'SESSION_NOT_COMPLETED', 'Only a finished workout can be corrected.');
+      }
+      const tz = await this.timezone(userId, tx);
+      if (!withinWindow(s.completedAt, tz, new Date())) {
+        throw new ApiError(HttpStatus.CONFLICT, 'CORRECTION_WINDOW_CLOSED', 'Workouts can only be corrected on the day they were finished or the next day.');
+      }
+      await change(tx, s, tz);
+      const completedSets = await tx.exerciseSetLog.count({ where: { sessionId, completed: true } });
+      if (completedSets === 0) throw sessionEmpty();
+      const after = await tx.workoutSession.findUniqueOrThrow({ where: { id: sessionId } });
+      const xpDelta = await this.writeCorrection(tx, userId, sessionId, 'correction', key, workoutXp(completedSets, after.activeSeconds));
+      return { session: await this.get(userId, sessionId, tx), xpDelta };
+    });
+    const newBadges = await this.achievements.awardNow(userId);
+    return { session, xpDelta, xpBalance: await this.xp.balance(userId, this.prisma), newBadges };
+  }
+
+  /**
+   * Net session XP = award + legacy reversal (adjustment keyed by the award) + the sum
+   * of correction deltas, never below 0.
+   */
+  private async netSessionXp(tx: Tx, userId: string, sessionId: string): Promise<number> {
+    const award = await this.xp.findAward(tx, userId, sessionId);
+    let net = award?.amount ?? 0;
+    if (award) {
+      const legacy = await tx.xPTransaction.findUnique({
+        where: { userId_sourceType_sourceId: { userId, sourceType: 'adjustment', sourceId: award.id } },
+      });
+      net += legacy?.amount ?? 0;
+    }
+    const sum = await tx.sessionCorrection.aggregate({ where: { userId, sessionId }, _sum: { xpDelta: true } });
+    return Math.max(0, net + (sum._sum.xpDelta ?? 0));
+  }
+
+  /**
+   * Appends one session_corrections row and, when the XP changes, one ledger row
+   * (`session_correction`, sourceId = that row's id), so repeated corrections never
+   * collide on the ledger's unique key. Returns the signed delta.
+   */
+  private async writeCorrection(tx: Tx, userId: string, sessionId: string, kind: 'correction' | 'discard', key: string, target: number): Promise<number> {
+    const xpDelta = Math.max(0, target) - (await this.netSessionXp(tx, userId, sessionId));
+    const row = await tx.sessionCorrection.create({ data: { userId, sessionId, kind, xpDelta, idempotencyKey: key } });
+    if (xpDelta !== 0) {
+      await tx.xPTransaction.create({
+        data: {
+          userId, sourceType: 'session_correction', sourceId: row.id, amount: xpDelta,
+          reason: kind === 'discard' ? 'Workout discarded' : 'Workout corrected',
+        },
+      });
+    }
+    return xpDelta;
+  }
+
+  private async timezone(userId: string, db: PrismaService | Tx = this.prisma): Promise<string> {
+    const profile = await db.userProfile.findUnique({ where: { userId }, select: { timezone: true } });
+    return profile?.timezone ?? DEFAULT_TZ;
   }
 
   async history(userId: string, q: HistoryQuery): Promise<{ items: SessionView[]; nextCursor: string | null }> {
     const limit = q.limit ?? 20;
     if (q.from && q.to && q.from > q.to) throw invalid('from', 'from must be on or before to');
     const after = decodeTimeCursor(q.cursor);
-    const profile = await this.prisma.userProfile.findUnique({ where: { userId }, select: { timezone: true } });
-    const tz = profile?.timezone ?? 'Asia/Kolkata';
+    const tz = await this.timezone(userId);
     const range: Prisma.DateTimeNullableFilter = { not: null };
     if (q.from) range.gte = startOfLocalDay(q.from, tz);
     if (q.to) range.lt = startOfLocalDay(nextDate(q.to), tz);
@@ -296,6 +456,13 @@ export class SessionsService {
     if (!locked.length) throw notFound('Session');
     return tx.workoutSession.findUniqueOrThrow({ where: { id } });
   }
+}
+
+/** True while `t`'s local date (profile timezone) is today or yesterday. */
+export function withinWindow(t: Date, tz: string, now: Date): boolean {
+  const today = localDate(now, tz);
+  const d = localDate(t, tz);
+  return d <= today && d >= prevDate(today);
 }
 
 function clientSetConflict(): ApiError {

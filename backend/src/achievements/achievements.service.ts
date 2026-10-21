@@ -138,7 +138,7 @@ export class AchievementsService implements OnModuleDestroy {
 
     const sessions = await db.workoutSession.findMany({ where: { userId, status: 'completed', completedAt: { not: null } }, select: { completedAt: true, activeSeconds: true } });
     const completedSets = await db.exerciseSetLog.count({ where: { userId, completed: true, session: { status: 'completed' } } });
-    const xp = await db.xPTransaction.aggregate({ where: { userId, sourceType: { in: ['workout_session', 'adjustment'] } }, _sum: { amount: true } });
+    const xp = await db.xPTransaction.aggregate({ where: { userId, sourceType: { in: ['workout_session', 'adjustment', 'session_correction'] } }, _sum: { amount: true } });
     const food = await db.foodLog.findMany({ where: { userId }, select: { date: true, createdAt: true } });
     const water = await db.waterLog.findMany({ where: { userId }, select: { date: true, createdAt: true, dateChangedAt: true, amountMl: true } });
     const measurements = await db.bodyMeasurement.findMany({ where: { userId }, select: { date: true, createdAt: true, dateChangedAt: true } });
