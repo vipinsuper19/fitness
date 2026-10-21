@@ -2538,8 +2538,8 @@ components:
         totalReps: { type: [integer, 'null'], minimum: 0, description: Σ `reps` over sets that have reps (weighted and bodyweight). Null when none do. }
         topSetWeightKg: { type: [number, 'null'], minimum: 0, description: Heaviest `weightKg` > 0 with reps ≥ 1 in the period }
         best1RmKg: { type: [number, 'null'], minimum: 0, description: Best Epley estimate in the period (same rule as `PersonalRecords.best1RmKg`) }
-        totalDurationSec: { type: [integer, 'null'], minimum: 0, description: Σ `durationSeconds` over sets that have it (> 0). Null when none do (e.g. reps-only exercises). }
-        totalDistanceM: { type: [number, 'null'], minimum: 0, description: Σ `distanceM` over sets that have it (> 0), one decimal. Null when none do. }
+        totalDurationSec: { type: [integer, 'null'], minimum: 0, description: 'Σ `durationSeconds` over sets that have it (> 0). Null when none do (e.g. reps-only exercises).' }
+        totalDistanceM: { type: [number, 'null'], minimum: 0, description: 'Σ `distanceM` over sets that have it (> 0), one decimal. Null when none do.' }
         maxSetDurationSec: { type: [integer, 'null'], minimum: 1, description: Longest single-set `durationSeconds` in the period }
         maxSetDistanceM: { type: [number, 'null'], minimum: 0, description: Longest single-set `distanceM` in the period }
 
