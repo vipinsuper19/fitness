@@ -65,6 +65,15 @@ describeDb('PRD 5.3: session correction (HTTP + Postgres)', () => {
     await app.close();
   });
 
+  // Fixed clock (Date only) at Wednesday 2026-10-21 12:00 IST, so relative moves (±hours,
+  // yesterday, 3 days ago) never cross local midnight whenever CI runs. The weekly
+  // boundary tests below set their own Monday clock.
+  const FAKE_DATE_ONLY = {
+    doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'hrtime', 'performance'] as const,
+  };
+  beforeEach(() => jest.useFakeTimers({ now: new Date('2026-10-21T06:30:00Z'), doNotFake: [...FAKE_DATE_ONLY.doNotFake] }));
+  afterEach(() => jest.useRealTimers());
+
   it('two corrections then a discard: three session_correction rows, net 0, no 500', async () => {
     const u = await signUp();
     const before = await balance(u.token);
