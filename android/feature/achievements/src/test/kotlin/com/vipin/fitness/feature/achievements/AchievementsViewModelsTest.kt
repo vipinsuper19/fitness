@@ -21,7 +21,7 @@ import java.time.ZoneOffset
 class BadgesViewModelTest {
     @get:Rule val main = MainDispatcherRule()
     private val repo = FakeAchievementsRepository()
-    private val tracker = EarnedBadgeTracker()
+    private val tracker = EarnedBadgeTracker(com.vipin.fitness.core.testing.InMemorySeenBadgeStore())
 
     @Test fun loadsCatalogAndCelebratesOnlyNewlyEarned() {
         repo.badgeList = BadgeList(listOf(testBadge("A", Instant.EPOCH), testBadge("B")), 1)

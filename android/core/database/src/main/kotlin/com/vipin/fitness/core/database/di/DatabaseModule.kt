@@ -3,6 +3,7 @@ package com.vipin.fitness.core.database.di
 import android.content.Context
 import androidx.room.Room
 import com.vipin.fitness.core.database.FitnessDatabase
+import com.vipin.fitness.core.database.badges.SeenBadgeDao
 import com.vipin.fitness.core.database.outbox.PendingWriteDao
 import com.vipin.fitness.core.database.session.WorkoutSessionDao
 import dagger.Module
@@ -24,4 +25,7 @@ object DatabaseModule {
 
     @Provides
     fun workoutSessionDao(db: FitnessDatabase): WorkoutSessionDao = db.workoutSessionDao()
+
+    @Provides
+    fun seenBadgeDao(db: FitnessDatabase): SeenBadgeDao = db.seenBadgeDao()
 }

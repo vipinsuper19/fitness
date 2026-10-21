@@ -43,6 +43,7 @@ fun SessionSummaryRoute(
                 modifier = Modifier.testTag("xp"),
             )
             session.syncError?.let { Text(stringResource(R.string.sync_error), color = MaterialTheme.colorScheme.error) }
+            SessionBadgesSection(synced = !s.xpPending)
         }
         Button(onClick = onDone, modifier = Modifier.fillMaxWidth().testTag("summary_done")) { Text(stringResource(R.string.done)) }
     }

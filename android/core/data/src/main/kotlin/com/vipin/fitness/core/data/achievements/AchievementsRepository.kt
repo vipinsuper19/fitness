@@ -6,9 +6,10 @@ import com.vipin.fitness.core.network.AchievementsApi
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.apiCall
 import com.vipin.fitness.core.network.model.ChallengeJoinRequestDto
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import com.vipin.fitness.core.database.badges.SeenBadgeDao
+import com.vipin.fitness.core.database.session.WorkoutSessionDao
 import kotlinx.serialization.json.Json
+import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -58,22 +59,44 @@ class DefaultAchievementsRepository @Inject constructor(
 }
 
 /**
- * Which earned badges the user has already been shown, for the one-off "Badge earned" sheet.
- * The first list seen after sign-in (or app start) is the baseline and shows nothing, so a fresh
- * install or the release backfill doesn't pop a sheet for history. Kept in memory per user.
+ * Which earned badges the user has already been shown, for the one-off "Badge earned" sheet
+ * (spec §10). Kept in Room per signed-in user, so a badge is celebrated once even across app
+ * restarts and screens (badges grid, workout summary). The user's first list is the baseline and
+ * shows nothing, so a fresh install or the release backfill doesn't pop a sheet for history.
+ * Cleared on sign-out; on sign-in only the signed-in user's rows are kept.
  */
 @Singleton
-class EarnedBadgeTracker @Inject constructor() : UserScopedState {
-    private val mutex = Mutex()
-    private var seen: Set<String>? = null
-
-    /** Badges earned since the last call (none on the first call). */
-    suspend fun newlyEarned(list: BadgeList): List<Badge> = mutex.withLock {
+class EarnedBadgeTracker @Inject constructor(private val store: SeenBadgeStore) : UserScopedState {
+    /** Earned badges not shown before, now marked seen (none on the user's first list, or when signed out). */
+    suspend fun newlyEarned(list: BadgeList): List<Badge> {
+        val owner = store.currentOwner() ?: return emptyList()
         val earned = list.items.filter { it.earned }
-        val before = seen
-        seen = (before.orEmpty()) + earned.map { it.code }
-        if (before == null) emptyList() else earned.filter { it.code !in before }
+        val fresh = store.recordEarned(owner, earned.map { it.code }).toSet()
+        return earned.filter { it.code in fresh }
     }
 
-    override suspend fun clearUserState() = mutex.withLock { seen = null }
+    override suspend fun clearUserState() = store.clearAll()
+
+    override suspend fun onSignedIn(userId: String) = store.keepOnly(userId)
+}
+
+/** Persistence for [EarnedBadgeTracker]; Room in the app, in-memory in tests. */
+interface SeenBadgeStore {
+    suspend fun currentOwner(): String?
+    /** Marks [codes] seen for [owner]; returns those not seen before (empty on the owner's first call). */
+    suspend fun recordEarned(owner: String, codes: List<String>): List<String>
+    suspend fun clearAll()
+    suspend fun keepOnly(owner: String)
+}
+
+@Singleton
+class RoomSeenBadgeStore @Inject constructor(
+    private val dao: SeenBadgeDao,
+    private val sessions: WorkoutSessionDao,
+    private val clock: Clock,
+) : SeenBadgeStore {
+    override suspend fun currentOwner() = sessions.currentUserId()
+    override suspend fun recordEarned(owner: String, codes: List<String>) = dao.recordEarned(owner, codes, clock.millis())
+    override suspend fun clearAll() = dao.clearAll()
+    override suspend fun keepOnly(owner: String) = dao.keepOnly(owner)
 }

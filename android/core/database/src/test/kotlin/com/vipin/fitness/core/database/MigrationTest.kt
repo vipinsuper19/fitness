@@ -24,4 +24,21 @@ class MigrationTest {
             db.query("SELECT COUNT(*) FROM workout_sessions").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
         }
     }
+
+    @Test fun v2ToV3KeepsSessionsAndAddsSeenBadgeTables() {
+        helper.createDatabase("m3.db", 2).use { db ->
+            db.execSQL("INSERT INTO current_account (id, user_id) VALUES (1, 'u1')")
+        }
+        helper.runMigrationsAndValidate("m3.db", 3, true).use { db ->
+            db.query("SELECT user_id FROM current_account").use { c -> c.moveToFirst(); assertEquals("u1", c.getString(0)) }
+            db.execSQL("INSERT INTO seen_badges (owner_user_id, code, seen_at) VALUES ('u1', 'FIRST_WORKOUT', 1)")
+            db.query("SELECT COUNT(*) FROM seen_badges").use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)) }
+            db.query("SELECT COUNT(*) FROM seen_badge_baselines").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
+        }
+    }
+
+    @Test fun v1MigratesAllTheWayToV3() {
+        helper.createDatabase("m13.db", 1).close()
+        helper.runMigrationsAndValidate("m13.db", 3, true).close()
+    }
 }
