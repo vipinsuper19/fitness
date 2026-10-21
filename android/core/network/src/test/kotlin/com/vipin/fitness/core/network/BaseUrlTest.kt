@@ -3,11 +3,13 @@ package com.vipin.fitness.core.network
 import com.vipin.fitness.core.network.di.UNSET_RELEASE_BASE_URL
 import com.vipin.fitness.core.network.di.checkedBaseUrl
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BaseUrlTest {
     @Test fun debugAllowsEmulatorCleartext() {
-        assertEquals(BuildConfig.API_BASE_URL, "http://10.0.2.2:3000/api/v1/") // unit tests run the debug variant
+        // Unit tests run the debug variant: Render staging by default, overridable per machine.
+        assertTrue(BuildConfig.API_BASE_URL.endsWith("/api/v1/"))
         assertEquals("http://10.0.2.2:3000/api/v1/", checkedBaseUrl("http://10.0.2.2:3000/api/v1/", debug = true))
     }
 
