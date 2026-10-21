@@ -53,6 +53,6 @@ Corrections live on their own paths. Each one needs an Idempotency-Key, works on
 
 ## Implementation notes
 
-- Migrations `20261021000400_session_corrections` (table, `SessionCorrectionKind`, `XpSourceType.session_correction`) and `20261021000500_session_correction_amount_check` (the ledger amount check also allows negative `session_correction` rows; separate so the new enum value is committed first).
+- Migrations `20261021000500_session_corrections` (table, `SessionCorrectionKind`, `XpSourceType.session_correction`) and `20261021000600_session_correction_amount_check` (the ledger amount check also allows negative `session_correction` rows; separate so the new enum value is committed first).
 - `PATCH /completion` with an earlier `completedAt` sets `activeSeconds = min(activeSeconds, completedAt − startedAt)`: a correction can shorten active time but never add to it.
 - `/progress/summary` `xpEarned` and the badges' workout-XP fact both count `session_correction` deltas.
