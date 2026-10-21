@@ -23,4 +23,14 @@ interface PendingWriteDao {
 
     @Query("DELETE FROM pending_writes WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Query("SELECT * FROM pending_writes WHERE idempotency_key = :key")
+    suspend fun byKey(key: String): PendingWriteEntity?
+
+    @Query("SELECT MAX(created_at) FROM pending_writes")
+    suspend fun latestCreatedAt(): Long?
+
+    /** Sign-out: queued writes belong to the user who made them, never to the next one. */
+    @Query("DELETE FROM pending_writes")
+    suspend fun clear()
 }

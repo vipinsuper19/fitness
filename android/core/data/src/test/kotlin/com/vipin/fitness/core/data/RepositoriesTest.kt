@@ -42,7 +42,7 @@ class RepositoriesTest {
     private val cache = MemoryCache()
     private val userState = object : UserScopedState {
         var clears = 0
-        override fun clearUserState() { clears++ }
+        override suspend fun clearUserState() { clears++ }
     }
     private val server = MockWebServer()
     private val json = fitnessJson()

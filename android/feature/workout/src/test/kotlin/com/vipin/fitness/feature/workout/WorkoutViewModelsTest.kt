@@ -13,6 +13,7 @@ import com.vipin.fitness.core.data.workout.PlannedWorkout
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeWorkoutRepository
+import com.vipin.fitness.core.testing.FakeWorkoutSessionRepository
 import com.vipin.fitness.core.testing.MainDispatcherRule
 import com.vipin.fitness.core.testing.asPlan
 import com.vipin.fitness.core.testing.networkFailure
@@ -51,12 +52,13 @@ private val draft = PlanDraft(
 
 class WorkoutHomeViewModelTest {
     @get:Rule val main = MainDispatcherRule()
+    private val sessions = FakeWorkoutSessionRepository()
     private val repo = FakeWorkoutRepository().apply { catalog["squat"] = testExercise("squat", "Squat") }
     // Wednesday 2026-10-21, 10:00 IST
     private val clock = Clock.fixed(Instant.parse("2026-10-21T04:30:00Z"), ZoneId.of("Asia/Kolkata"))
 
     @Test fun noPlanShowsEmptyWeekStartingMonday() {
-        val vm = WorkoutHomeViewModel(repo, clock)
+        val vm = WorkoutHomeViewModel(repo, clock, sessions)
         val s = vm.state.value
         assertNull(s.plan)
         assertFalse(s.loading)
@@ -68,7 +70,7 @@ class WorkoutHomeViewModelTest {
 
     @Test fun activePlanFillsCalendarAndNames() {
         repo.refreshResult = { ApiResult.Success(ActivePlan.Some(draft.asPlan("p1", true))) }
-        val s = WorkoutHomeViewModel(repo, clock).state.value
+        val s = WorkoutHomeViewModel(repo, clock, sessions).state.value
         assertEquals("Full body", s.week[0].workout?.name)
         assertNull(s.week[1].workout)
         assertEquals(mapOf("squat" to "Squat"), s.exerciseNames)
@@ -76,7 +78,7 @@ class WorkoutHomeViewModelTest {
 
     @Test fun failureWithoutPlanIsErrorWithPlanIsStale() {
         repo.refreshResult = { networkFailure }
-        val vm = WorkoutHomeViewModel(repo, clock)
+        val vm = WorkoutHomeViewModel(repo, clock, sessions)
         assertNotNull(vm.state.value.error)
         repo.activePlan.value = ActivePlan.Some(draft.asPlan("p1", true))
         assertNull(vm.state.value.error)
@@ -88,14 +90,14 @@ class WorkoutHomeViewModelTest {
     @Test fun todayIsInIndiaNotUtc() {
         // 20:00 UTC on the 20th is 01:30 IST on Wednesday the 21st.
         val utc = Clock.fixed(Instant.parse("2026-10-20T20:00:00Z"), ZoneOffset.UTC)
-        val s = WorkoutHomeViewModel(repo, utc).state.value
+        val s = WorkoutHomeViewModel(repo, utc, sessions).state.value
         assertEquals(LocalDate.of(2026, 10, 21), s.week.single { it.isToday }.date)
         assertEquals(DayOfWeek.WEDNESDAY, s.selectedDay)
     }
 
     @Test fun resumeOnANewDayRebuildsWeekAndToday() {
         val clock = MutableClock(Instant.parse("2026-10-25T10:00:00Z")) // Sunday IST
-        val vm = WorkoutHomeViewModel(repo, clock)
+        val vm = WorkoutHomeViewModel(repo, clock, sessions)
         assertEquals(LocalDate.of(2026, 10, 19), vm.state.value.week.first().date)
         clock.now = Instant.parse("2026-10-25T19:00:00Z") // 00:30 IST Monday 26th
         vm.onResume()
@@ -107,7 +109,7 @@ class WorkoutHomeViewModelTest {
 
     @Test fun resumeKeepsAPickedDay() {
         val clock = MutableClock(Instant.parse("2026-10-21T10:00:00Z"))
-        val vm = WorkoutHomeViewModel(repo, clock)
+        val vm = WorkoutHomeViewModel(repo, clock, sessions)
         vm.select(DayOfWeek.FRIDAY)
         clock.now = Instant.parse("2026-10-22T10:00:00Z")
         vm.onResume()
@@ -116,7 +118,7 @@ class WorkoutHomeViewModelTest {
     }
 
     @Test fun followsActivationElsewhere() {
-        val vm = WorkoutHomeViewModel(repo, clock)
+        val vm = WorkoutHomeViewModel(repo, clock, sessions)
         assertNull(vm.state.value.plan)
         repo.activePlan.value = ActivePlan.Some(draft.asPlan("p2", true))
         assertEquals("p2", vm.state.value.plan?.id)
@@ -126,11 +128,12 @@ class WorkoutHomeViewModelTest {
 @OptIn(ExperimentalCoroutinesApi::class)
 class ExerciseLibraryViewModelTest {
     @get:Rule val main = MainDispatcherRule(StandardTestDispatcher())
+    private val sessions = FakeWorkoutSessionRepository()
     private val repo = FakeWorkoutRepository()
     private val store = PlanBuilderStore()
 
     @Test fun typingIsDebouncedChipsAreNot() = runTest(main.dispatcher) {
-        val vm = ExerciseLibraryViewModel(repo, store)
+        val vm = ExerciseLibraryViewModel(repo, store, sessions)
         advanceTimeBy(301); runCurrent()
         assertEquals(1, repo.exerciseCalls.size)
         vm.onQuery("s"); vm.onQuery("sq"); vm.onQuery("squat")
@@ -153,7 +156,7 @@ class ExerciseLibraryViewModelTest {
             if (c == null) ApiResult.Success(ExercisePage(listOf(testExercise("a"), testExercise("b")), "n1"))
             else ApiResult.Success(ExercisePage(listOf(testExercise("b"), testExercise("c")), null))
         }
-        val vm = ExerciseLibraryViewModel(repo, store)
+        val vm = ExerciseLibraryViewModel(repo, store, sessions)
         advanceTimeBy(301); runCurrent()
         vm.loadMore(); vm.loadMore(); runCurrent()
         assertEquals(listOf("a", "b", "c"), vm.state.value.items.map { it.id })
@@ -165,7 +168,7 @@ class ExerciseLibraryViewModelTest {
 
     @Test fun loadMoreDuringDebounceUsesTheLoadedFilter() = runTest(main.dispatcher) {
         repo.pages = { _, c -> ApiResult.Success(ExercisePage(listOf(testExercise(c ?: "a")), if (c == null) "n1" else null)) }
-        val vm = ExerciseLibraryViewModel(repo, store)
+        val vm = ExerciseLibraryViewModel(repo, store, sessions)
         vm.onQuery("squat")
         advanceTimeBy(301); runCurrent()
         vm.onQuery("bench") // still inside the debounce window
@@ -177,7 +180,7 @@ class ExerciseLibraryViewModelTest {
     }
 
     @Test fun pickAddsOnceToTheDay() = runTest(main.dispatcher) {
-        val vm = ExerciseLibraryViewModel(repo, store)
+        val vm = ExerciseLibraryViewModel(repo, store, sessions)
         vm.pick(testExercise("a")) // not in pick mode
         assertTrue(store.custom.value.days.isEmpty())
         vm.setPickDay(DayOfWeek.TUESDAY)
@@ -188,7 +191,7 @@ class ExerciseLibraryViewModelTest {
 
     @Test fun failureShowsError() = runTest(main.dispatcher) {
         repo.pages = { _, _ -> networkFailure }
-        val vm = ExerciseLibraryViewModel(repo, store)
+        val vm = ExerciseLibraryViewModel(repo, store, sessions)
         advanceTimeBy(301); runCurrent()
         assertNotNull(vm.state.value.error)
         assertFalse(vm.state.value.loading)

@@ -113,7 +113,7 @@ class PlanBuilderStore @Inject constructor() : UserScopedState {
     }
 
     /** Sign-out / sign-in: nothing here belongs to the next user. */
-    override fun clearUserState() {
+    override suspend fun clearUserState() {
         resetCustom()
         clearPreview()
     }

@@ -36,18 +36,27 @@ import java.time.DayOfWeek
 @Composable
 fun ExerciseLibraryRoute(
     pickDay: DayOfWeek?,
+    replacePosition: Int? = null,
     onOpen: (String) -> Unit,
     onPicked: () -> Unit,
     viewModel: ExerciseLibraryViewModel = hiltViewModel(),
 ) {
     val s by viewModel.state.collectAsStateWithLifecycle()
-    LaunchedEffect(pickDay) { viewModel.setPickDay(pickDay) }
+    LaunchedEffect(pickDay, replacePosition) {
+        viewModel.setPickDay(pickDay)
+        viewModel.setReplacePosition(replacePosition)
+    }
+    val picking = pickDay != null || replacePosition != null
     LaunchedEffect(s.picked) { if (s.picked) onPicked() }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 16.dp)) {
                 Text(
-                    if (pickDay != null) stringResource(R.string.pick_for, pickDay.fullName()) else stringResource(R.string.exercise_library),
+                    when {
+                        replacePosition != null -> stringResource(R.string.replace_with)
+                        pickDay != null -> stringResource(R.string.pick_for, pickDay.fullName())
+                        else -> stringResource(R.string.exercise_library)
+                    },
                     style = MaterialTheme.typography.headlineSmall,
                 )
                 OutlinedTextField(
@@ -72,7 +81,7 @@ fun ExerciseLibraryRoute(
                         supportingContent = {
                             Text(listOfNotNull(e.primaryMuscle?.label(), e.equipment.map { it.label() }.joinToString().ifEmpty { null }).joinToString(" · "))
                         },
-                        modifier = Modifier.clickable { if (pickDay != null) viewModel.pick(e) else onOpen(e.id) }.testTag("exercise_${e.id}"),
+                        modifier = Modifier.clickable { if (picking) viewModel.pick(e) else onOpen(e.id) }.testTag("exercise_${e.id}"),
                     )
                     HorizontalDivider()
                 }

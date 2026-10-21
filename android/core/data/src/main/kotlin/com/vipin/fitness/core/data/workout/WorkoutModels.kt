@@ -71,7 +71,7 @@ data class PlannedExercise(
 )
 
 /** One day's workout. [day] is the ISO weekday. Exercise order is the list order. */
-data class PlannedWorkout(val day: DayOfWeek, val name: String, val exercises: List<PlannedExercise>)
+data class PlannedWorkout(val day: DayOfWeek, val name: String, val exercises: List<PlannedExercise>, val id: String? = null)
 
 /** Unsaved plan: from the generator or built by hand. */
 data class PlanDraft(

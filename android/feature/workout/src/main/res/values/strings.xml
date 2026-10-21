@@ -100,4 +100,46 @@
         <item quantity="one">%1$d set</item>
         <item quantity="other">%1$d sets</item>
     </plurals>
+    <!-- Tracking (T13) -->
+    <string name="start_workout">Start workout</string>
+    <string name="resume_workout">Resume workout</string>
+    <string name="session_unfinished">Workout in progress</string>
+    <string name="paused">Paused</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="sync_error">Some of this workout couldn\'t be saved to your account.</string>
+    <string name="rest_remaining">Rest %1$s</string>
+    <string name="rest_add_30">+30 s</string>
+    <string name="rest_skip">Skip rest</string>
+    <string name="replaced">Replaced</string>
+    <string name="skipped">Skipped</string>
+    <string name="skip">Skip</string>
+    <string name="unskip">Undo skip</string>
+    <string name="replace">Replace</string>
+    <string name="replace_with">Replace with</string>
+    <string name="set_n">Set %1$d</string>
+    <string name="reps">Reps</string>
+    <string name="weight_kg">kg</string>
+    <string name="finish_workout">Finish workout</string>
+    <string name="finish_title">Finish workout?</string>
+    <string name="how_hard">How hard was it?</string>
+    <string name="difficulty_scale">1 = too easy, 5 = too hard</string>
+    <string name="notes">Notes (optional)</string>
+    <string name="finish_needs_set">Tick at least one set before finishing.</string>
+    <string name="finish">Finish</string>
+    <string name="keep_going">Keep going</string>
+    <string name="workout_done">Workout complete</string>
+    <string name="active_time">Active time: %1$s</string>
+    <string name="felt">Difficulty: %1$d of 5</string>
+    <string name="xp_pending">XP will show once this workout is synced.</string>
+    <string name="xp_awarded">+%1$d XP</string>
+    <string name="done">Done</string>
+    <plurals name="pending_sync">
+        <item quantity="one">%1$d change waiting to sync</item>
+        <item quantity="other">%1$d changes waiting to sync</item>
+    </plurals>
+    <plurals name="n_sets_done">
+        <item quantity="one">%1$d set done</item>
+        <item quantity="other">%1$d sets done</item>
+    </plurals>
 </resources>

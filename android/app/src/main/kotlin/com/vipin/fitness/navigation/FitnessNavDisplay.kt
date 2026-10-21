@@ -15,10 +15,12 @@ import com.vipin.fitness.feature.auth.RegisterRoute
 import com.vipin.fitness.feature.auth.SignInRoute
 import com.vipin.fitness.feature.onboarding.OnboardingRoute
 import com.vipin.fitness.feature.onboarding.ProfileEditRoute
+import com.vipin.fitness.feature.workout.ActiveSessionRoute
 import com.vipin.fitness.feature.workout.ExerciseDetailRoute
 import com.vipin.fitness.feature.workout.ExerciseLibraryRoute
 import com.vipin.fitness.feature.workout.NewPlanRoute
 import com.vipin.fitness.feature.workout.PlanPreviewRoute
+import com.vipin.fitness.feature.workout.SessionSummaryRoute
 import com.vipin.fitness.feature.workout.WorkoutDestination
 import java.time.DayOfWeek
 import kotlinx.coroutines.flow.Flow
@@ -73,6 +75,7 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                                     WorkoutDestination.NewPlan -> Route.WorkoutNewPlan
                                     WorkoutDestination.Library -> Route.ExerciseLibrary()
                                     is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
+                                    WorkoutDestination.ActiveSession -> Route.ActiveSession
                                 },
                             )
                         },
@@ -96,12 +99,24 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                 is Route.ExerciseLibrary -> NavEntry(key) {
                     ExerciseLibraryRoute(
                         pickDay = route.pickDay?.let(DayOfWeek::of),
+                        replacePosition = route.replacePosition,
                         onOpen = { backStack.add(Route.ExerciseDetail(it)) },
                         onPicked = { AppNavigation.pop(stack) },
                     )
                 }
                 is Route.ExerciseDetail -> NavEntry(key) {
                     ExerciseDetailRoute(route.id)
+                }
+                Route.ActiveSession -> NavEntry(key) {
+                    ActiveSessionRoute(
+                        onFinished = { AppNavigation.onSessionFinished(stack, it) },
+                        onReplace = { backStack.add(Route.ExerciseLibrary(replacePosition = it)) },
+                        onOpenExercise = { backStack.add(Route.ExerciseDetail(it)) },
+                        onNoSession = { AppNavigation.pop(stack) },
+                    )
+                }
+                is Route.SessionSummary -> NavEntry(key) {
+                    SessionSummaryRoute(route.localId, onDone = { AppNavigation.backToMain(stack) })
                 }
             }
         },

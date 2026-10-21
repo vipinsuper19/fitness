@@ -47,7 +47,7 @@ class DefaultWorkoutRepository @Inject constructor(
     private val exerciseCache = ConcurrentHashMap<String, Exercise>()
 
     /** The catalog is shared, so the exercise cache stays; the plan is the user's. */
-    override fun clearUserState() {
+    override suspend fun clearUserState() {
         _active.value = null
     }
 

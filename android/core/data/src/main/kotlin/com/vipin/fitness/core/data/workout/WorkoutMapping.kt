@@ -28,6 +28,7 @@ private fun PlannedWorkoutDto.toDomain() = PlannedWorkout(
     exercises = exercises.sortedBy { it.order }.map {
         PlannedExercise(it.exerciseId, it.sets, it.repsMin, it.repsMax, it.durationSeconds, it.targetWeightKg, it.restSeconds, it.notes)
     },
+    id = id,
 )
 
 private fun PlannedWorkout.toDto() = PlannedWorkoutDto(

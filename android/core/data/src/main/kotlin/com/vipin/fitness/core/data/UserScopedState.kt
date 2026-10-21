@@ -6,5 +6,5 @@ package com.vipin.fitness.core.data
  * next user never sees the previous user's data.
  */
 interface UserScopedState {
-    fun clearUserState()
+    suspend fun clearUserState()
 }
