@@ -45,6 +45,8 @@ describe('contracts/openapi.yaml', () => {
       'get /exercises', 'get /exercises/{exerciseId}',
       'post /workout-plans/generate', 'post /workout-plans', 'get /workout-plans/active',
       'get /workout-plans/{planId}', 'patch /workout-plans/{planId}', 'post /workout-plans/{planId}/activate',
+      // P1: plan management (docs/specs/plan-management.md)
+      'get /workout-plans', 'post /workout-plans/{planId}/deactivate', 'delete /workout-plans/{planId}',
       'post /workout-sessions', 'post /workout-sessions/{sessionId}/sets',
       'patch /workout-sessions/{sessionId}', 'post /workout-sessions/{sessionId}/complete',
       'get /workout-sessions/history',
