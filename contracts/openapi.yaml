@@ -1013,7 +1013,7 @@ paths:
       tags: [progress]
       operationId: updateBodyMeasurement
       summary: Edit a body measurement
-      description: Partial update, like the profile. `Idempotency-Key` is optional: with one, a retry with the same body replays the stored 200 (`Idempotent-Replayed: true`) and a different body under the same key is `409 IDEMPOTENCY_KEY_REUSED`; without one, a retry just applies the same values again. An empty body `{}` is rejected with 400. A field left out stays unchanged; `null` clears a measurement. After the change the entry must still have at least one measurement, otherwise 400 VALIDATION_FAILED (fields name the cleared measurements).
+      description: 'Partial update, like the profile. `Idempotency-Key` is optional: with one, a retry with the same body replays the stored 200 (`Idempotent-Replayed: true`) and a different body under the same key is `409 IDEMPOTENCY_KEY_REUSED`; without one, a retry just applies the same values again. An empty body `{}` is rejected with 400. A field left out stays unchanged; `null` clears a measurement. After the change the entry must still have at least one measurement, otherwise 400 VALIDATION_FAILED (fields name the cleared measurements).'
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
