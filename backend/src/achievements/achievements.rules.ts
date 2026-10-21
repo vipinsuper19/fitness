@@ -50,7 +50,10 @@ export interface BadgeDef {
 
 /**
  * Backdating rule: a client-dated entry counts if its date is not in the future
- * and it was created on that local day or the next (profile timezone).
+ * and is no earlier than its createdAt local day minus 1 (profile timezone),
+ * i.e. it was created on that local day or the next. Checked against the row's
+ * *current* date on every evaluation, so an edit that moves the date earlier
+ * stops it counting (anything already awarded stays: nothing is revoked).
  */
 export function counts(date: string, createdAt: Date, today: string, tz: string): boolean {
   return date <= today && createdAt < startOfLocalDay(nextDate(nextDate(date)), tz);

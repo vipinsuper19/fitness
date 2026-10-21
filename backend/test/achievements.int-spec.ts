@@ -83,6 +83,26 @@ describeDb('badges & challenges engine (Postgres)', () => {
       expect((await engine.evaluate(u, NOW)).badgesAwarded).toEqual(['FIRST_MEASUREMENT']);
     });
 
+    it('an edit that moves the date earlier stops the entry counting; awarded badges stay', async () => {
+      const u = await user();
+      // Water goal met on 7 days (2026-10-14..20), each entry logged on its own day.
+      const logs = [];
+      for (const day of days('2026-10-14', 7)) logs.push(await prisma.waterLog.create({ data: { userId: u, date: d(day), amountMl: 2500, createdAt: at(day, 20) } }));
+      expect((await engine.evaluate(u, NOW)).badgesAwarded).toContain('HYDRATED_7');
+      // Moving an entry's date 3 days back (still created 2026-10-20) takes it out of the window...
+      await prisma.waterLog.update({ where: { id: logs[6]!.id }, data: { date: d('2026-10-17') } });
+      const facts = await engine.facts(u, NOW);
+      expect(facts.waterByDate.has('2026-10-20')).toBe(false);
+      expect(facts.waterByDate.get('2026-10-17')).toBe(2500); // only the original 10-17 entry
+      // ...and a new entry dated two days before it was created never counts.
+      await prisma.waterLog.create({ data: { userId: u, date: d('2026-10-19'), amountMl: 5000, createdAt: at('2026-10-21', 10) } });
+      expect((await engine.facts(u, NOW)).waterByDate.get('2026-10-19')).toBe(2500);
+      // Nothing is revoked.
+      await engine.evaluate(u, NOW);
+      expect(await prisma.userBadge.count({ where: { userId: u, badgeCode: 'HYDRATED_7' } })).toBe(1);
+      expect(await ledger(u, 'badge')).toHaveLength(1);
+    });
+
     it('uses the profile water goal, else 2000 ml', async () => {
       const withGoal = await user({ dailyWaterTargetMl: 3000 });
       const noGoal = await user();
@@ -239,6 +259,18 @@ describeDb('badges & challenges engine (Postgres)', () => {
         boom.mockRestore();
         warn.mockRestore();
       }
+    });
+
+    it('a hook lost before it ran (e.g. a restart) is caught up by the next evaluation', async () => {
+      const { token, id } = await signUp();
+      // A workout committed but its evaluation never ran (process restarted).
+      await workout(id, new Date(Date.now() - 60_000));
+      expect(await prisma.userBadge.count({ where: { userId: id } })).toBe(0);
+      // Any later write re-evaluates the user's whole state, so the missed badge is awarded.
+      const today = localDate(new Date(), tz);
+      await http().post('/api/v1/water-logs').set('Authorization', `Bearer ${token}`).set('Idempotency-Key', randomUUID()).send({ date: today, amountMl: 250 }).expect(201);
+      await engine.idle();
+      expect((await prisma.userBadge.findMany({ where: { userId: id } })).map((b) => b.badgeCode)).toEqual(['FIRST_WORKOUT']);
     });
 
     it('a rejected write schedules nothing', async () => {

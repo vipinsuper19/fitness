@@ -89,7 +89,12 @@ export class AchievementsService implements OnModuleDestroy {
     return { badgesAwarded, ...challenges };
   }
 
-  /** Loads everything the rules read. Client-dated rows are filtered by the backdating rule. */
+  /**
+   * Loads everything the rules read. Client-dated rows are filtered by the backdating rule.
+   * TODO(badges): this reads the user's full history on every evaluation (fine at MVP scale).
+   * Bound it before it grows: aggregate counts in SQL, cap streak/date scans to the windows
+   * the rules need, or keep per-user running counters.
+   */
   async facts(userId: string, now = new Date()): Promise<Facts> {
     const db = this.prisma;
     const profile = await db.userProfile.findUnique({ where: { userId }, select: { timezone: true, dailyWaterTargetMl: true } });
