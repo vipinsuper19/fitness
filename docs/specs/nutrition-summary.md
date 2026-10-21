@@ -4,6 +4,8 @@
 
 ## Range and periods
 
+- `from`, `to` and every `period` are ISO dates (`YYYY-MM-DD`, OpenAPI `format: date`).
+
 - Same validation as `/progress/summary`: `from ≤ to`, at most 366 days, years 1900–2100, otherwise `400 VALIDATION_FAILED`. `bucket` defaults to `day`.
 - Local dates are in the profile timezone (default `Asia/Kolkata`), echoed as `timezone`. Food and water logs carry a local `date` already.
 - `week`: Monday to Sunday. `month`: calendar month. The first and last periods are clipped to `from`/`to`. `period` is the first date of the clipped period, and `daysInPeriod` counts its days inside the range.
@@ -14,13 +16,17 @@
 - `totals`: the sum of the period's food logs (`energyKcal`, `proteinG`, `carbsG`, `fatG`, `fiberG`, `sugarG`, `sodiumMg`), using the same per-entry nutrients as `/nutrition/daily`, so a day's numbers match the daily view.
 - `avgPerLoggedDay` = `totals / daysLogged`, where `daysLogged` counts days with at least one food log. Dividing by every day would make unlogged days look like fasting.
 - Optional nutrients follow `DailyNutrition`: `entriesMissing` counts entries without a value. A total is `null` when every entry lacks the nutrient, and partial otherwise.
-- `waterMl` is the period's water total. `null` means nothing was logged, never 0. The same goes for `totals`, `avgPerLoggedDay` and `adherence` when no food was logged.
+- `waterMl` is the period's **total** water. `waterDaysLogged` counts days with at least one water log, and `avgWaterMlPerLoggedDay` = `waterMl / waterDaysLogged` (integer, HALF_UP; `null` when no water was logged). `null` means nothing was logged, never 0. The same goes for `totals`, `avgPerLoggedDay` and `adherence` when no food was logged.
 
 ## Targets
 
 - The profile stores only the **current** `dailyCalorieTargetKcal` and `dailyWaterTargetMl`. There is no target history and there are no macro targets.
 - `targets` are therefore the current targets, applied to every period. `proteinG`, `carbsG` and `fatG` are always `null` until the profile gains macro targets. `targets` is `null` when neither calories nor water has a target.
-- Adherence = average per logged day ÷ daily target × 100. For water it is the average over days with water logged. A pct is `null` when its target is `null`, and `adherence` is `null` when nothing was logged or no target is set.
+- Adherence, each × 100 with one decimal HALF_UP:
+  - `kcalPct` = `avgPerLoggedDay.energyKcal / targets.kcal`
+  - `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro> / targets.<macro>`
+  - `waterPct` = `avgWaterMlPerLoggedDay / targets.waterMl` A pct is `null` when its target is `null`, and `adherence` is `null` when nothing was logged or no target is set.
+- **Follow-up:** macro targets (`proteinG`, `carbsG`, `fatG`) stay `null`, and so do their pcts, until a later profile change adds macro targets. That change is listed as a follow-up and is not part of this endpoint.
 - If targets are stored with history later, each day should use the target in effect that day. That would be an additive change, documented then.
 
 ## Rounding
