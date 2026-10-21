@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 
 import { ApiError } from '../common/api-error';
+import { decodeTimeCursor, encodeCursor } from '../common/cursor';
 import { num } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
 import { daySpan, localDate } from '../common/time';
@@ -40,7 +41,29 @@ export interface PlanView {
   currentWeek: number | null;
   /** True once the active plan's last week is over; null unless this is the active plan. */
   planEnded: boolean | null;
+  pausedAt: string | null;
+  archivedAt: string | null;
 }
+
+export type PlanStatus = 'active' | 'paused' | 'inactive' | 'archived';
+export const PLAN_STATUSES: readonly PlanStatus[] = ['active', 'paused', 'inactive', 'archived'];
+
+/** WorkoutPlanSummary (contract): everything the plan list shows. */
+export interface PlanSummary {
+  id: string; name: string; source: 'rule_based' | 'custom'; version: number; status: PlanStatus; isActive: boolean;
+  currentWeek: number | null; totalWeeks: number; activatedAt: string | null; pausedAt: string | null;
+  archivedAt: string | null; createdAt: string; completedSessions: number;
+}
+
+/** Derived in contract order: archived, then active, then paused, else inactive. */
+export function planStatus(p: { id: string; pausedAt?: Date | null; archivedAt?: Date | null }, activePlanId: string | null): PlanStatus {
+  if (p.archivedAt) return 'archived';
+  if (p.id === activePlanId) return 'active';
+  return p.pausedAt ? 'paused' : 'inactive';
+}
+
+const planArchived = () =>
+  new ApiError(HttpStatus.CONFLICT, 'PLAN_ARCHIVED', 'This plan is archived. Save a new plan instead.');
 
 /**
  * Week of a plan activated at [activatedAt], counted in local calendar days of [tz]:
@@ -58,7 +81,7 @@ export const versionInclude = {
 } satisfies Prisma.WorkoutPlanVersionInclude;
 
 type VersionRow = Prisma.WorkoutPlanVersionGetPayload<{ include: typeof versionInclude }>;
-type PlanRow = { id: string; source: 'rule_based' | 'custom'; createdAt: Date; activatedAt: Date | null };
+type PlanRow = { id: string; source: 'rule_based' | 'custom'; createdAt: Date; activatedAt: Date | null; pausedAt?: Date | null; archivedAt?: Date | null };
 
 export function toPlanView(plan: PlanRow, v: VersionRow, activePlanId: string | null): PlanView {
   return {
@@ -89,6 +112,8 @@ export function toPlanView(plan: PlanRow, v: VersionRow, activePlanId: string | 
     activatedAt: plan.activatedAt?.toISOString() ?? null,
     currentWeek: null,
     planEnded: null,
+    pausedAt: plan.pausedAt?.toISOString() ?? null,
+    archivedAt: plan.archivedAt?.toISOString() ?? null,
   };
 }
 
@@ -164,16 +189,18 @@ export class PlansService {
   async update(userId: string, planId: string, dto: WorkoutPlanUpdateDto): Promise<PlanView> {
     const plan = await this.prisma.workoutPlan.findFirst({ where: { id: planId, userId } });
     if (!plan) throw notFound('Plan');
+    if (plan.archivedAt) throw planArchived();
     await this.check(dto);
     const next = dto.baseVersion + 1;
     await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.workoutPlan.updateMany({
-        where: { id: planId, userId, currentVersion: dto.baseVersion },
+        where: { id: planId, userId, currentVersion: dto.baseVersion, archivedAt: null },
         data: { currentVersion: next, source: dto.generator },
       });
       if (count !== 1) {
-        const current = await tx.workoutPlan.findFirst({ where: { id: planId, userId }, select: { currentVersion: true } });
+        const current = await tx.workoutPlan.findFirst({ where: { id: planId, userId }, select: { currentVersion: true, archivedAt: true } });
         if (!current) throw notFound('Plan');
+        if (current.archivedAt) throw planArchived();
         throw new ApiError(HttpStatus.CONFLICT, 'VERSION_CONFLICT', 'This plan changed since you opened it. Reload and edit the latest version.', {
           currentVersion: current.currentVersion,
         });
@@ -185,23 +212,116 @@ export class PlansService {
 
   /**
    * One active plan per user: user_profiles.active_plan_id holds it. Activating
-   * stamps activatedAt; re-activating the already active plan is a no-op and
-   * keeps its timestamp.
+   * stamps activatedAt = now (week 1) and clears pausedAt; with `resume` on a paused
+   * plan, activatedAt moves forward by the whole pause instead, so the week count
+   * continues. Re-activating the already active plan is a no-op and keeps its
+   * timestamp. The previously active plan becomes inactive (not paused).
+   * Archived plans are read-only: 409 PLAN_ARCHIVED.
    */
-  async activate(userId: string, planId: string): Promise<PlanView> {
+  async activate(userId: string, planId: string, resume = false): Promise<PlanView> {
     await this.prisma.$transaction(async (tx) => {
-      const plan = await tx.workoutPlan.findFirst({ where: { id: planId, userId }, select: { id: true } });
+      const plan = await tx.workoutPlan.findFirst({ where: { id: planId, userId }, select: { id: true, activatedAt: true, pausedAt: true, archivedAt: true } });
       if (!plan) throw notFound('Plan');
+      if (plan.archivedAt) throw planArchived();
       const profile = await tx.userProfile.findUnique({ where: { userId }, select: { activePlanId: true } });
       if (profile?.activePlanId === planId) return;
+      const now = new Date();
+      const activatedAt =
+        resume && plan.pausedAt && plan.activatedAt ? new Date(plan.activatedAt.getTime() + Math.max(0, now.getTime() - plan.pausedAt.getTime())) : now;
+      // Guarded on archived_at so a concurrent archive can't leave an archived plan active.
+      const { count } = await tx.workoutPlan.updateMany({ where: { id: planId, archivedAt: null }, data: { activatedAt, pausedAt: null } });
+      if (count !== 1) throw planArchived();
       await tx.userProfile.upsert({
         where: { userId },
         create: { userId, activePlanId: planId },
         update: { activePlanId: planId },
       });
-      await tx.workoutPlan.update({ where: { id: planId }, data: { activatedAt: new Date() } });
     });
     return this.get(userId, planId);
+  }
+
+  /**
+   * Pause: if this is the active plan, clear the user's active plan and stamp pausedAt.
+   * Anything else (inactive, paused, archived) is a no-op. The conditional update on
+   * active_plan_id makes concurrent pauses/activations converge.
+   */
+  async deactivate(userId: string, planId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.pauseIfActive(tx, userId, planId, new Date());
+    });
+  }
+
+  /**
+   * Archive (soft delete): pauses the plan first if active, then sets archivedAt once.
+   * Repeating is a no-op that keeps the first archivedAt. Nothing is deleted.
+   */
+  async archive(userId: string, planId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      await this.pauseIfActive(tx, userId, planId, now);
+      await tx.workoutPlan.updateMany({ where: { id: planId, userId, archivedAt: null }, data: { archivedAt: now } });
+    });
+  }
+
+  private async pauseIfActive(tx: Prisma.TransactionClient, userId: string, planId: string, now: Date): Promise<void> {
+    const plan = await tx.workoutPlan.findFirst({ where: { id: planId, userId }, select: { id: true } });
+    if (!plan) throw notFound('Plan');
+    const { count } = await tx.userProfile.updateMany({ where: { userId, activePlanId: planId }, data: { activePlanId: null } });
+    if (count === 1) await tx.workoutPlan.update({ where: { id: planId }, data: { pausedAt: now } });
+  }
+
+  /** GET /workout-plans: newest createdAt first (ties by id); default hides archived. */
+  async list(userId: string, q: { status?: PlanStatus; cursor?: string; limit?: number }): Promise<{ items: PlanSummary[]; nextCursor: string | null }> {
+    const limit = q.limit ?? 20;
+    const after = decodeTimeCursor(q.cursor);
+    const profile = await this.prisma.userProfile.findUnique({ where: { userId }, select: { activePlanId: true, timezone: true } });
+    const activeId = profile?.activePlanId ?? null;
+    const notActive: Prisma.WorkoutPlanWhereInput = activeId ? { id: { not: activeId } } : {};
+    const byStatus: Record<PlanStatus, Prisma.WorkoutPlanWhereInput> = {
+      archived: { archivedAt: { not: null } },
+      active: activeId ? { id: activeId, archivedAt: null } : { id: { in: [] } },
+      paused: { archivedAt: null, pausedAt: { not: null }, ...notActive },
+      inactive: { archivedAt: null, pausedAt: null, ...notActive },
+    };
+    const rows = await this.prisma.workoutPlan.findMany({
+      where: {
+        userId,
+        ...(q.status ? byStatus[q.status] : { archivedAt: null }),
+        ...(after ? { OR: [{ createdAt: { lt: after.t } }, { createdAt: after.t, id: { lt: after.id } }] } : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+    const page = rows.slice(0, limit);
+    const ids = page.map((p) => p.id);
+    const versions = ids.length
+      ? await this.prisma.workoutPlanVersion.findMany({ where: { planId: { in: ids } }, select: { id: true, planId: true, version: true, name: true, weeks: true } })
+      : [];
+    const done = ids.length
+      ? await this.prisma.workoutSession.groupBy({ by: ['planVersionId'], where: { userId, status: 'completed', planVersionId: { in: versions.map((v) => v.id) } }, _count: { _all: true } })
+      : [];
+    const planOfVersion = new Map(versions.map((v) => [v.id, v.planId]));
+    const sessions = new Map<string, number>();
+    for (const d of done) {
+      const pid = d.planVersionId ? planOfVersion.get(d.planVersionId) : undefined;
+      if (pid) sessions.set(pid, (sessions.get(pid) ?? 0) + d._count._all);
+    }
+    const now = new Date();
+    const tz = profile?.timezone ?? 'Asia/Kolkata';
+    const items = page.map((p): PlanSummary => {
+      const latest = versions.find((v) => v.planId === p.id && v.version === p.currentVersion)!;
+      const status = planStatus(p, activeId);
+      return {
+        id: p.id, name: latest.name, source: p.source, version: p.currentVersion, status, isActive: status === 'active',
+        currentWeek: status === 'active' && p.activatedAt ? planWeek(p.activatedAt, now, tz, latest.weeks).currentWeek : null,
+        totalWeeks: latest.weeks,
+        activatedAt: p.activatedAt?.toISOString() ?? null, pausedAt: p.pausedAt?.toISOString() ?? null,
+        archivedAt: p.archivedAt?.toISOString() ?? null, createdAt: p.createdAt.toISOString(),
+        completedSessions: sessions.get(p.id) ?? 0,
+      };
+    });
+    const last = page[page.length - 1];
+    return { items, nextCursor: rows.length > limit && last ? encodeCursor({ t: last.createdAt.toISOString(), id: last.id }) : null };
   }
 
   private async activePlanId(userId: string): Promise<string | null> {
