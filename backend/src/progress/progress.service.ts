@@ -153,7 +153,8 @@ export class ProgressService {
   /**
    * One point per local day (profile timezone). Missing data is null, never 0:
    * weight is the day's latest measured weight, energy the day's logged kcal.
-   * xpEarned counts workout awards on that day that were not later reversed.
+   * xpEarned counts workout awards on that day that were not later reversed,
+   * net of session corrections (never below 0 per session).
    */
   async summary(userId: string, q: SummaryQuery, now = new Date()): Promise<ProgressSummary> {
     if (q.from > q.to) throw invalid({ from: 'from must be on or before to' });
@@ -209,6 +210,19 @@ export class ProgressService {
         : [],
     );
 
+    // Session corrections (PRD 5.3) change a session's net XP; keyed by session id.
+    const corrections = new Map<string, number>(
+      sessions.length
+        ? (
+            await this.prisma.sessionCorrection.groupBy({
+              by: ['sessionId'],
+              where: { userId, sessionId: { in: sessions.map((s) => s.id) } },
+              _sum: { xpDelta: true },
+            })
+          ).map((r) => [r.sessionId, r._sum.xpDelta ?? 0])
+        : [],
+    );
+
     const points = new Map<string, ProgressPoint>(
       days.map((d) => [d, { date: d, weightKg: null, bodyFatPct: null, waistCm: null, waterMl: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 }]),
     );
@@ -240,7 +254,7 @@ export class ProgressService {
     for (const a of awards) {
       if (reversed.has(a.id)) continue;
       const p = points.get(completedDay.get(a.sourceId!)!);
-      if (p) p.xpEarned += a.amount;
+      if (p) p.xpEarned += Math.max(0, a.amount + (corrections.get(a.sourceId) ?? 0));
     }
 
     return { from: q.from, to: q.to, points: days.map((d) => points.get(d)!), streakDays: await this.streak(userId, tz, now) };

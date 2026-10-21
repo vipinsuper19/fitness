@@ -140,6 +140,13 @@ enum XpSourceType {
   badge
   /// Bonus XP for a completed challenge; sourceId = user_challenges.id.
   challenge
+  /// XP change from correcting or discarding a completed session; sourceId = session_corrections.id.
+  session_correction
+}
+
+enum SessionCorrectionKind {
+  correction
+  discard
 }
 
 enum ChallengeType {
@@ -171,20 +178,21 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  profile          UserProfile?
-  refreshTokens    RefreshToken[]
-  goals            FitnessGoal[]
-  workoutPlans     WorkoutPlan[]
-  workoutSessions  WorkoutSession[]
-  setLogs          ExerciseSetLog[]
-  customFoods      FoodItem[]
-  foodLogs         FoodLog[]
-  waterLogs        WaterLog[]
-  bodyMeasurements BodyMeasurement[]
-  xpTransactions   XPTransaction[]
-  badges           UserBadge[]
-  challenges       UserChallenge[]
-  idempotencyKeys  IdempotencyKey[]
+  profile            UserProfile?
+  refreshTokens      RefreshToken[]
+  goals              FitnessGoal[]
+  workoutPlans       WorkoutPlan[]
+  workoutSessions    WorkoutSession[]
+  setLogs            ExerciseSetLog[]
+  customFoods        FoodItem[]
+  foodLogs           FoodLog[]
+  waterLogs          WaterLog[]
+  bodyMeasurements   BodyMeasurement[]
+  xpTransactions     XPTransaction[]
+  sessionCorrections SessionCorrection[]
+  badges             UserBadge[]
+  challenges         UserChallenge[]
+  idempotencyKeys    IdempotencyKey[]
 
   @@map("users")
 }
@@ -545,6 +553,27 @@ model XPTransaction {
   @@unique([userId, sourceType, sourceId])
   @@index([userId, createdAt])
   @@map("xp_transactions")
+}
+
+/// One row per correction or discard of a completed session (PRD 5.3,
+/// docs/specs/session-correction.md). Its id is the `session_correction`
+/// ledger row's sourceId, so every correction has its own ledger key.
+/// sessionId is not a foreign key: a discard deletes the session but this
+/// row (and its ledger row) stays.
+model SessionCorrection {
+  id             String                @id @default(uuid()) @db.Uuid
+  sessionId      String                @map("session_id") @db.Uuid
+  userId         String                @map("user_id") @db.Uuid
+  kind           SessionCorrectionKind
+  xpDelta        Int                   @map("xp_delta")
+  idempotencyKey String                @map("idempotency_key") @db.VarChar(255)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([sessionId])
+  @@map("session_corrections")
 }
 
 // ---------- badges & challenges (P1, docs/specs/badges-challenges.md) ----------

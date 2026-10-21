@@ -48,3 +48,9 @@ Corrections live on their own paths. Each one needs an Idempotency-Key, works on
 - A correction that would push net XP below 0 is clamped, and net stays 0.
 - A legacy discard (`adjustment` row) is still read as reversed, and completing again doesn't re-award.
 - Errors: `CORRECTION_WINDOW_CLOSED`, `SESSION_NOT_COMPLETED`, `SESSION_EMPTY`, and `SET_NOT_FOUND` on a repeated delete.
+
+## Implementation notes
+
+- Migrations `20261021000400_session_corrections` (table, `SessionCorrectionKind`, `XpSourceType.session_correction`) and `20261021000500_session_correction_amount_check` (the ledger amount check also allows negative `session_correction` rows; separate so the new enum value is committed first).
+- `PATCH /completion` with an earlier `completedAt` sets `activeSeconds = min(activeSeconds, completedAt − startedAt)`: a correction can shorten active time but never add to it.
+- `/progress/summary` `xpEarned` and the badges' workout-XP fact both count `session_correction` deltas.

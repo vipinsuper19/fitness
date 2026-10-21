@@ -38,6 +38,19 @@ export class SessionCompleteDto {
   notes?: string | null;
 }
 
+/** PATCH /workout-sessions/{id}/completion (PRD 5.3); at least one field. */
+export class SessionCompletionUpdateDto {
+  @ApiPropertyOptional({ format: 'date-time', description: 'Today or yesterday (profile timezone), not in the future, after startedAt' })
+  @IsOptional() @IsISO8601(iso)
+  completedAt?: string;
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 5 }) @IsOptional() @IsInt() @Min(1) @Max(5)
+  perceivedDifficulty?: number;
+
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 1000 }) @IsOptional() @IsString() @MaxLength(1000)
+  notes?: string | null;
+}
+
 export class SetLogUpsertDto {
   @ApiProperty({ format: 'uuid', description: 'Generated on the device; the upsert key' }) @IsUUID()
   clientSetId!: string;
