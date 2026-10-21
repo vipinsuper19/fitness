@@ -8,6 +8,8 @@ import { IdParamPipe } from '../common/id-param.pipe';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
 import { BodyMeasurementDto, BodyMeasurementUpdateDto, MeasurementListQuery, SummaryQuery } from './progress.dto';
 import { MeasurementView, ProgressService, ProgressSummary } from './progress.service';
+import { ExerciseProgressListQuery, ExerciseProgressQuery } from './strength.dto';
+import { StrengthService } from './strength.service';
 
 @ApiTags('progress')
 @ApiBearerAuth()
@@ -16,7 +18,18 @@ export class ProgressController {
   constructor(
     private readonly progress: ProgressService,
     private readonly idem: IdempotentWriteService,
+    private readonly strength: StrengthService,
   ) {}
+
+  @Get('progress/exercises')
+  exercises(@CurrentUserId() userId: string, @Query() q: ExerciseProgressListQuery) {
+    return this.strength.list(userId, q);
+  }
+
+  @Get('progress/exercises/:exerciseId')
+  exercise(@CurrentUserId() userId: string, @Param('exerciseId', IdParamPipe) id: string, @Query() q: ExerciseProgressQuery) {
+    return this.strength.detail(userId, id, q);
+  }
 
   @Get('body-measurements')
   list(@CurrentUserId() userId: string, @Query() q: MeasurementListQuery): Promise<{ items: MeasurementView[]; nextCursor: string | null }> {

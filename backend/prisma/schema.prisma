@@ -394,6 +394,7 @@ model WorkoutSession {
 
   @@index([userId, completedAt])
   @@index([userId, status])
+  @@index([userId, status, completedAt])
   @@map("workout_sessions")
 }
 
