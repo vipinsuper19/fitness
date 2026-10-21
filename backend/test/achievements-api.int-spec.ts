@@ -91,9 +91,11 @@ describeDb('badges & challenges API (HTTP + Postgres)', () => {
   });
 
   describe('newBadges on session complete', () => {
-    const finish = async (token: string, key = randomUUID()) => {
+    const finish = async (token: string, key = randomUUID(), beforeComplete: () => void = () => undefined) => {
       const s = (await as(token).post('/api/v1/workout-sessions').send({}).expect(201)).body;
       await as(token).post(`/api/v1/workout-sessions/${s.id}/sets`).send({ clientSetId: randomUUID(), exerciseId: seedId('exercise', 'push-up'), setIndex: 0, reps: 10, completed: true }).expect(200);
+      await engine.idle(); // the set's background evaluation (awards nothing yet)
+      beforeComplete();
       return { id: s.id as string, key, body: (await as(token).post(`/api/v1/workout-sessions/${s.id}/complete`, key).send({}).expect(200)).body };
     };
 
@@ -118,12 +120,15 @@ describeDb('badges & challenges API (HTTP + Postgres)', () => {
 
     it('still completes with newBadges [] when the evaluation throws', async () => {
       const u = await signUp();
-      const boom = jest.spyOn(engine, 'evaluate').mockRejectedValueOnce(new Error('db hiccup'));
+      let boom: jest.SpyInstance | undefined;
       try {
-        const r = await finish(u.token);
+        const r = await finish(u.token, randomUUID(), () => {
+          boom = jest.spyOn(engine, 'evaluate').mockRejectedValueOnce(new Error('db hiccup'));
+        });
         expect(r.body).toMatchObject({ session: { status: 'completed' }, newBadges: [] });
+        expect(boom).toHaveBeenCalled();
       } finally {
-        boom.mockRestore();
+        boom?.mockRestore();
       }
       await engine.idle(); // the fallback background evaluation awards it
       expect(await prisma.userBadge.count({ where: { userId: u.id, badgeCode: 'FIRST_WORKOUT' } })).toBe(1);
