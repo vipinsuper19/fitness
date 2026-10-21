@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 
 import { AchievementsService } from '../achievements/achievements.service';
+import type { EarnedBadge } from '../achievements/achievements.service';
 import { EvaluatesAchievements } from '../achievements/evaluates-achievements.decorator';
 import { ApiError } from '../common/api-error';
 import { decodeTimeCursor, encodeCursor } from '../common/cursor';
@@ -60,6 +61,8 @@ export interface CompleteResult {
   session: SessionView;
   xpAwarded: number;
   xpBalance: XpBalance;
+  /** Badges awarded by this completion; [] on a re-completion (a same-key replay returns the stored body). */
+  newBadges: EarnedBadge[];
 }
 
 const toSetView = (s: SetRow): SetLogView => ({
@@ -206,13 +209,12 @@ export class SessionsService {
    * Completing again returns the original result: the award is looked up,
    * never recomputed or re-written.
    */
-  @EvaluatesAchievements()
   async complete(userId: string, id: string, dto: SessionCompleteDto): Promise<CompleteResult> {
-    return this.prisma.$transaction(async (tx) => {
+    const { result, fresh } = await this.prisma.$transaction(async (tx) => {
       const s = await this.lock(tx, userId, id);
       if (s.status === 'completed') {
         const award = await this.xp.findAward(tx, userId, id);
-        return { session: await this.get(userId, id, tx), xpAwarded: award?.amount ?? 0, xpBalance: await this.xp.balance(userId, tx) };
+        return { fresh: false, result: { session: await this.get(userId, id, tx), xpAwarded: award?.amount ?? 0, xpBalance: await this.xp.balance(userId, tx) } };
       }
       const now = new Date();
       const completedAt = clientTime(dto.completedAt, 'completedAt', now) ?? now;
@@ -235,8 +237,13 @@ export class SessionsService {
         },
       });
       const award = await this.xp.awardWorkout(tx, userId, id, workoutXp(completedSets, activeSeconds));
-      return { session: await this.get(userId, id, tx), xpAwarded: award?.amount ?? 0, xpBalance: await this.xp.balance(userId, tx) };
+      return { fresh: true, result: { session: await this.get(userId, id, tx), xpAwarded: award?.amount ?? 0 } };
     });
+    // After commit: evaluate in the request so the response can name the badges it earned.
+    // Badge XP lands in the ledger, so the balance is read after the evaluation.
+    if (!fresh) return { ...(result as CompleteResult), newBadges: [] };
+    const newBadges = await this.achievements.awardNow(userId);
+    return { ...result, xpBalance: await this.xp.balance(userId, this.prisma), newBadges };
   }
 
   /**
