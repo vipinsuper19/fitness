@@ -61,6 +61,7 @@ class DefaultSessionRepository @Inject constructor(
     private val json: Json,
     private val clock: Clock,
     private val cache: ProfileFlagsCache,
+    private val userState: Set<@JvmSuppressWildcards UserScopedState> = emptySet(),
 ) : SessionRepository {
     override fun isSignedIn() = tokens.get() != null
     override val sessionExpired: Flow<Unit> = events.expired
@@ -80,6 +81,7 @@ class DefaultSessionRepository @Inject constructor(
         if (refresh != null) apiCall(json) { api.logout(RefreshRequestDto(refresh)) }
         withContext(Dispatchers.IO) { tokens.clear() }
         cache.clear()
+        userState.forEach { it.clearUserState() }
     }
 
     private suspend fun authenticate(call: suspend () -> AuthResponseDto): AuthOutcome =
@@ -89,6 +91,7 @@ class DefaultSessionRepository @Inject constructor(
                 // New session, possibly a different user: forget the previous account's cached
                 // flags so launch can't skip onboarding on their behalf. Onboarding refills it.
                 cache.clear()
+                userState.forEach { it.clearUserState() }
                 AuthOutcome.Success
             }
             is ApiResult.Failure -> AuthOutcome.Failure(r.error.toAuthFailure())

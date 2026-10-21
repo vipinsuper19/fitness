@@ -40,6 +40,10 @@ class RepositoriesTest {
     }
 
     private val cache = MemoryCache()
+    private val userState = object : UserScopedState {
+        var clears = 0
+        override fun clearUserState() { clears++ }
+    }
     private val server = MockWebServer()
     private val json = fitnessJson()
     private val store = MemoryTokenStore()
@@ -50,7 +54,7 @@ class RepositoriesTest {
         server.start()
         val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         val clock = Clock.fixed(Instant.ofEpochMilli(0), ZoneOffset.UTC)
-        session = DefaultSessionRepository(r.create(AuthApi::class.java), store, SessionEvents(), json, clock, cache)
+        session = DefaultSessionRepository(r.create(AuthApi::class.java), store, SessionEvents(), json, clock, cache, setOf(userState))
         profiles = DefaultProfileRepository(r.create(ProfileApi::class.java), json, cache)
     }
 
@@ -112,7 +116,17 @@ class RepositoriesTest {
         session.signOut()
         assertNull(store.tokens)
         assertNull(cache.completed)
+        assertEquals(1, userState.clears)
         assertEquals("""{"refreshToken":"r"}""", server.takeRequest().body?.utf8())
+    }
+
+    @Test fun signInClearsUserStateOnlyOnSuccess() = runTest {
+        server.enqueue(MockResponse(code = 401, body = """{"code":"INVALID_CREDENTIALS","message":"no","requestId":"q"}"""))
+        server.enqueue(MockResponse(code = 200, body = authBody))
+        session.signIn("a@b.c", "x")
+        assertEquals(0, userState.clears)
+        session.signIn("a@b.c", "x")
+        assertEquals(1, userState.clears)
     }
 
     @Test fun profileUpdateSendsPresenceAwareBodyAndKey() = runTest {
