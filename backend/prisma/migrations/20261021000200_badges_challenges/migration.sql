@@ -62,9 +62,6 @@ CREATE INDEX "user_challenges_user_id_joined_at_id_idx" ON "user_challenges"("us
 -- CreateIndex
 CREATE INDEX "user_challenges_user_id_status_joined_at_id_idx" ON "user_challenges"("user_id", "status", "joined_at" DESC, "id" DESC);
 
--- CreateIndex
-CREATE UNIQUE INDEX "user_challenges_user_id_template_code_window_start_key" ON "user_challenges"("user_id", "template_code", "window_start");
-
 -- AddForeignKey
 ALTER TABLE "user_badges" ADD CONSTRAINT "user_badges_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -73,6 +70,10 @@ ALTER TABLE "user_challenges" ADD CONSTRAINT "user_challenges_user_id_fkey" FORE
 
 -- Not expressible in Prisma: at most one *active* challenge per template.
 CREATE UNIQUE INDEX "user_challenges_one_active_per_template" ON "user_challenges"("user_id", "template_code") WHERE "status" = 'active';
+
+-- Not expressible in Prisma: one weekly instance per (user, template, week). Personal
+-- challenges are exempt, so leaving and re-joining one on the same day works.
+CREATE UNIQUE INDEX "user_challenges_one_weekly_instance" ON "user_challenges"("user_id","template_code","window_start") WHERE "type" = 'weekly';
 
 -- Sanity checks, matching the style of 20261020000100_check_constraints.
 ALTER TABLE "user_challenges"

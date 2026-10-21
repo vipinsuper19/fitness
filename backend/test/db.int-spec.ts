@@ -289,12 +289,25 @@ describeDb('database schema (migrated Postgres)', () => {
       const user = await newUser('challenge');
       const c = await prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-19') } });
       expect(c).toMatchObject({ status: 'active', progress: 0, xpAwarded: 0, waterGoalMl: null });
-      // Same week again (even after leaving): unique (user, template, window_start).
+      // Same week again (even after leaving): weekly-only partial unique (user, template, window_start).
       await prisma.userChallenge.update({ where: { id: c.id }, data: { status: 'left', leftAt: new Date() } });
       await expect(prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-19') } })).rejects.toThrow();
       // Next week is fine; a second *active* one for the template is not.
       await prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-10-26'), windowEnd: new Date('2026-11-01') } });
       await expect(prisma.userChallenge.create({ data: { userId: user.id, ...week, windowStart: new Date('2026-11-02'), windowEnd: new Date('2026-11-08') } })).rejects.toThrow();
+    });
+
+    it('lets a personal challenge be left and joined again on the same date', async () => {
+      const user = await newUser('challenge-rejoin');
+      const personal = { userId: user.id, templateCode: 'PERSONAL_STREAK_N', type: 'personal' as const, target: 7, windowStart: new Date('2026-10-21'), joinDate: new Date('2026-10-21'), timezone: 'Asia/Kolkata' };
+      const first = await prisma.userChallenge.create({ data: personal });
+      // Still active: a second active one for the template is refused.
+      await expect(prisma.userChallenge.create({ data: personal })).rejects.toThrow();
+      await prisma.userChallenge.update({ where: { id: first.id }, data: { status: 'left', leftAt: new Date() } });
+      const again = await prisma.userChallenge.create({ data: personal });
+      expect(again.id).not.toBe(first.id);
+      expect(again.status).toBe('active');
+      expect(await prisma.userChallenge.count({ where: { userId: user.id, templateCode: 'PERSONAL_STREAK_N', windowStart: new Date('2026-10-21') } })).toBe(2);
     });
 
     it('stores an open-ended personal challenge with the water goal and join date, and enforces checks', async () => {

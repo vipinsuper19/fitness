@@ -563,8 +563,9 @@ model UserBadge {
 /// A joined challenge. Window dates are local dates (inclusive) in the
 /// timezone captured at join; water templates also capture the water goal.
 /// windowEnd null = no deadline (template deadlineDays null).
-/// One instance per (user, template, windowStart); at most one *active* per
-/// (user, template) via a partial unique index (migration SQL only).
+/// Weekly: one instance per (user, template, windowStart). At most one *active*
+/// per (user, template). Both are partial unique indexes (migration SQL only), so
+/// a personal challenge can be left and joined again on the same day.
 model UserChallenge {
   id           String          @id @default(uuid()) @db.Uuid
   userId       String          @map("user_id") @db.Uuid
@@ -591,7 +592,6 @@ model UserChallenge {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, templateCode, windowStart])
   @@index([userId, joinedAt(sort: Desc), id(sort: Desc)])
   @@index([userId, status, joinedAt(sort: Desc), id(sort: Desc)])
   @@map("user_challenges")
