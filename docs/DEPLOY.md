@@ -37,7 +37,9 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
    - The `post-deploy-smoke` workflow then runs automatically on the same pushes. It waits up to ~6 min for the service to restart (`/health` uptime lower than the time since the push), then runs the smoke test (health + DB, register → delete account → login fails, test user always cleaned up).
    - If no restart is seen in time, the workflow **fails** rather than smoke-testing the old build: check the deploy in the Render dashboard. A free instance waking from spin-down also resets uptime, which can let the wait pass early; the smoke then still checks the live service.
    - Manual run: Actions → post-deploy-smoke → Run workflow (`skip_wait` defaults to true).
-5. Optional one-time seed (exercises and Indian foods; safe to re-run). Render Free has no shell, so run it locally against the same URL: `cd backend && DATABASE_URL=... DIRECT_URL=... npm run db:seed`.
+5. Seed the catalogs (exercises and Indian foods). It's idempotent (upserts on fixed ids), never touches user data, and is safe to re-run. Render Free has no shell, so either:
+   - **GitHub Actions (recommended):** add the repository secret `FITNESS_DATABASE_URL` (Settings → Secrets and variables → Actions) with the Supabase session pooler URI (port 5432). Then go to Actions → **db-seed** → Run workflow. It prints the exercise and food counts before and after the seed, and never prints the URL.
+   - **Locally:** `cd backend && DATABASE_URL=... DIRECT_URL=... npm run db:seed`. This needs outbound access to port 5432.
 
 ## 3. Verify
 - `curl https://<service>.onrender.com/health` → `{"status":"ok",...}`
