@@ -15,6 +15,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -68,6 +69,15 @@ fun WorkoutHomeRoute(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                s.flagged.forEach { f ->
+                    Card(Modifier.fillMaxWidth().testTag("flagged_${f.localId}")) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(stringResource(R.string.flagged_title, f.name), color = MaterialTheme.colorScheme.error)
+                            Text(stringResource(R.string.flagged_body), style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { viewModel.dismissFlag(f.localId) }) { Text(stringResource(R.string.dismiss)) }
+                        }
+                    }
+                }
                 s.unfinishedSession?.let { u ->
                     Card(onClick = viewModel::startWorkout, modifier = Modifier.fillMaxWidth().testTag("resume_session")) {
                         Column(Modifier.padding(16.dp)) {

@@ -4,6 +4,7 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,6 +19,8 @@ class MigrationTest {
         }
         helper.runMigrationsAndValidate("m.db", 2, true).use { db ->
             db.query("SELECT COUNT(*) FROM pending_writes").use { c -> c.moveToFirst(); assertEquals(1, c.getInt(0)) }
+            db.query("SELECT owner_user_id FROM pending_writes").use { c -> c.moveToFirst(); assertTrue(c.isNull(0)) }
+            db.query("SELECT COUNT(*) FROM current_account").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
             db.query("SELECT COUNT(*) FROM workout_sessions").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
         }
     }

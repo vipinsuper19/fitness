@@ -2,6 +2,7 @@ package com.vipin.fitness.core.database.session
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
@@ -58,6 +59,28 @@ interface WorkoutSessionDao {
     /** Keeps the first error: later ones are usually its consequence. */
     @Query("UPDATE workout_sessions SET sync_error = COALESCE(sync_error, :error) WHERE local_id = :localId")
     suspend fun setSyncError(localId: String, error: String?)
+
+    @Query("SELECT * FROM workout_sessions WHERE sync_error IS NOT NULL ORDER BY started_at DESC")
+    fun observeFlagged(): Flow<List<WorkoutSessionEntity>>
+
+    @Query("UPDATE workout_sessions SET sync_error = NULL WHERE local_id = :localId")
+    suspend fun clearSyncError(localId: String)
+
+    @Query("SELECT * FROM workout_sessions")
+    suspend fun all(): List<WorkoutSessionEntity>
+
+    @Query("SELECT user_id FROM current_account WHERE id = 1")
+    suspend fun currentUserId(): String?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun setCurrentAccount(a: CurrentAccountEntity)
+
+    @Query("DELETE FROM current_account")
+    suspend fun clearCurrentAccount()
+
+    /** Sign-in as someone else: their sessions (and unknown-owner ones) go, unsent. */
+    @Query("DELETE FROM workout_sessions WHERE owner_user_id IS NULL OR owner_user_id != :userId")
+    suspend fun deleteNotOwnedBy(userId: String)
 
     /** Sign-out: sessions belong to the user. Exercises and sets go by cascade. */
     @Query("DELETE FROM workout_sessions")

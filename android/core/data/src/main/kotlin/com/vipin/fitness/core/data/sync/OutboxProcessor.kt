@@ -53,6 +53,12 @@ class OutboxProcessor @Inject constructor(
 
     /** True when the write is finished with (sent or dropped); false to stop and retry later. */
     private suspend fun send(w: PendingWriteEntity): Boolean {
+        // Never send one user's write with another user's login.
+        val current = sessions.currentUserId()
+        if (w.ownerUserId != null && current != null && w.ownerUserId != current) {
+            pending.delete(w.id)
+            return true
+        }
         val localId = SESSION_REF.find(w.path)?.groupValues?.get(1)
         val path = if (localId == null) {
             w.path
@@ -99,6 +105,7 @@ class OutboxProcessor @Inject constructor(
             return true
         }
         val error = r.errorBody()?.string()?.let { runCatching { json.decodeFromString<ErrorDto>(it).code }.getOrNull() }
+        // 404 (session gone, e.g. discarded on another device) and other 4xx: dropped below.
         return when {
             code == 408 || code == 429 || code >= 500 || error == "IDEMPOTENCY_IN_PROGRESS" -> {
                 pending.markFailed(w.id, error ?: "HTTP_$code")
@@ -123,6 +130,18 @@ class OutboxProcessor @Inject constructor(
         val sessionId = localId ?: if (w.path == START_PATH) sessions.byStartKey(w.idempotencyKey)?.localId else null
         sessionId?.let { sessions.setSyncError(it, reason) }
         return true
+    }
+
+    /** Distinct workouts with at least one write not yet accepted by the server. */
+    suspend fun unsyncedWorkouts(): Int {
+        val ids = mutableSetOf<String>()
+        var other = 0
+        pending.oldest(Int.MAX_VALUE).forEach { w ->
+            val id = SESSION_REF.find(w.path)?.groupValues?.get(1)
+                ?: if (w.path == START_PATH) sessions.byStartKey(w.idempotencyKey)?.localId else null
+            if (id != null) ids += id else other++
+        }
+        return ids.size + other
     }
 
     private suspend fun hasPendingStart(localId: String): Boolean {

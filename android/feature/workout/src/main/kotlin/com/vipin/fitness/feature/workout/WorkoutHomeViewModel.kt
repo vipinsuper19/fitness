@@ -38,6 +38,8 @@ data class WorkoutHomeState(
     val exerciseNames: Map<String, String> = emptyMap(),
     /** A session in progress or paused: the tab offers Resume instead of Start. */
     val unfinishedSession: WorkoutSession? = null,
+    /** Workouts the server rejected for good: shown until dismissed. */
+    val flagged: List<WorkoutSession> = emptyList(),
     val starting: Boolean = false,
     /** One-shot: open the active session screen, then call [WorkoutHomeViewModel.onSessionOpened]. */
     val openSession: Boolean = false,
@@ -62,6 +64,7 @@ class WorkoutHomeViewModel @Inject constructor(
         // Activation elsewhere (preview screen) updates the repository; follow it.
         viewModelScope.launch { repo.activePlan.filterNotNull().collect { show(it) } }
         viewModelScope.launch { sessions.unfinished.collect { u -> _state.update { it.copy(unfinishedSession = u) } } }
+        viewModelScope.launch { sessions.flagged.collect { f -> _state.update { it.copy(flagged = f) } } }
         refresh()
     }
 
@@ -114,6 +117,10 @@ class WorkoutHomeViewModel @Inject constructor(
             sessions.start(plan, workout, exercises)
             _state.update { it.copy(starting = false, openSession = true) }
         }
+    }
+
+    fun dismissFlag(localId: String) {
+        viewModelScope.launch { sessions.dismissFlag(localId) }
     }
 
     fun onSessionOpened() = _state.update { it.copy(openSession = false) }

@@ -11,6 +11,7 @@ import com.vipin.fitness.core.data.workout.TrackingType
 import com.vipin.fitness.core.data.workout.WorkoutPlan
 import com.vipin.fitness.core.database.FitnessDatabase
 import com.vipin.fitness.core.database.outbox.PendingWriteEntity
+import com.vipin.fitness.core.database.session.CurrentAccountEntity
 import com.vipin.fitness.core.database.session.SessionExerciseEntity
 import com.vipin.fitness.core.database.session.SessionSetEntity
 import com.vipin.fitness.core.database.session.WorkoutSessionEntity
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import java.time.Clock
 import java.time.Instant
@@ -48,6 +50,10 @@ interface WorkoutSessionRepository {
     fun session(localId: String): Flow<WorkoutSession?>
     /** Writes not yet accepted by the server. */
     val pendingWrites: Flow<Int>
+    /** Sessions with a write the server rejected for good, newest first. */
+    val flagged: Flow<List<WorkoutSession>>
+    /** The user has seen the problem. */
+    suspend fun dismissFlag(localId: String)
 
     suspend fun start(plan: WorkoutPlan, workout: PlannedWorkout, exercises: Map<String, Exercise>): StartOutcome
     suspend fun pause()
@@ -79,6 +85,11 @@ class DefaultWorkoutSessionRepository @Inject constructor(
 
     override val pendingWrites: Flow<Int> = outbox.count()
 
+    override val flagged: Flow<List<WorkoutSession>> =
+        dao.observeFlagged().map { list -> list.map { it.toDomain(emptyList(), emptyList()) } }
+
+    override suspend fun dismissFlag(localId: String) = dao.clearSyncError(localId)
+
     private fun details(localId: String): Flow<WorkoutSession?> =
         combine(dao.observeSession(localId), dao.observeExercises(localId), dao.observeSets(localId)) { s, ex, sets ->
             s?.toDomain(ex, sets)
@@ -98,7 +109,7 @@ class DefaultWorkoutSessionRepository @Inject constructor(
                 WorkoutSessionEntity(
                     localId = localId, startKey = startKey, planId = plan.id, planVersion = plan.version,
                     plannedWorkoutId = workout.id, name = workout.name, status = SessionStatus.IN_PROGRESS.wire,
-                    startedAtMs = now, resumedAtMs = now,
+                    startedAtMs = now, resumedAtMs = now, ownerUserId = dao.currentUserId(),
                 ),
             )
             val slots = workout.exercises.mapIndexed { i, p ->
@@ -238,12 +249,26 @@ class DefaultWorkoutSessionRepository @Inject constructor(
         return outcome
     }
 
-    /** Sign-out / sign-in: sessions and unsent writes belong to the previous user. */
+    /** Sign-out, confirmed by the user: sessions and unsent writes go with the account. */
     override suspend fun clearUserState() {
         db.withTransaction {
             outbox.clear()
             dao.clear()
+            dao.clearCurrentAccount()
         }
+    }
+
+    /**
+     * The same user back: keep their unsynced workouts and send them. Anyone else: delete the
+     * previous owner's (and unknown-owner) sessions and writes without sending them.
+     */
+    override suspend fun onSignedIn(userId: String) {
+        db.withTransaction {
+            outbox.deleteNotOwnedBy(userId)
+            dao.deleteNotOwnedBy(userId)
+            dao.setCurrentAccount(CurrentAccountEntity(userId = userId))
+        }
+        sync.requestSync()
     }
 
     private suspend fun isOpen(localId: String) = dao.session(localId)?.status?.let { it != SessionStatus.COMPLETED.wire } == true
@@ -271,7 +296,7 @@ class DefaultWorkoutSessionRepository @Inject constructor(
      */
     private suspend fun queue(key: String, method: String, path: String, body: String, now: Long) {
         val at = maxOf(now, (outbox.latestCreatedAt() ?: Long.MIN_VALUE) + 1)
-        outbox.enqueue(PendingWriteEntity(UUID.randomUUID().toString(), key, method, path, body, at))
+        outbox.enqueue(PendingWriteEntity(UUID.randomUUID().toString(), key, method, path, body, at, ownerUserId = dao.currentUserId()))
     }
 
     private fun sessionPath(localId: String) = "workout-sessions/${OutboxProcessor.sessionRef(localId)}"

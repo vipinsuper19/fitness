@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "b20d005480b61c4afe106e6a7d82b7d7",
+    "identityHash": "a51a6e3a1e8cfaa4ea1686329460ca0e",
     "entities": [
       {
         "tableName": "pending_writes",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `method` TEXT NOT NULL, `path` TEXT NOT NULL, `body` TEXT, `created_at` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, `last_error` TEXT, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `method` TEXT NOT NULL, `path` TEXT NOT NULL, `body` TEXT, `created_at` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, `last_error` TEXT, `owner_user_id` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -53,6 +53,11 @@
             "fieldPath": "lastError",
             "columnName": "last_error",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "owner_user_id",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -84,7 +89,7 @@
       },
       {
         "tableName": "workout_sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`local_id` TEXT NOT NULL, `server_id` TEXT, `start_key` TEXT NOT NULL, `complete_key` TEXT, `plan_id` TEXT, `plan_version` INTEGER, `planned_workout_id` TEXT, `name` TEXT NOT NULL, `status` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `active_ms_before_pause` INTEGER NOT NULL, `resumed_at` INTEGER, `completed_at` INTEGER, `perceived_difficulty` INTEGER, `notes` TEXT, `xp_awarded` INTEGER, `sync_error` TEXT, PRIMARY KEY(`local_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`local_id` TEXT NOT NULL, `server_id` TEXT, `start_key` TEXT NOT NULL, `complete_key` TEXT, `plan_id` TEXT, `plan_version` INTEGER, `planned_workout_id` TEXT, `name` TEXT NOT NULL, `status` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `active_ms_before_pause` INTEGER NOT NULL, `resumed_at` INTEGER, `completed_at` INTEGER, `perceived_difficulty` INTEGER, `notes` TEXT, `xp_awarded` INTEGER, `sync_error` TEXT, `owner_user_id` TEXT, PRIMARY KEY(`local_id`))",
         "fields": [
           {
             "fieldPath": "localId",
@@ -176,6 +181,11 @@
             "fieldPath": "syncError",
             "columnName": "sync_error",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "owner_user_id",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -204,6 +214,30 @@
             "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_workout_sessions_start_key` ON `${TABLE_NAME}` (`start_key`)"
           }
         ]
+      },
+      {
+        "tableName": "current_account",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `user_id` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
       },
       {
         "tableName": "session_exercises",
@@ -407,7 +441,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b20d005480b61c4afe106e6a7d82b7d7')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a51a6e3a1e8cfaa4ea1686329460ca0e')"
     ]
   }
 }

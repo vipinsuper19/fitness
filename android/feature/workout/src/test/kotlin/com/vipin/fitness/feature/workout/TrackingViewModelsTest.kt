@@ -192,6 +192,14 @@ class StartWorkoutTest {
         assertTrue(vm.state.value.openSession)
     }
 
+    @Test fun flaggedSessionsShowUntilDismissed() = runTest {
+        sessions.put(testSession("s3", "Push", emptyList()).copy(status = SessionStatus.COMPLETED, syncError = "VALIDATION_FAILED"))
+        val vm = WorkoutHomeViewModel(repo, clock, sessions)
+        assertEquals(listOf("s3"), vm.state.value.flagged.map { it.localId })
+        vm.dismissFlag("s3")
+        assertTrue(vm.state.value.flagged.isEmpty())
+    }
+
     @Test fun libraryReplaceModeSwapsTheSlot() = runTest {
         sessions.put(testSession("s1", "Legs", listOf(testSessionExercise(0, "squat", sessionId = "s1"))))
         val vm = ExerciseLibraryViewModel(repo, PlanBuilderStore(), sessions)

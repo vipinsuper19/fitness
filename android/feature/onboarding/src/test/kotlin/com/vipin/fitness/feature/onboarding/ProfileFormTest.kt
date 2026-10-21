@@ -90,4 +90,10 @@ class ProfileFormTest {
         assertEquals("5" to "8", imp.heightFt to imp.heightIn)
         assertEquals("172.7", imp.withUnits(UnitSystem.METRIC).heightCm)
     }
+
+    @Test fun almostSixFeetShowsSixFeetZero() {
+        val back = ProfileForm(units = UnitSystem.IMPERIAL, heightFt = "5", heightIn = "11.95")
+            .withUnits(UnitSystem.METRIC).withUnits(UnitSystem.IMPERIAL)
+        assertEquals("6" to "0", back.heightFt to back.heightIn)
+    }
 }

@@ -47,4 +47,9 @@ class UnitConversionTest {
         assertEquals(FeetInches(5, 8.0), UnitConversion.cmToFeetInches(171.45))
         assertEquals(171.45, UnitConversion.feetInchesToCm(5, 7.5), 0.0)
     }
+
+    @Test fun almostSixFeetCarriesIntoTheNextFoot() {
+        // 5 ft 11.95 in = 182.753 cm: inches round to 12, which carries (never "5 ft 12 in").
+        assertEquals(FeetInches(6, 0.0), UnitConversion.cmToFeetInches(UnitConversion.feetInchesToCm(5, 11.95)))
+    }
 }

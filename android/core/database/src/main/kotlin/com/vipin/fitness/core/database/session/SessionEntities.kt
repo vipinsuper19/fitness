@@ -35,6 +35,14 @@ data class WorkoutSessionEntity(
     @ColumnInfo(name = "xp_awarded") val xpAwarded: Int? = null,
     /** A queued write the server rejected for good (e.g. a start older than 24 h). */
     @ColumnInfo(name = "sync_error") val syncError: String? = null,
+    @ColumnInfo(name = "owner_user_id") val ownerUserId: String? = null,
+)
+
+/** The signed-in user (one row, id = 1): the owner stamped on new sessions and queued writes. */
+@Entity(tableName = "current_account")
+data class CurrentAccountEntity(
+    @PrimaryKey val id: Int = 1,
+    @ColumnInfo(name = "user_id") val userId: String,
 )
 
 /** One exercise slot of a session, in order. Skip and replace change the slot, not the plan. */

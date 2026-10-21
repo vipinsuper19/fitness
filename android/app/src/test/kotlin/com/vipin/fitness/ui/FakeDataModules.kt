@@ -4,6 +4,7 @@ import com.vipin.fitness.core.data.ProfileRepository
 import com.vipin.fitness.core.data.SessionRepository
 import com.vipin.fitness.core.data.UserScopedState
 import com.vipin.fitness.core.data.session.WorkoutSessionRepository
+import com.vipin.fitness.core.data.sync.OfflineSync
 import com.vipin.fitness.core.data.sync.SyncScheduler
 import com.vipin.fitness.core.data.workout.WorkoutRepository
 import com.vipin.fitness.core.data.di.DataModule
@@ -14,6 +15,7 @@ import com.vipin.fitness.core.network.auth.TokenStore
 import com.vipin.fitness.core.testing.FakeProfileFlagsCache
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
+import com.vipin.fitness.core.testing.FakeOfflineSync
 import com.vipin.fitness.core.testing.FakeSyncScheduler
 import com.vipin.fitness.core.testing.FakeWorkoutRepository
 import com.vipin.fitness.core.testing.FakeWorkoutSessionRepository
@@ -34,6 +36,7 @@ abstract class FakeDataModule {
     @Binds abstract fun workout(f: FakeWorkoutRepository): WorkoutRepository
     @Binds abstract fun workoutSessions(f: FakeWorkoutSessionRepository): WorkoutSessionRepository
     @Binds abstract fun sync(f: FakeSyncScheduler): SyncScheduler
+    @Binds abstract fun offlineSync(f: FakeOfflineSync): OfflineSync
     @Multibinds abstract fun userScopedState(): Set<UserScopedState>
 
     companion object {
@@ -42,6 +45,7 @@ abstract class FakeDataModule {
         @Provides @Singleton fun fakeWorkout() = FakeWorkoutRepository()
         @Provides @Singleton fun fakeWorkoutSessions() = FakeWorkoutSessionRepository()
         @Provides @Singleton fun fakeSync() = FakeSyncScheduler()
+        @Provides @Singleton fun fakeOfflineSync() = FakeOfflineSync()
     }
 }
 

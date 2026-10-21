@@ -30,6 +30,9 @@ interface PendingWriteDao {
     @Query("SELECT MAX(created_at) FROM pending_writes")
     suspend fun latestCreatedAt(): Long?
 
+    @Query("DELETE FROM pending_writes WHERE owner_user_id IS NULL OR owner_user_id != :userId")
+    suspend fun deleteNotOwnedBy(userId: String)
+
     /** Sign-out: queued writes belong to the user who made them, never to the next one. */
     @Query("DELETE FROM pending_writes")
     suspend fun clear()

@@ -7,6 +7,7 @@ import com.vipin.fitness.core.data.session.SessionStatus
 import com.vipin.fitness.core.data.session.StartOutcome
 import com.vipin.fitness.core.data.session.WorkoutSession
 import com.vipin.fitness.core.data.session.WorkoutSessionRepository
+import com.vipin.fitness.core.data.sync.OfflineSync
 import com.vipin.fitness.core.data.sync.SyncScheduler
 import com.vipin.fitness.core.data.workout.Exercise
 import com.vipin.fitness.core.data.workout.PlannedWorkout
@@ -29,6 +30,12 @@ class FakeWorkoutSessionRepository(private val now: () -> Instant = { Instant.EP
         sessions.map { m -> m.values.lastOrNull { it.status != SessionStatus.COMPLETED } }
 
     override fun session(localId: String): Flow<WorkoutSession?> = sessions.map { it[localId] }
+
+    override val flagged: Flow<List<WorkoutSession>> = sessions.map { m -> m.values.filter { it.syncError != null }.reversed() }
+
+    override suspend fun dismissFlag(localId: String) {
+        sessions.value[localId]?.let { put(it.copy(syncError = null)) }
+    }
 
     fun current(): WorkoutSession? = sessions.value.values.lastOrNull { it.status != SessionStatus.COMPLETED }
     fun put(s: WorkoutSession) = sessions.update { it + (s.localId to s) }
@@ -118,6 +125,17 @@ fun testSession(id: String, name: String, exercises: List<SessionExercise>, star
     resumedAt = startedAt, completedAt = null, perceivedDifficulty = null, exercises = exercises,
     synced = false, xpAwarded = null, syncError = null,
 )
+
+class FakeOfflineSync(var unsynced: Int = 0) : OfflineSync {
+    var syncs = 0
+    /** Applied on each sync, e.g. to simulate the network coming back. */
+    var afterSync: () -> Unit = {}
+    override suspend fun syncNow(): Int {
+        syncs++
+        afterSync()
+        return unsynced
+    }
+}
 
 class FakeSyncScheduler : SyncScheduler {
     var requests = 0

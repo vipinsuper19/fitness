@@ -27,4 +27,6 @@ data class PendingWriteEntity(
     @ColumnInfo(name = "created_at") val createdAtEpochMs: Long,
     val attempts: Int = 0,
     @ColumnInfo(name = "last_error") val lastError: String? = null,
+    /** User who made the write (v2). Never sent for anyone else; null = unknown (v1 rows). */
+    @ColumnInfo(name = "owner_user_id") val ownerUserId: String? = null,
 )

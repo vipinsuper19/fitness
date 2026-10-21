@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.vipin.fitness.core.data.sync.DefaultOfflineSync
 import com.vipin.fitness.core.data.sync.DrainResult
 import com.vipin.fitness.core.data.sync.OutboxProcessor
 import com.vipin.fitness.core.data.sync.SyncScheduler
@@ -14,6 +15,7 @@ import com.vipin.fitness.core.data.workout.TrackingType
 import com.vipin.fitness.core.data.workout.WorkoutPlan
 import com.vipin.fitness.core.data.workout.Exercise
 import com.vipin.fitness.core.database.FitnessDatabase
+import com.vipin.fitness.core.database.outbox.PendingWriteEntity
 import com.vipin.fitness.core.network.OutboxApi
 import com.vipin.fitness.core.network.di.fitnessJson
 import com.vipin.fitness.core.network.di.retrofit
@@ -256,5 +258,85 @@ class WorkoutTrackingTest {
         assertTrue(queued().isEmpty())
         assertNull(repo.session(session().localId).first()!!.syncError)
         server.takeRequest(1, TimeUnit.SECONDS)
+    }
+
+    // (a) Ownership
+
+    @Test fun writesAndSessionsCarryTheSignedInUser() = runTest {
+        repo.onSignedIn("u1")
+        start()
+        assertEquals(listOf("u1"), queued().map { it.ownerUserId })
+    }
+
+    @Test fun sameUserSigningBackInKeepsAndSyncsTheQueue() = runTest {
+        repo.onSignedIn("u1")
+        start()
+        val before = sync.requests
+        repo.onSignedIn("u1")
+        assertEquals(1, queued().size)
+        assertTrue(repo.unfinished.first() != null)
+        assertEquals(before + 1, sync.requests)
+    }
+
+    @Test fun anotherUserSigningInDeletesWithoutSending() = runTest {
+        repo.onSignedIn("u1")
+        start()
+        repo.onSignedIn("u2")
+        assertTrue(queued().isEmpty())
+        assertNull(repo.unfinished.first())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test fun aWriteOfAnotherUserIsNeverSent() = runTest {
+        repo.onSignedIn("u2")
+        db.pendingWriteDao().enqueue(
+            PendingWriteEntity("w", "k", "POST", "food-logs", "{}", 1, ownerUserId = "u1"),
+        )
+        assertEquals(DrainResult.Done, outbox.drain())
+        assertEquals(0, server.requestCount)
+        assertTrue(queued().isEmpty())
+    }
+
+    @Test fun confirmedSignOutClearsTheAccountToo() = runTest {
+        repo.onSignedIn("u1")
+        start()
+        repo.clearUserState()
+        assertNull(db.workoutSessionDao().currentUserId())
+        assertTrue(queued().isEmpty())
+    }
+
+    @Test fun offlineSyncReportsUnsyncedWorkouts() = runTest {
+        start()
+        repo.setCompleted(session().exercises[0].sets[0].clientSetId, true)
+        val offline = DefaultOfflineSync(outbox)
+        server.enqueue(MockResponse(code = 503, body = ""))
+        assertEquals(1, offline.syncNow()) // two writes, one workout
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        server.enqueue(ok("""{"clientSetId":"x","exerciseId":"squat","setIndex":0,"completed":true,"id":"l1","updatedAt":"t"}"""))
+        assertEquals(0, offline.syncNow())
+    }
+
+    // (c) Errors
+
+    @Test fun idempotencyInProgressRetriesAndKeepsTheWrite() = runTest {
+        start()
+        server.enqueue(MockResponse(code = 409, body = """{"code":"IDEMPOTENCY_IN_PROGRESS","message":"x"}"""))
+        assertEquals(DrainResult.Retry, outbox.drain())
+        assertEquals("IDEMPOTENCY_IN_PROGRESS", queued().single().lastError)
+        assertNull(session().syncError)
+    }
+
+    @Test fun sessionGoneDropsTheWriteAndFlagsIt() = runTest {
+        val id = start()
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        outbox.drain()
+        repo.setCompleted(session().exercises[0].sets[0].clientSetId, true)
+        server.enqueue(MockResponse(code = 404, body = """{"code":"NOT_FOUND","message":"x"}"""))
+        assertEquals(DrainResult.Done, outbox.drain())
+        assertTrue(queued().isEmpty())
+        assertEquals(listOf(id), repo.flagged.first().map { it.localId })
+        assertEquals("NOT_FOUND", repo.flagged.first().single().syncError)
+        repo.dismissFlag(id)
+        assertTrue(repo.flagged.first().isEmpty())
     }
 }

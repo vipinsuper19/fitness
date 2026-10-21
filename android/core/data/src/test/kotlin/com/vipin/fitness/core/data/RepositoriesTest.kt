@@ -42,7 +42,9 @@ class RepositoriesTest {
     private val cache = MemoryCache()
     private val userState = object : UserScopedState {
         var clears = 0
+        val signIns = mutableListOf<String>()
         override suspend fun clearUserState() { clears++ }
+        override suspend fun onSignedIn(userId: String) { signIns += userId }
     }
     private val server = MockWebServer()
     private val json = fitnessJson()
@@ -124,9 +126,10 @@ class RepositoriesTest {
         server.enqueue(MockResponse(code = 401, body = """{"code":"INVALID_CREDENTIALS","message":"no","requestId":"q"}"""))
         server.enqueue(MockResponse(code = 200, body = authBody))
         session.signIn("a@b.c", "x")
-        assertEquals(0, userState.clears)
+        assertEquals(emptyList<String>(), userState.signIns)
         session.signIn("a@b.c", "x")
-        assertEquals(1, userState.clears)
+        assertEquals(listOf("u"), userState.signIns) // the signed-in user's id, for per-user state
+        assertEquals(0, userState.clears)
     }
 
     @Test fun profileUpdateSendsPresenceAwareBodyAndKey() = runTest {

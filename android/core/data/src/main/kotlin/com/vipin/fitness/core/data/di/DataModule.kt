@@ -7,6 +7,8 @@ import com.vipin.fitness.core.data.SessionRepository
 import com.vipin.fitness.core.data.UserScopedState
 import com.vipin.fitness.core.data.session.DefaultWorkoutSessionRepository
 import com.vipin.fitness.core.data.session.WorkoutSessionRepository
+import com.vipin.fitness.core.data.sync.DefaultOfflineSync
+import com.vipin.fitness.core.data.sync.OfflineSync
 import com.vipin.fitness.core.data.sync.SyncScheduler
 import com.vipin.fitness.core.data.sync.WorkManagerSyncScheduler
 import com.vipin.fitness.core.data.workout.DefaultWorkoutRepository
@@ -32,4 +34,5 @@ abstract class DataModule {
     @Binds abstract fun workoutSessions(impl: DefaultWorkoutSessionRepository): WorkoutSessionRepository
     @Binds @IntoSet abstract fun workoutSessionsUserState(impl: DefaultWorkoutSessionRepository): UserScopedState
     @Binds abstract fun syncScheduler(impl: WorkManagerSyncScheduler): SyncScheduler
+    @Binds abstract fun offlineSync(impl: DefaultOfflineSync): OfflineSync
 }

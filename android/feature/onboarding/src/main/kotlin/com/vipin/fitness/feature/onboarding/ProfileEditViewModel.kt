@@ -6,6 +6,7 @@ import com.vipin.fitness.core.common.UnitSystem
 import com.vipin.fitness.core.data.ProfileChanges
 import com.vipin.fitness.core.data.ProfileRepository
 import com.vipin.fitness.core.data.SessionRepository
+import com.vipin.fitness.core.data.sync.OfflineSync
 import com.vipin.fitness.core.data.newIdempotencyKey
 import com.vipin.fitness.core.data.userMessage
 import com.vipin.fitness.core.designsystem.UiText
@@ -30,6 +31,8 @@ data class ProfileEditState(
     val saved: Boolean = false,
     val signingOut: Boolean = false,
     val signedOut: Boolean = false,
+    /** Sign-out found this many workouts not yet synced: ask before deleting them. */
+    val unsyncedOnSignOut: Int = 0,
 )
 
 /** Edit every profile field on one screen. Save sends only the fields that changed. */
@@ -38,6 +41,7 @@ class ProfileEditViewModel @Inject constructor(
     private val profiles: ProfileRepository,
     private val session: SessionRepository,
     private val clock: Clock,
+    private val offline: OfflineSync,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ProfileEditState())
     val state: StateFlow<ProfileEditState> = _state.asStateFlow()
@@ -100,13 +104,35 @@ class ProfileEditViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Sends anything unsynced first. If workouts are still unsynced (offline), asks before
+     * signing out, because signing out deletes them ([confirmSignOut]); [signOut] again retries.
+     */
     fun signOut() {
         val s = _state.value
         if (s.signedOut || s.signingOut) return
-        _state.update { it.copy(signingOut = true) } // set before launch: a double tap signs out once
+        _state.update { it.copy(signingOut = true, unsyncedOnSignOut = 0) } // set before launch: a double tap signs out once
         viewModelScope.launch {
-            session.signOut()
-            _state.update { it.copy(signingOut = false, signedOut = true) }
+            val left = offline.syncNow()
+            if (left > 0) {
+                _state.update { it.copy(signingOut = false, unsyncedOnSignOut = left) }
+            } else {
+                doSignOut()
+            }
         }
+    }
+
+    fun confirmSignOut() {
+        val s = _state.value
+        if (s.signedOut || s.signingOut || s.unsyncedOnSignOut == 0) return
+        _state.update { it.copy(signingOut = true, unsyncedOnSignOut = 0) }
+        viewModelScope.launch { doSignOut() }
+    }
+
+    fun cancelSignOut() = _state.update { it.copy(unsyncedOnSignOut = 0) }
+
+    private suspend fun doSignOut() {
+        session.signOut()
+        _state.update { it.copy(signingOut = false, signedOut = true) }
     }
 }
