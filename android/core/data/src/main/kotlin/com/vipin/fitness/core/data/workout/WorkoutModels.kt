@@ -91,6 +91,10 @@ data class WorkoutPlan(
     val workouts: List<PlannedWorkout>,
     val isActive: Boolean,
     val source: PlanSource,
+    /** 1-based week of the active plan, capped at [weeks]; null unless this is the active plan. */
+    val currentWeek: Int? = null,
+    /** True once the active plan's last week is over; null unless this is the active plan. */
+    val planEnded: Boolean? = null,
 ) {
     fun workoutOn(day: DayOfWeek): PlannedWorkout? = workouts.firstOrNull { it.day == day }
 }

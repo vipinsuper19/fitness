@@ -34,7 +34,22 @@ sealed interface Slot<out T> {
 }
 
 /** Today's plan day: [workout] null means a rest day; [plan] null means no active plan. */
-data class PlanDay(val plan: WorkoutPlan?, val workout: PlannedWorkout?)
+data class PlanDay(val plan: WorkoutPlan?, val workout: PlannedWorkout?) {
+    /** "Week N of M" / "Plan finished" from the plan response; null hides it. */
+    val week: PlanWeek? get() = plan?.let { p ->
+        val week = p.currentWeek
+        when {
+            p.planEnded == true -> PlanWeek.Finished
+            week != null -> PlanWeek.Current(week, p.weeks)
+            else -> null
+        }
+    }
+}
+
+sealed interface PlanWeek {
+    data object Finished : PlanWeek
+    data class Current(val week: Int, val of: Int) : PlanWeek
+}
 
 /** Streak from /progress/summary, plus whether a workout is already done today. */
 data class Streak(val days: Int, val workoutsToday: Int, val xpToday: Int)

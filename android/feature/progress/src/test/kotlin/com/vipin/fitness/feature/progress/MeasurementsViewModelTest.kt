@@ -172,4 +172,13 @@ class MeasurementsViewModelTest {
         vm.save()
         assertTrue(repo.writes.isEmpty())
     }
+
+    @Test fun bodyFatAndWaistEditShowOneDecimalWeightTwo() {
+        val vm = vm()
+        vm.startEdit(BodyMeasurement("x", oct21, mapOf(WEIGHT to 80.25, WAIST to 90.25, MeasurementKind.BODY_FAT to 18.25)))
+        val t = vm.state.value.form!!.texts
+        assertEquals("80.25", t[WEIGHT])
+        assertEquals("90.3", t[WAIST])
+        assertEquals("18.3", t[MeasurementKind.BODY_FAT])
+    }
 }
