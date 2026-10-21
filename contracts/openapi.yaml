@@ -428,6 +428,41 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
   /workout-plans:
+    get:
+      tags: [workout-plans]
+      operationId: listWorkoutPlans
+      summary: List the user's saved plans (plan management)
+      description: |
+        Summaries only (no workouts); open one with `GET /workout-plans/{planId}`.
+        Newest `createdAt` first, ties by `id`. Without `status`, returns active and
+        inactive plans (archived plans are hidden unless asked for).
+        **Regenerating** a plan is not a separate call: `POST /workout-plans/generate`
+        (draft), then `POST /workout-plans` (save as a new plan), then
+        `POST /workout-plans/{planId}/activate`. The old plan becomes inactive and can be
+        archived with `DELETE /workout-plans/{planId}`.
+      parameters:
+        - name: status
+          in: query
+          description: '`active` (at most one), `inactive` (saved, not active, not archived) or `archived`. Omit for active + inactive.'
+          schema: { $ref: '#/components/schemas/PlanStatus' }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of plan summaries
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/WorkoutPlanSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [workout-plans]
       operationId: createWorkoutPlan
@@ -503,10 +538,50 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: '`VERSION_CONFLICT`, or an idempotency conflict'
+          description: '`VERSION_CONFLICT`, `PLAN_ARCHIVED` (archived plans are read-only), or an idempotency conflict'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [workout-plans]
+      operationId: archiveWorkoutPlan
+      summary: Archive a plan (soft delete; sessions and XP are kept)
+      description: |
+        Sets the plan's `archivedAt`; nothing is hard-deleted. Logged sessions keep their
+        `plannedWorkoutId`/`planVersion`, history and the XP ledger are unchanged, and
+        every version stays readable with `GET /workout-plans/{planId}` (now with
+        `archivedAt` set). Archiving the active plan deactivates it first (same effect as
+        `POST /workout-plans/{planId}/deactivate`). Repeating it is a no-op that returns
+        204 and keeps the original `archivedAt`. An archived plan is read-only:
+        `PATCH` and `activate` return `409 PLAN_ARCHIVED`. Sessions already started from it
+        can still be logged and completed (offline sync).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Archived (or already archived) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /workout-plans/{planId}/deactivate:
+    post:
+      tags: [workout-plans]
+      operationId: deactivateWorkoutPlan
+      summary: Pause a plan (the user then has no active plan)
+      description: |
+        Clears the user's active plan if it is this one. Idempotent: an inactive or
+        archived plan also returns 204 and nothing changes. Afterwards
+        `GET /workout-plans/active` returns 204, and this plan reports `isActive: false`
+        with `currentWeek` and `planEnded` null (they are only computed for the active
+        plan). `activatedAt` keeps its value. Resuming is `POST .../activate`, which
+        sets `activatedAt` to now, so `currentWeek` restarts at 1.
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Not active (now or already) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
   /workout-plans/{planId}/activate:
     post:
       tags: [workout-plans]
@@ -523,6 +598,11 @@ paths:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`PLAN_ARCHIVED`: archived plans cannot be activated; save a new plan instead. Or an idempotency conflict.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /workout-sessions:
     post:
@@ -1776,6 +1856,23 @@ components:
           required: [baseVersion]
           properties:
             baseVersion: { type: integer, minimum: 1 }
+    PlanStatus:
+      type: string
+      enum: [active, inactive, archived]
+      description: Derived, not stored. `archived` = `archivedAt` set; else `active` = the profile's active plan; else `inactive`.
+    WorkoutPlanSummary:
+      type: object
+      required: [id, name, source, version, isActive, activatedAt, createdAt, archivedAt, completedSessions]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string, description: Name of the latest version }
+        source: { type: string, enum: [rule_based, custom] }
+        version: { type: integer, minimum: 1, description: Latest version number }
+        isActive: { type: boolean }
+        activatedAt: { type: [string, 'null'], format: date-time, description: Same as `WorkoutPlan.activatedAt` }
+        createdAt: { type: string, format: date-time }
+        archivedAt: { type: [string, 'null'], format: date-time }
+        completedSessions: { type: integer, minimum: 0, description: 'Completed sessions logged against any version of this plan (discarded sessions excluded)' }
     WorkoutPlan:
       type: object
       required: [id, version, name, weeks, workouts, isActive, source, createdAt, activatedAt, currentWeek, planEnded]
@@ -1800,13 +1897,10 @@ components:
             Re-activating the already active plan keeps it, and it stays set after another
             plan becomes active (use `isActive` for the current state). Plans that were
             active before this field existed report their `createdAt` (a lower bound).
-
-    SessionStatus:
-      type: string
-      enum: [in_progress, paused, completed]
-    SessionStart:
-      type: object
-      properties:
+        archivedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Set when the plan was archived (`DELETE /workout-plans/{planId}`); null otherwise. Optional for backward compatibility; servers always send it.
         currentWeek:
           type: [integer, 'null']
           minimum: 1
@@ -1817,7 +1911,14 @@ components:
             (see `planEnded`). Null unless this is the active plan, and also null if its `activatedAt` is null.
         planEnded:
           type: [boolean, 'null']
-          description: True once the active plan's last week is over (then `currentWeek` stays at `weeks`). Null unless this is the active plan, and also null if its `activatedAt` is null.
+          description: True once the active plan's last week is over (then `currentWeek` stays at `weeks`). Null unless this is the active plan, and also null if its `activatedAt` is null. With no active plan (after deactivate or archive), every plan reports both as null.
+
+    SessionStatus:
+      type: string
+      enum: [in_progress, paused, completed]
+    SessionStart:
+      type: object
+      properties:
         plannedWorkoutId: { $ref: '#/components/schemas/Id' }
         planVersion: { type: integer, minimum: 1 }
         startedAt:
