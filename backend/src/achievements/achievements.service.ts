@@ -27,6 +27,11 @@ export interface EvaluationResult {
  * - Per-user work is serialised with a transaction-scoped advisory lock, so concurrent
  *   evaluations and retries converge on one award.
  */
+/** A badge as the API shows it once earned (contract `Badge`, progress null). */
+export interface EarnedBadge {
+  code: string; title: string; description: string; family: string; bonusXp: number; earnedAt: string; progress: null;
+}
+
 @Injectable()
 export class AchievementsService implements OnModuleDestroy {
   private readonly logger = new Logger('Achievements');
@@ -61,6 +66,30 @@ export class AchievementsService implements OnModuleDestroy {
       } while (this.rerun.has(userId));
     })().finally(() => this.running.delete(userId));
     this.running.set(userId, job);
+  }
+
+  /**
+   * Evaluates inside the request, after the caller's write has committed, and returns
+   * the badges this evaluation awarded (earned views, progress null), for responses
+   * that report `newBadges`. Never throws: a failure is logged and falls back to the
+   * background evaluation, and the next read heals. Off when ACHIEVEMENTS_HOOKS=off.
+   */
+  async awardNow(userId: string): Promise<EarnedBadge[]> {
+    if (this.env.ACHIEVEMENTS_HOOKS === 'off') return [];
+    try {
+      const { badgesAwarded } = await this.evaluate(userId);
+      if (!badgesAwarded.length) return [];
+      const rows = await this.prisma.userBadge.findMany({ where: { userId, badgeCode: { in: badgesAwarded } } });
+      const at = new Map(rows.map((r) => [r.badgeCode, r.earnedAt]));
+      return BADGES.filter((b) => at.has(b.code)).map((b) => ({
+        code: b.code, title: b.title, description: b.description, family: b.family, bonusXp: b.bonusXp,
+        earnedAt: at.get(b.code)!.toISOString(), progress: null,
+      }));
+    } catch (e) {
+      this.logger.warn(`awardNow failed userId=${userId}: ${e instanceof Error ? e.message : String(e)}`);
+      this.afterWrite(userId);
+      return [];
+    }
   }
 
   /** Resolves when no background evaluation is pending (tests, shutdown). */
