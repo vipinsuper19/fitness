@@ -33,8 +33,8 @@ fun FitnessApp(
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
     onWorkoutNavigate: (WorkoutDestination) -> Unit = {},
-    /** Slot so UI tests can render the shell without Hilt. */
-    workoutTab: @Composable (Modifier) -> Unit = { WorkoutHomeRoute(onWorkoutNavigate, it) },
+    /** Slot so UI tests can render the shell without Hilt. Defaults to the real screen for each tab. */
+    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m, onWorkoutNavigate) },
 ) {
     var current by rememberSaveable { mutableStateOf(TopLevelDestination.START) }
     Scaffold(
@@ -64,12 +64,15 @@ fun FitnessApp(
             }
         },
     ) { padding ->
-        val content = Modifier.padding(padding)
-        when (current) {
-            TopLevelDestination.HOME -> HomeScreen(content)
-            TopLevelDestination.WORKOUT -> workoutTab(content)
-            TopLevelDestination.NUTRITION -> NutritionScreen(content)
-            TopLevelDestination.PROGRESS -> ProgressScreen(content)
-        }
+        tabContent(current, Modifier.padding(padding))
     }
+}
+
+/** The real screen for each tab. Tests can pass their own [FitnessApp] tabContent to stay free of Hilt. */
+@Composable
+private fun TabContent(dest: TopLevelDestination, modifier: Modifier, onWorkoutNavigate: (WorkoutDestination) -> Unit) = when (dest) {
+    TopLevelDestination.HOME -> HomeScreen(modifier)
+    TopLevelDestination.WORKOUT -> WorkoutHomeRoute(onWorkoutNavigate, modifier)
+    TopLevelDestination.NUTRITION -> NutritionScreen(modifier)
+    TopLevelDestination.PROGRESS -> ProgressScreen(modifier)
 }

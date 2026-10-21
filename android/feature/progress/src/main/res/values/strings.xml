@@ -1,5 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="progress_title">Progress</string>
-    <string name="progress_coming_soon">Progress is coming soon.</string>
+    <string name="progress_charts">Charts</string>
+    <string name="progress_measurements">Measurements</string>
+    <string name="progress_retry">Retry</string>
+    <string name="progress_save">Save</string>
+    <string name="progress_cancel">Cancel</string>
+    <string name="progress_today">Today</string>
+    <string name="range_days">%1$d days</string>
+    <string name="range_dates">%1$s – %2$s</string>
+    <string name="chart_weight">Weight (%1$s)</string>
+    <string name="chart_energy">Calories eaten (kcal)</string>
+    <string name="chart_active_minutes">Active minutes</string>
+    <string name="chart_workouts">Workouts completed</string>
+    <string name="chart_no_data">No data in this range yet.</string>
+    <string name="chart_min_max">Low %1$s · High %2$s · %3$d of %4$d days with data</string>
+    <string name="measurements_empty">No measurements yet. Add your first one to start tracking.</string>
+    <string name="measurements_load_more">Load more</string>
+    <string name="measurement_add">Add</string>
+    <string name="measurement_edit">Edit measurement</string>
+    <string name="measurement_delete">Delete</string>
+    <string name="measurement_invalid">Enter a value from %1$s to %2$s</string>
+    <string name="measurement_none">Enter at least one measurement.</string>
+    <string name="measurement_future">The date can\'t be in the future.</string>
+    <string name="kind_weight">Weight</string>
+    <string name="kind_body_fat">Body fat</string>
+    <string name="kind_waist">Waist</string>
+    <string name="kind_chest">Chest</string>
+    <string name="kind_hip">Hip</string>
+    <string name="kind_arm">Arm</string>
+    <string name="kind_thigh">Thigh</string>
 </resources>

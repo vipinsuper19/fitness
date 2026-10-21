@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="home_title">Home</string>
-    <string name="home_coming_soon">Home is coming soon.</string>
+    <string name="home_retry">Retry</string>
+    <string name="home_plan_title">Today\'s plan</string>
+    <string name="home_plan_none">No active plan yet. Pick or build one in Workout.</string>
+    <string name="home_plan_rest">Rest day. Recover well.</string>
+    <string name="home_plan_exercises">%1$d exercises</string>
+    <string name="home_nutrition_title">Today\'s nutrition</string>
+    <string name="home_nutrition_empty">Nothing logged yet today.</string>
+    <string name="home_kcal">%1$s kcal</string>
+    <string name="home_kcal_of_target">%1$s of %2$s kcal</string>
+    <string name="home_macros">P %1$s g · C %2$s g · F %3$s g</string>
+    <string name="home_water">Water %1$s</string>
+    <string name="home_water_of_target">Water %1$s of %2$s</string>
+    <string name="home_streak_title">Streak</string>
+    <string name="home_streak_empty">No streak yet. Finish a workout to start one.</string>
+    <string name="home_streak_days">%1$d-day streak</string>
+    <string name="home_streak_keep_alive">Work out today to keep it going.</string>
+    <string name="home_xp_title">XP</string>
+    <string name="home_xp_empty">No XP yet. Complete a workout to earn some.</string>
+    <string name="home_xp_level">Level %1$d · %2$s XP</string>
+    <string name="home_xp_next">%1$d / %2$d XP to the next level</string>
 </resources>
