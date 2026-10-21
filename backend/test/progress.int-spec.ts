@@ -238,7 +238,7 @@ describeDb('T15: body measurements and progress summary (HTTP + Postgres)', () =
       const b = await signUp();
       await api(a.token).post('/api/v1/body-measurements').send({ date: '2026-10-05', weightKg: 80 }).expect(201);
       const s = (await api(b.token).get('/api/v1/progress/summary?from=2026-10-05&to=2026-10-05').expect(200)).body;
-      expect(s.points[0]).toEqual({ date: '2026-10-05', weightKg: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 });
+      expect(s.points[0]).toEqual({ date: '2026-10-05', weightKg: null, bodyFatPct: null, waistCm: null, waterMl: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 });
     });
   });
 });
