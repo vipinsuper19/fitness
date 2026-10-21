@@ -36,6 +36,9 @@ jobs:
       - run: npm ci --include=dev --no-audit --no-fund
       - name: Count before
         run: node scripts/db-counts.cjs before
+      # The seed imports the generated client (src/generated, git-ignored).
+      - name: Generate Prisma client
+        run: npm run prisma:generate
       - name: Seed
         run: npm run db:seed 2>&1 | sed -E 's#postgres(ql)?://[^[:space:]]*#[REDACTED]#g'; exit "${PIPESTATUS[0]}"
         shell: bash
