@@ -643,7 +643,9 @@ paths:
       tags: [workout-sessions]
       operationId: upsertSetLog
       summary: Log or correct a set (upsert by the client's set UUID)
-      description: The client-generated `clientSetId` makes this safe to retry from offline sync. Sending the same `clientSetId` again replaces that set. Unchanged by session correction: on a completed session this returns `409 SESSION_COMPLETED`; use `PUT /workout-sessions/{sessionId}/corrections/sets/{clientSetId}` instead.
+      description: |
+        The client-generated `clientSetId` makes this safe to retry from offline sync. Sending the same `clientSetId` again replaces that set.
+        Unchanged by session correction: on a completed session this returns `409 SESSION_COMPLETED`; use `PUT /workout-sessions/{sessionId}/corrections/sets/{clientSetId}` instead.
       parameters:
         - $ref: '#/components/parameters/SessionId'
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
