@@ -35,6 +35,26 @@ class AchievementsContentTest {
         compose.onNodeWithText("0 / 1").assertIsDisplayed()
     }
 
+    @Test fun notServedYetShowsComingSoonWithoutRetry() {
+        show(BadgesState(loading = false, unavailable = true))
+        compose.onNodeWithText("Badges and challenges are coming soon.").assertIsDisplayed()
+        compose.onNodeWithTag("achievements_retry").assertDoesNotExist()
+        compose.onNodeWithTag("tab_challenges").performClick()
+        compose.onNodeWithTag("achievements_unavailable").assertDoesNotExist() // challenges state is fine here
+    }
+
+    @Test fun challengesNotServedYetShowsComingSoon() {
+        show(c = ChallengesState(loading = false, unavailable = true), tab = 1)
+        compose.onNodeWithTag("achievements_unavailable").assertIsDisplayed()
+        compose.onNodeWithTag("achievements_retry").assertDoesNotExist()
+    }
+
+    @Test fun passedWindowSaysEnded() {
+        val c = testChallenge("a1", windowEnd = java.time.LocalDate.of(2026, 10, 18))
+        show(c = ChallengesState(loading = false, active = listOf(c)), tab = 1)
+        compose.onNodeWithText("Ended").assertIsDisplayed()
+    }
+
     @Test fun badgeErrorOffersRetry() {
         var retried = 0
         show(BadgesState(loading = false, error = ApiError.Network), ba = BadgeActions(refresh = { retried++ }))

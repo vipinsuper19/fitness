@@ -19,12 +19,20 @@ data class BadgesState(
     val loading: Boolean = true,
     /** Set when the last load failed; cached [badges] (if any) stay on screen. */
     val error: ApiError? = null,
+    /** The server doesn't serve badges yet (404): "coming soon", no Retry. */
+    val unavailable: Boolean = false,
     /** Server catalog order (stable per the contract). */
     val badges: List<Badge> = emptyList(),
     val earnedCount: Int = 0,
     /** Badges earned since the user last saw the list: shown once in a "Badge earned" sheet. */
     val celebrate: List<Badge> = emptyList(),
 )
+
+/**
+ * The backend ships these endpoints after the app (spec §12), so until then they 404. That is
+ * "coming soon", not an error: retrying wouldn't help.
+ */
+internal fun ApiError.isNotServedYet() = this is ApiError.Http && status == 404
 
 @HiltViewModel
 class BadgesViewModel @Inject constructor(
@@ -47,13 +55,16 @@ class BadgesViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             loading = false,
+                            unavailable = false,
                             badges = r.value.items,
                             earnedCount = r.value.earnedCount,
                             celebrate = (it.celebrate + fresh).distinctBy { b -> b.code },
                         )
                     }
                 }
-                is ApiResult.Failure -> _state.update { it.copy(loading = false, error = r.error) }
+                is ApiResult.Failure ->
+                    if (r.error.isNotServedYet()) _state.update { it.copy(loading = false, unavailable = true) }
+                    else _state.update { it.copy(loading = false, error = r.error) }
             }
         }
     }

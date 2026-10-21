@@ -3,6 +3,7 @@
     <string name="achievements_title">Badges &amp; challenges</string>
     <string name="tab_badges">Badges</string>
     <string name="tab_challenges">Challenges</string>
+    <string name="achievements_coming_soon">Badges and challenges are coming soon.</string>
     <string name="achievements_retry">Retry</string>
     <string name="achievements_load_failed">Couldn\'t load. Check your connection and try again.</string>
     <plurals name="badges_earned_count">

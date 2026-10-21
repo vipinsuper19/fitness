@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -45,6 +46,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.common.time.APP_ZONE
 import com.vipin.fitness.core.data.achievements.Badge
@@ -64,11 +66,17 @@ fun AchievementsRoute(
     challenges: ChallengesViewModel = hiltViewModel(),
 ) {
     val b by badges.state.collectAsStateWithLifecycle()
+    // Re-read on every resume so "days left" moves on after midnight.
+    var now by remember { mutableStateOf(challenges.now()) }
+    LifecycleResumeEffect(Unit) {
+        now = challenges.now()
+        onPauseOrDispose { }
+    }
     val c by challenges.state.collectAsStateWithLifecycle()
     AchievementsContent(
         badges = b,
         challenges = c,
-        now = challenges.now(),
+        now = now,
         badgeActions = BadgeActions(badges::refresh, badges::dismissCelebration),
         challengeActions = ChallengeActions(
             refresh = challenges::refresh,
@@ -171,6 +179,15 @@ private fun LoadFailed(onRetry: () -> Unit) {
 }
 
 @Composable
+private fun ComingSoon() {
+    Text(
+        stringResource(R.string.achievements_coming_soon),
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("achievements_unavailable"),
+    )
+}
+
+@Composable
 private fun Loading() = Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 
 private val DATE: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
@@ -179,6 +196,7 @@ private val DATE: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatSt
 private fun BadgesTab(s: BadgesState, a: BadgeActions) {
     when {
         s.badges.isEmpty() && s.loading -> Loading()
+        s.unavailable -> ComingSoon()
         s.badges.isEmpty() && s.error != null -> LoadFailed(a.refresh)
         else -> LazyVerticalGrid(
             columns = GridCells.Adaptive(160.dp),
@@ -227,6 +245,7 @@ private fun BadgeCard(b: Badge) {
 @Composable
 private fun ChallengesTab(s: ChallengesState, now: Instant, a: ChallengeActions) {
     if (s.loading && s.templates.isEmpty() && s.active.isEmpty()) return Loading()
+    if (s.unavailable) return ComingSoon()
     LazyColumn(
         Modifier.fillMaxSize().testTag("challenges_list"),
         contentPadding = PaddingValues(16.dp),
@@ -241,7 +260,7 @@ private fun ChallengesTab(s: ChallengesState, now: Instant, a: ChallengeActions)
         if (s.history.isNotEmpty()) item(key = "h_history") { Section(stringResource(R.string.challenges_history)) }
         items(s.history, key = { "h_${it.id}" }) { HistoryCard(it) }
         if (s.historyCursor != null) item(key = "more") {
-            TextButton(a.loadMore, Modifier.testTag("challenges_load_more")) { Text(stringResource(R.string.challenges_load_more)) }
+            TextButton(a.loadMore, Modifier.testTag("challenges_load_more"), enabled = !s.loadingMore) { Text(stringResource(R.string.challenges_load_more)) }
         }
     }
 }
@@ -265,7 +284,8 @@ private fun ActiveCard(c: Challenge, now: Instant, leaving: Boolean, onLeave: ()
             Text(
                 when (left) {
                     null -> stringResource(R.string.challenge_no_deadline)
-                    0, 1 -> stringResource(R.string.challenge_ends_today)
+                    0 -> stringResource(R.string.status_unknown) // window passed, server hasn't expired it yet
+                    1 -> stringResource(R.string.challenge_ends_today)
                     else -> pluralStringResource(R.plurals.challenge_days_left, left, left)
                 },
                 style = MaterialTheme.typography.labelMedium,

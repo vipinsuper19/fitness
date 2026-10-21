@@ -36,6 +36,16 @@ class BadgesViewModelTest {
         assertTrue(vm.state.value.celebrate.isEmpty())
     }
 
+    @Test fun notServedYetIsUnavailableNotAnError() {
+        repo.failWith = ApiError.Http(404, "NOT_FOUND", "", null)
+        val vm = BadgesViewModel(repo, tracker)
+        assertTrue(vm.state.value.unavailable)
+        assertNull(vm.state.value.error)
+        repo.failWith = ApiError.Http(500, "INTERNAL", "", null)
+        vm.refresh()
+        assertEquals(500, (vm.state.value.error as ApiError.Http).status)
+    }
+
     @Test fun failureKeepsLoadedBadges() {
         repo.badgeList = BadgeList(listOf(testBadge("A")), 0)
         val vm = BadgesViewModel(repo, tracker)
@@ -121,6 +131,29 @@ class ChallengesViewModelTest {
         vm.askLeave(vm.state.value.history.first()) // completed
         vm.confirmLeave()
         assertEquals(ChallengeMessage.NOT_ACTIVE, vm.state.value.message)
+    }
+
+    @Test fun notServedYetIsUnavailableNotAnError() {
+        repo.failWith = ApiError.Http(404, "NOT_FOUND", "", null)
+        val s = vm().state.value
+        assertTrue(s.unavailable)
+        assertNull(s.loadError)
+    }
+
+    @Test fun loadMoreIgnoresADoubleTap() {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val slow = object : com.vipin.fitness.core.data.achievements.AchievementsRepository by repo {
+            var calls = 0
+            override suspend fun challenges(status: ChallengeStatus?, cursor: String?) =
+                if (cursor == null) com.vipin.fitness.core.network.ApiResult.Success(com.vipin.fitness.core.data.achievements.ChallengePage(emptyList(), "c2"))
+                else { calls++; gate.await(); com.vipin.fitness.core.network.ApiResult.Success(com.vipin.fitness.core.data.achievements.ChallengePage(emptyList(), null)) }
+        }
+        val vm = ChallengesViewModel(slow, clock)
+        vm.loadMoreHistory()
+        vm.loadMoreHistory()
+        assertEquals(1, slow.calls)
+        gate.complete(Unit)
+        assertNull(vm.state.value.historyCursor)
     }
 
     @Test fun loadFailureIsShown() {

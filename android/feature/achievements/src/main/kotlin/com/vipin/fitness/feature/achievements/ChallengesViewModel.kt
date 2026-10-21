@@ -26,6 +26,9 @@ enum class ChallengeMessage { JOINED, LEFT, ALREADY_JOINED, LIMIT_REACHED, NOT_A
 data class ChallengesState(
     val loading: Boolean = true,
     val loadError: ApiError? = null,
+    /** Challenges aren't served yet (404 on a list): "coming soon", no Retry. */
+    val unavailable: Boolean = false,
+    val loadingMore: Boolean = false,
     val templates: List<ChallengeTemplate> = emptyList(),
     val active: List<Challenge> = emptyList(),
     /** Completed, expired, left, and any status this build doesn't know. */
@@ -78,16 +81,21 @@ class ChallengesViewModel @Inject constructor(
                     val (active, rest) = c.value.items.partition { it.status == ChallengeStatus.ACTIVE }
                     n = n.copy(active = active, history = rest, historyCursor = c.value.nextCursor)
                 }
-                val err = (t as? ApiResult.Failure)?.error ?: (c as? ApiResult.Failure)?.error
-                n.copy(loadError = err)
+                val errors = listOfNotNull((t as? ApiResult.Failure)?.error, (c as? ApiResult.Failure)?.error)
+                val unavailable = errors.any { it.isNotServedYet() }
+                n.copy(unavailable = unavailable, loadError = if (unavailable) null else errors.firstOrNull())
             }
         }
     }
 
     fun loadMoreHistory() {
-        val cursor = _state.value.historyCursor ?: return
+        val s = _state.value
+        val cursor = s.historyCursor ?: return
+        if (s.loadingMore) return // double tap
+        _state.update { it.copy(loadingMore = true) }
         viewModelScope.launch {
             val r = repo.challenges(cursor = cursor)
+            _state.update { it.copy(loadingMore = false) }
             if (r is ApiResult.Success) {
                 _state.update { s ->
                     val (active, rest) = r.value.items.partition { it.status == ChallengeStatus.ACTIVE }
