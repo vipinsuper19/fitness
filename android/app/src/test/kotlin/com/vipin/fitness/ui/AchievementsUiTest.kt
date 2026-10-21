@@ -33,7 +33,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -229,7 +228,6 @@ class AchievementsUiTest {
 
     // ---- one-off messages (snackbar) after join / leave / limit ----
 
-    @Ignore("Known bug #52")
     @Test fun joinShowsConfirmationSnackbar() {
         repo.templateList += testTemplate("WEEKLY_WORKOUTS")
         openChallenges()
@@ -238,7 +236,6 @@ class AchievementsUiTest {
         waitFor("Challenge joined.")
     }
 
-    @Ignore("Known bug #52")
     @Test fun leaveShowsConfirmationSnackbar() {
         repo.challengeList += testChallenge("c9")
         openChallenges()
@@ -249,7 +246,6 @@ class AchievementsUiTest {
         waitFor("You left the challenge.")
     }
 
-    @Ignore("Known bug #52")
     @Test fun limitReachedShowsLimitSnackbar() {
         (1..5).forEach { i ->
             repo.templateList += testTemplate("T$i")

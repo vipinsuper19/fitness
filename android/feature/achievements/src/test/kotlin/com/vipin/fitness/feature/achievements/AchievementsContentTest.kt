@@ -102,6 +102,9 @@ class AchievementsContentTest {
         var shown = 0
         show(c = ChallengesState(loading = false, message = ChallengeMessage.LIMIT_REACHED), ca = ChallengeActions(messageShown = { shown++ }), tab = 1)
         compose.onNodeWithText("You can have 5 active challenges. Leave one to join another.").assertIsDisplayed()
+        assertEquals(0, shown) // cleared only after it has been shown (#52)
+        compose.mainClock.advanceTimeBy(10_000)
+        compose.waitForIdle()
         assertEquals(1, shown)
     }
 
