@@ -36,3 +36,16 @@ Scope: Lean MVP (P0) per `fitness-plan.md` and `contracts/openapi.yaml` v1 (`/ap
 
 ## Exit criteria for MVP sign-off
 All CI checks green; every row of `acceptance-checklist.md` Pass or explicitly waived by Vipin; no open P0/P1 defects; manual smoke on staging and on one physical device (minSdk 26 + latest).
+
+## §10 Badges & challenges — anti-abuse test rows
+
+Source: `docs/specs/badges-challenges.md` §5 (weekly cap) and §9 (anti-abuse). (`fitness-plan.md` §10 is not in the repo, so these rows live here.)
+
+| # | Rule | Steps | Expected | Automated by |
+|---|---|---|---|---|
+| AB1 | Future-dated entries don't count | Log food / water / measurement with `date` > today (profile tz); check badges + active challenge progress; advance the clock until that date arrives and re-check | Entry shows in diary; no badge, no challenge progress — not even once its day arrives | `backend/test/achievements.int-spec.ts` › "future-dated entries never count, even once their days arrive" |
+| AB2 | Backdated entries count only within the window | Log an entry dated D at `createdAt` on D or D+1 (counts) and at ≥ start of D+2 (doesn't) | Rows count only if `date ≤ today` and `createdAt < startOfLocalDay(date + 2)` | `achievements.int-spec.ts` › "applies the backdating rule to client-dated entries" |
+| AB3 | Re-dated entries don't count | Create an old (late) entry, then `PATCH` its `date` to today / yesterday | Still doesn't count (window is checked against original `createdAt`); badges already awarded stay | `achievements.int-spec.ts` › "re-dating an old entry through PATCH does not make it count; awarded badges stay" |
+| AB4 | Challenge bonus XP capped at 150 / ISO week | Complete challenges in one Monday-start week (profile tz, week of `completed_at`) whose bonuses sum > 150 | Award trimmed to the remainder, then 0; `xp_awarded` stored on the challenge; ledger row only when > 0; capped amount never paid later; badge XP not capped | `achievements.int-spec.ts` › "caps challenge XP at 150 per Monday-start week: partial, then 0 with no ledger row" |
+| AB5 | Cap week boundary | Complete one challenge Sunday 23:59 and one Monday 00:01 (profile tz) | Each counts toward its own week's 150 | manual / to automate |
+| AB6 | Android shows capped XP | History card for a capped challenge | Shows `xpAwarded` (after cap), not the template's `bonusXp` | manual (UI) |
