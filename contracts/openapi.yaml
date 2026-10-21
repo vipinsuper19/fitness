@@ -623,9 +623,13 @@ paths:
         again. The client never writes XP.
 
         This is also the way to discard a **completed** session (PRD 5.3,
-        `docs/specs/session-correction.md`): the negative adjustment equals the
-        session's current net XP (award plus any correction adjustments), so the
-        net becomes 0. A correction that would remove the last completed set
+        `docs/specs/session-correction.md`). Once session correction ships, a
+        discard writes its own ledger row (`source_type` `session_correction`,
+        `source_id` = a new `session_corrections` row of kind `discard`) whose
+        amount is minus the session's current net XP (award plus earlier
+        correction deltas), so the net becomes 0 and a discard after corrections
+        never hits the ledger's unique key. Legacy discard rows (`adjustment`
+        with `sourceId` = the award id) stay valid and still count. A correction that would remove the last completed set
         returns `422 SESSION_EMPTY`, which points the client here. Earned badges
         and completed challenges are never revoked; active challenge progress is
         recomputed. The response stays `204` with no body (unchanged for released
@@ -715,8 +719,9 @@ paths:
         Unchecking or editing so that no completed set is left returns `422 SESSION_EMPTY` (discard with `DELETE /workout-sessions/{sessionId}` instead).
         Completed sessions only (`409 SESSION_NOT_COMPLETED` otherwise), and only while the session's
         `completedAt` local date (profile timezone) is today or yesterday (`409 CORRECTION_WINDOW_CLOSED` otherwise).
-        The server recomputes the session's workout XP and writes the difference as one `adjustment` row against the
-        award (never below 0 net per session), recomputes active challenge progress and re-evaluates badges.
+        The server recomputes the session's workout XP and writes the difference as one new append-only ledger row
+        (`source_type` `session_correction`, `source_id` = a new `session_corrections` row id), so repeated corrections never
+        collide on the ledger's unique key. Net session XP = award + sum of deltas, never below 0, recomputes active challenge progress and re-evaluates badges.
         Earned badges and completed challenges are never revoked. A retry with the same Idempotency-Key replays the same body.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
@@ -754,8 +759,9 @@ paths:
         `clientSetId`, returns `404 SET_NOT_FOUND`, so an offline outbox can drop it. An unknown session stays `404 NOT_FOUND`.
         Completed sessions only (`409 SESSION_NOT_COMPLETED` otherwise), and only while the session's
         `completedAt` local date (profile timezone) is today or yesterday (`409 CORRECTION_WINDOW_CLOSED` otherwise).
-        The server recomputes the session's workout XP and writes the difference as one `adjustment` row against the
-        award (never below 0 net per session), recomputes active challenge progress and re-evaluates badges.
+        The server recomputes the session's workout XP and writes the difference as one new append-only ledger row
+        (`source_type` `session_correction`, `source_id` = a new `session_corrections` row id), so repeated corrections never
+        collide on the ledger's unique key. Net session XP = award + sum of deltas, never below 0, recomputes active challenge progress and re-evaluates badges.
         Earned badges and completed challenges are never revoked. A retry with the same Idempotency-Key replays the same body.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
@@ -791,8 +797,9 @@ paths:
         Changing `completedAt` can change active time and so XP.
         Completed sessions only (`409 SESSION_NOT_COMPLETED` otherwise), and only while the session's
         `completedAt` local date (profile timezone) is today or yesterday (`409 CORRECTION_WINDOW_CLOSED` otherwise).
-        The server recomputes the session's workout XP and writes the difference as one `adjustment` row against the
-        award (never below 0 net per session), recomputes active challenge progress and re-evaluates badges.
+        The server recomputes the session's workout XP and writes the difference as one new append-only ledger row
+        (`source_type` `session_correction`, `source_id` = a new `session_corrections` row id), so repeated corrections never
+        collide on the ledger's unique key. Net session XP = award + sum of deltas, never below 0, recomputes active challenge progress and re-evaluates badges.
         Earned badges and completed challenges are never revoked. A retry with the same Idempotency-Key replays the same body.
       parameters:
         - $ref: '#/components/parameters/SessionId'
@@ -1870,7 +1877,18 @@ components:
           type: integer
           minimum: 0
           description: XP from this completion; the original amount on a replay. A reversed award is never re-awarded.
-        xpBalance: { $ref: '#/components/schemas/XpBalance' }
+        xpBalance:
+          allOf: [{ $ref: '#/components/schemas/XpBalance' }]
+          description: Balance after this completion, including any badge or challenge bonus XP it triggered.
+        newBadges:
+          type: array
+          items: { $ref: '#/components/schemas/Badge' }
+          description: |
+            Optional, additive. Badges awarded by this completion (earned, `progress` null), in
+            catalog order; empty when none. Evaluation is best-effort: if it fails the list is empty
+            and the badge still appears on the next `GET /badges`. A replay with the same
+            Idempotency-Key returns the stored body unchanged; completing an already-completed
+            session with a new key returns `[]`. Clients that ignore this keep polling `GET /badges`.
     SessionCompletionUpdate:
       type: object
       minProperties: 1

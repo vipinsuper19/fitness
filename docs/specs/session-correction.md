@@ -25,8 +25,26 @@ Corrections live on their own paths. Each one needs an Idempotency-Key, works on
 
 ## Decisions
 
-1. **XP:** the server recomputes `workoutXp(completedSets, activeSeconds)` and writes the difference from the session's current net XP as one `adjustment` ledger row whose `sourceId` is the original award (±, no row when the difference is 0). A session's net XP never goes below 0. The client never writes XP. Corrections run in one transaction under the session row lock.
-2. **Discard:** writes one negative adjustment equal to the session's current net XP, so the net becomes 0. The award row stays, so the session can never be awarded again.
+1. **XP:** the server recomputes `workoutXp(completedSets, activeSeconds)`. The difference from the session's current net XP is written as a new ledger row, or none when the difference is 0. The client never writes XP. Corrections run in one transaction under the session row lock.
+2. **Discard:** writes minus the session's current net XP, so the net becomes 0. The award row stays, so the session can never be awarded again.
 3. **Never revoked:** earned badges and completed challenges, with their bonus XP, stay (badges spec §9).
 4. **Active challenges:** progress is recomputed from source data, so it can go down or up.
 5. **Re-evaluation:** every correction triggers badge and challenge evaluation. Badges newly earned through it come back in `newBadges`, which uses the same `Badge` schema as `GET /badges`.
+
+## Ledger design
+
+`xp_transactions` is unique on `(user_id, source_type, source_id)`. Today `XpService.reverse` writes a discard as `source_type = adjustment`, `source_id = <award id>`. A second correction, or a correction followed by that discard, would reuse that key and fail with a 500. So:
+
+- **New table `session_corrections`:** `id uuid pk`, `session_id` (FK, no cascade on the ledger side), `user_id`, `kind` enum `correction | discard`, `xp_delta int`, `idempotency_key text`, `created_at timestamptz`. Unique on `(user_id, idempotency_key)`, with an index on `session_id`.
+- **New `XpSourceType` value `session_correction`.** Each correction and each discard inserts one `session_corrections` row. When `xp_delta ≠ 0` it also inserts one ledger row with `source_type = session_correction`, `source_id = session_corrections.id` and `amount = xp_delta`. Every row has its own key, so there are no collisions. The ledger stays append-only.
+- **Net session XP** = award amount + the sum of the session's `session_correction` deltas + any legacy `adjustment` row whose `source_id` is the award id. It is never below 0: a delta is clamped to `-net`.
+- **Backward compatibility:** discards already in the ledger (`adjustment`, `source_id` = award id) stay as they are and count in the net. New discards use the `session_correction` path, so `XpService.reverse` is no longer used for sessions. Anything that asks "was this award reversed?" (e.g. `/progress/summary` `xpEarned`, completing again) checks for either a legacy adjustment or a `discard` correction. The `DELETE /workout-sessions/{id}` response stays `204` with no body. `/xp/ledger` shows the new rows with `sourceType` `session_correction`, so clients must accept unknown source types.
+- **Session deletion:** a discard still deletes the session and its sets. The `session_corrections` and ledger rows stay, so `session_id` there isn't enforced as a foreign key (or uses `ON DELETE SET NULL`, keeping a copy of the id).
+
+## Planned tests
+
+- Two corrections, then a discard, on one session: three `session_correction` ledger rows, net session XP 0, no 500, and the balance equals the earlier balance minus the original award.
+- A correction replayed with the same Idempotency-Key: one row, same body.
+- A correction that would push net XP below 0 is clamped, and net stays 0.
+- A legacy discard (`adjustment` row) is still read as reversed, and completing again doesn't re-award.
+- Errors: `CORRECTION_WINDOW_CLOSED`, `SESSION_NOT_COMPLETED`, `SESSION_EMPTY`, and `SET_NOT_FOUND` on a repeated delete.

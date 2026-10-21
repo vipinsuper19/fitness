@@ -178,7 +178,7 @@ components:
                      joinedAt, completedAt|null, leftAt|null, xpAwarded: int }   # bonus XP actually awarded, after the cap
 ```
 
-Responses that complete something are side effects of other writes, so existing responses (e.g. session complete) **may** gain an optional `newBadges: Badge[]` in a later, additive contract PR. v1 apps poll `GET /badges` after a completion.
+Responses that complete something are side effects of other writes. **Done for session complete:** `POST /workout-sessions/{id}/complete` returns an optional `newBadges: Badge[]`, the badges that completion awarded (evaluated in the request after commit; best-effort, `[]` on failure or on re-completion; a same-key replay returns the stored body). Other writes (sets, food, water, measurements) keep the background evaluation; apps poll `GET /badges` after them.
 
 ## 9. Anti-abuse
 
