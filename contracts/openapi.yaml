@@ -189,7 +189,10 @@ paths:
       tags: [me]
       operationId: deleteAccount
       summary: Delete the account and all user data
-      description: Requires the current password. Revokes every token; data is erased, not soft-deleted.
+      description: |
+        Requires the current password. Revokes every token; data is erased, not soft-deleted.
+        A body without `password` (e.g. `{}`) is `400 VALIDATION_FAILED` with `details.fields.password` = `password is required`.
+        Retrying after a successful delete (same or new Idempotency-Key) returns `401`: the access token's user no longer exists.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -199,7 +202,12 @@ paths:
             schema: { $ref: '#/components/schemas/DeleteAccountRequest' }
       responses:
         '204': { description: Deleted }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401':
+          description: '`UNAUTHORIZED`, including any retry after a successful delete'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '403':
           description: '`INVALID_PASSWORD`'
           content:
@@ -598,7 +606,9 @@ paths:
         it stopped (weeks are then counted from the shifted date in local calendar
         days, as usual). The shift is always the full pause, even if other plans were
         active in between. `resume: true` on a plan that was never paused (or has no
-        `activatedAt`) activates normally. Activating the plan that is already active
+        `activatedAt`) activates normally. Resuming a plan that had already ended gives
+        `currentWeek = weeks` and `planEnded: true` (the usual cap); a default activate
+        starts it over at week 1. Activating the plan that is already active
         changes nothing, with or without `resume`.
         The previously active plan becomes `inactive` (not paused).
         Servers before this change ignore the body, so `resume` there restarts at week 1.
@@ -897,7 +907,9 @@ paths:
       operationId: correctSessionCompletion
       summary: Fix a completed session's details
       description: |
-        `completedAt` must fall on today or yesterday (local date, profile timezone), not in the future, and after `startedAt` (`400` otherwise).
+        A new `completedAt` must be on the same local date (profile timezone) as the current `completedAt`, no later than it,
+        and after `startedAt` (`400 VALIDATION_FAILED` otherwise), so a correction can never move a workout into another day,
+        week or challenge window.
         Changing `completedAt` can change active time and so XP.
         Completed sessions only (`409 SESSION_NOT_COMPLETED` otherwise), and only while the session's
         `completedAt` local date (profile timezone) is today or yesterday (`409 CORRECTION_WINDOW_CLOSED` otherwise).
@@ -1196,6 +1208,39 @@ paths:
               schema: { $ref: '#/components/schemas/DailyNutrition' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /nutrition/summary:
+    get:
+      tags: [nutrition]
+      operationId: getNutritionSummary
+      summary: Nutrition totals and averages by day, week or month
+      description: |
+        Read-only; no XP and no Idempotency-Key. Same range rules as `/progress/summary`: `from` must be on or before `to`,
+        at most 366 days, dates within years 1900–2100 (otherwise `400`). Days are local dates in the profile timezone.
+        `week` periods start on Monday and `month` periods are calendar months; the first and last periods are clipped to
+        `from`/`to`, and `period` is the first date of the (clipped) period. Every period in the range is returned.
+        `null` means nothing logged, never 0. Food logs count with the nutrients snapshotted at log time, including logs of
+        foods that were later deleted. Rules and rounding: `docs/specs/nutrition-summary.md`.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: bucket
+          in: query
+          required: false
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        '200':
+          description: One point per period, in date order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NutritionSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /body-measurements:
     get:
       tags: [progress]
@@ -2035,7 +2080,7 @@ components:
       type: object
       minProperties: 1
       properties:
-        completedAt: { type: string, format: date-time, description: 'Today or yesterday (local date, profile timezone), not in the future, after startedAt' }
+        completedAt: { type: string, format: date-time, description: 'Same local date (profile timezone) as the current completedAt, no later than it, after startedAt' }
         perceivedDifficulty: { type: integer, minimum: 1, maximum: 5 }
         notes: { type: [string, 'null'], maxLength: 1000 }
     SessionCorrectionResult:
@@ -2217,6 +2262,82 @@ components:
         waterMl: { type: integer, minimum: 0 }
         calorieTargetKcal: { type: [integer, 'null'] }
         waterTargetMl: { type: [integer, 'null'] }
+
+    NutritionTargets:
+      type: object
+      description: The profile's current daily targets (targets are not stored historically). A target the user has not set is null.
+      required: [kcal, proteinG, carbsG, fatG, waterMl]
+      properties:
+        kcal: { type: [integer, 'null'], description: '`dailyCalorieTargetKcal`' }
+        proteinG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        carbsG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        fatG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        waterMl: { type: [integer, 'null'], description: '`dailyWaterTargetMl`' }
+    NutritionAdherence:
+      type: object
+      description: |
+        Percent of the daily target (one decimal, HALF_UP). `kcalPct` and the macro pcts are null when no food was logged in
+        the period or their target is null; `waterPct` is null when no water was logged or `targets.waterMl` is null. A target
+        of 0 is treated as null.
+        `kcalPct` = `avgPerLoggedDay.energyKcal` / `targets.kcal` × 100; `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro>` / `targets.<macro>` × 100
+        (null until macro targets exist); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
+      required: [kcalPct, proteinPct, carbsPct, fatPct, waterPct]
+      properties:
+        kcalPct: { type: [number, 'null'], minimum: 0 }
+        proteinPct: { type: [number, 'null'], minimum: 0 }
+        carbsPct: { type: [number, 'null'], minimum: 0 }
+        fatPct: { type: [number, 'null'], minimum: 0 }
+        waterPct: { type: [number, 'null'], minimum: 0, description: 'avgWaterMlPerLoggedDay / targets.waterMl × 100' }
+    NutritionSummaryPoint:
+      type: object
+      required: [period, daysInPeriod, daysLogged, totals, avgPerLoggedDay, waterMl, waterDaysLogged, avgWaterMlPerLoggedDay, adherence, entryCount, entriesMissing]
+      properties:
+        period: { type: string, format: date, description: 'ISO date (YYYY-MM-DD): first date of the period, clipped to `from`' }
+        daysInPeriod: { type: integer, minimum: 1, description: Days of the period inside from..to }
+        daysLogged: { type: integer, minimum: 0, description: Days in the period with at least one food log }
+        totals:
+          description: Sum of the period's food logs; null when nothing was logged
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/Nutrients'
+        avgPerLoggedDay:
+          description: '`totals` divided by `daysLogged` (not `daysInPeriod`); null when nothing was logged'
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/Nutrients'
+        waterMl: { type: [integer, 'null'], minimum: 0, description: 'Period TOTAL water (ml); null when none was logged' }
+        waterDaysLogged: { type: integer, minimum: 0, description: Days in the period with at least one water log }
+        avgWaterMlPerLoggedDay: { type: [integer, 'null'], minimum: 0, description: '`waterMl` / `waterDaysLogged`, integer HALF_UP; null when no water was logged' }
+        adherence:
+          description: Null only when every pct would be null (see `NutritionAdherence`)
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/NutritionAdherence'
+        entryCount: { type: integer, minimum: 0, description: Food log entries counted in `totals` }
+        entriesMissing:
+          type: object
+          description: As in `DailyNutrition`, over the period's entries
+          required: [fiberG, sugarG, sodiumMg]
+          properties:
+            fiberG: { type: integer, minimum: 0 }
+            sugarG: { type: integer, minimum: 0 }
+            sodiumMg: { type: integer, minimum: 0 }
+    NutritionSummary:
+      type: object
+      required: [from, to, bucket, timezone, targets, points]
+      properties:
+        from: { type: string, format: date, description: ISO date (YYYY-MM-DD) as requested }
+        to: { type: string, format: date, description: ISO date (YYYY-MM-DD) as requested }
+        bucket: { type: string, enum: [day, week, month] }
+        timezone: { type: string, description: 'Profile timezone used for local dates (IANA, e.g. Asia/Kolkata)' }
+        targets:
+          description: Null when the user has set no nutrition or water target
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/NutritionTargets'
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/NutritionSummaryPoint' }
 
     BodyMeasurement:
       type: object

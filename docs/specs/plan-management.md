@@ -36,6 +36,9 @@ Edge cases:
 - Activating another plan while one is paused leaves the paused plan `paused`.
 - Archiving a paused plan keeps `paused_at` (history); it is then `archived` and can't be resumed (409 `PLAN_ARCHIVED`). Unarchive is out for v1.
 - Activating the already-active plan: no change, with or without `resume`.
+- Resuming a plan that had already ended: `currentWeek = weeks`, `planEnded: true`.
+- Weeks are local calendar days in the profile timezone counted from the *shifted* `activatedAt`. A short pause across local midnight therefore keeps the day count tied to the wall clock: e.g. activated 09:00 IST, paused 23:50 IST on day 7, resumed 00:10 IST the next day → day 8, week 2 (the 20-minute shift doesn't move the start day). If the shift moves `activatedAt` past midnight, the start day moves with it.
+- Two concurrent activations (same or different plans) leave exactly one active plan (the last write wins); neither fails.
 - Old servers ignore the activate body: `resume` there restarts at week 1.
 
 ## Progress fields with no active plan
@@ -43,7 +46,8 @@ Edge cases:
 - `GET /workout-plans/active` → **204, empty body**. This is today's behaviour on prod (`plans.controller.ts` sets 204 when there is no active plan) and it does not change, so Android needs no dual handling for this call. Before this API ships the user can't pause or archive, so "no active plan" only happens for users who never activated one.
 - Before deploy: `GET /workout-plans`, `deactivate` and `DELETE` don't exist (404 `NOT_FOUND` route), and `activate` ignores `{resume}`. Android should hide pause/archive/list on a 404 from `GET /workout-plans`.
 - Every plan reports `isActive: false`, `currentWeek: null`, `planEnded: null` (they are computed only for the active plan).
-- `activatedAt` keeps its last value. Resuming with `activate` sets `activatedAt = now`, so `currentWeek` restarts at 1 (existing activation rule).
+- `activatedAt` keeps its last value while paused. To continue, call `activate` with `{resume: true}`: `activatedAt` shifts forward by the pause and `currentWeek` picks up where it stopped (see *Pause and resume*). `activate` with no body or `resume: false` sets `activatedAt = now`, so `currentWeek` restarts at 1.
+- Resuming a plan whose last week was already over before the pause gives `currentWeek = weeks` and `planEnded: true` (the shift preserves the elapsed days; the usual cap applies). Use a default activate to start it over at week 1.
 
 ## Database (implementation PR)
 

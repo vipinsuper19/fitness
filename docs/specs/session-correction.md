@@ -10,7 +10,7 @@ Corrections live on their own paths. Each one needs an Idempotency-Key, works on
 | --- | --- |
 | `PUT /workout-sessions/{id}/corrections/sets/{clientSetId}` | Upsert by `clientSetId`: edits the existing set in place, or adds one if none has that id. Never creates a duplicate. Body is `SetLogUpsert` (its `clientSetId` must match the path). |
 | `DELETE /workout-sessions/{id}/corrections/sets/{clientSetId}` | Delete a set. |
-| `PATCH /workout-sessions/{id}/completion` | Fix `completedAt`, `perceivedDifficulty` and `notes`. `completedAt` must be today or yesterday (profile timezone), not in the future, and after `startedAt`. |
+| `PATCH /workout-sessions/{id}/completion` | Fix `completedAt`, `perceivedDifficulty` and `notes`. A new `completedAt` must be on the same local date (profile timezone) as the current one, no later than it, and after `startedAt` (`400 VALIDATION_FAILED` otherwise). |
 | `DELETE /workout-sessions/{id}` | Unchanged: discard a session, completed or not. Still `204` with no body. |
 
 `POST /workout-sessions/{id}/sets` is unchanged and still returns `409 SESSION_COMPLETED` on completed sessions.
@@ -30,6 +30,7 @@ Corrections live on their own paths. Each one needs an Idempotency-Key, works on
 3. **Never revoked:** earned badges and completed challenges, with their bonus XP, stay (badges spec §9).
 4. **Active challenges:** progress is recomputed from source data, so it can go down or up.
 5. **Re-evaluation:** every correction triggers badge and challenge evaluation. Badges newly earned through it come back in `newBadges`, which uses the same `Badge` schema as `GET /badges`.
+6. **completedAt edits:** the new value stays on the same local date as the current one and can only move earlier (still after `startedAt`), so a correction can never move a workout into another day, week or challenge window (e.g. Sunday 23:30 to Monday, or back), and never adds active time.
 
 ## Ledger design
 
@@ -48,3 +49,10 @@ Corrections live on their own paths. Each one needs an Idempotency-Key, works on
 - A correction that would push net XP below 0 is clamped, and net stays 0.
 - A legacy discard (`adjustment` row) is still read as reversed, and completing again doesn't re-award.
 - Errors: `CORRECTION_WINDOW_CLOSED`, `SESSION_NOT_COMPLETED`, `SESSION_EMPTY`, and `SET_NOT_FOUND` on a repeated delete.
+- `completedAt`: moving it later, or from yesterday to today, is `400`. With an active weekly challenge, Sunday 23:30 → Monday and Monday → Sunday are both `400`, and the challenge count is unchanged (no double count).
+
+## Implementation notes
+
+- Migrations `20261021000500_session_corrections` (table, `SessionCorrectionKind`, `XpSourceType.session_correction`) and `20261021000600_session_correction_amount_check` (the ledger amount check also allows negative `session_correction` rows; separate so the new enum value is committed first).
+- `PATCH /completion` with an earlier `completedAt` sets `activeSeconds = min(activeSeconds, completedAt − startedAt)`: a correction can shorten active time but never add to it.
+- `/progress/summary` `xpEarned` and the badges' workout-XP fact both count `session_correction` deltas.

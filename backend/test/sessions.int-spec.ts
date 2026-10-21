@@ -239,9 +239,12 @@ describeDb('T12: workout sessions and XP (HTTP + Postgres)', () => {
       const ledger = (await api(u.token).get('/api/v1/xp/ledger').expect(200)).body.items;
       expect(ledger).toHaveLength(2);
       const award = ledger.find((e: { sourceType: string }) => e.sourceType === 'workout_session');
-      const reversal = ledger.find((e: { sourceType: string }) => e.sourceType === 'adjustment');
+      // Since session correction (PRD 5.3) a discard is its own session_correction row.
+      const reversal = ledger.find((e: { sourceType: string }) => e.sourceType === 'session_correction');
       expect(award).toMatchObject({ sourceId: s.id, amount: 22 });
-      expect(reversal).toMatchObject({ sourceId: award.id, amount: -22 });
+      const row = await prisma.sessionCorrection.findUniqueOrThrow({ where: { id: reversal.sourceId } });
+      expect(row).toMatchObject({ sessionId: s.id, kind: 'discard', xpDelta: -22 });
+      expect(reversal).toMatchObject({ amount: -22 });
 
       // A completion retried with the old key replays the stored result; nothing is re-awarded.
       const old = await api(u.token).post(`/api/v1/workout-sessions/${s.id}/complete`, completeKey).send({}).expect(200);

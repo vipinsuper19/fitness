@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
@@ -6,8 +6,8 @@ import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
-import { HistoryQuery, SessionCompleteDto, SessionStartDto, SessionUpdateDto, SetLogUpsertDto } from './sessions.dto';
-import { CompleteResult, SessionsService, SessionView, SetLogView } from './sessions.service';
+import { HistoryQuery, SessionCompleteDto, SessionCompletionUpdateDto, SessionStartDto, SessionUpdateDto, SetLogUpsertDto } from './sessions.dto';
+import { CompleteResult, CorrectionResult, SessionsService, SessionView, SetLogView } from './sessions.service';
 
 @ApiTags('workout-sessions')
 @ApiBearerAuth()
@@ -88,6 +88,47 @@ export class SessionsController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    await this.idem.run({ userId, key, req, res, status: 204, handler: () => this.sessions.discard(userId, id) });
+    await this.idem.run({ userId, key, req, res, status: 204, handler: () => this.sessions.discard(userId, id, key) });
+  }
+
+  // Corrections of a completed session (PRD 5.3): always 200 SessionCorrectionResult.
+  @Put(':sessionId/corrections/sets/:clientSetId')
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  correctSet(
+    @CurrentUserId() userId: string,
+    @Param('sessionId', IdParamPipe) id: string,
+    @Param('clientSetId', IdParamPipe) clientSetId: string,
+    @RequiredIdempotencyKey() key: string,
+    @Body() dto: SetLogUpsertDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<CorrectionResult | undefined> {
+    return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.correctSet(userId, id, clientSetId, dto, key) });
+  }
+
+  @Delete(':sessionId/corrections/sets/:clientSetId')
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  deleteCorrectedSet(
+    @CurrentUserId() userId: string,
+    @Param('sessionId', IdParamPipe) id: string,
+    @Param('clientSetId', IdParamPipe) clientSetId: string,
+    @RequiredIdempotencyKey() key: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<CorrectionResult | undefined> {
+    return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.deleteCorrectedSet(userId, id, clientSetId, key) });
+  }
+
+  @Patch(':sessionId/completion')
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  correctCompletion(
+    @CurrentUserId() userId: string,
+    @Param('sessionId', IdParamPipe) id: string,
+    @RequiredIdempotencyKey() key: string,
+    @Body() dto: SessionCompletionUpdateDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<CorrectionResult | undefined> {
+    return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.correctCompletion(userId, id, dto, key) });
   }
 }

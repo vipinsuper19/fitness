@@ -30,7 +30,10 @@ export const toXpView = (x: XPTransaction): XpEntryView => ({
  * - an award is keyed by the session id, so a session awards at most once;
  * - a reversal is an `adjustment` keyed by the award's id, so an award is
  *   reversed at most once, and because the award row stays, the session
- *   can never be awarded again.
+ *   can never be awarded again. New sessions no longer use this path: since
+ *   session correction (PRD 5.3), corrections and discards each write a
+ *   `session_correction` row keyed by a session_corrections id. Existing
+ *   `adjustment` rows stay valid and still count as reversed.
  */
 @Injectable()
 export class XpService {

@@ -74,6 +74,7 @@ fun ProfileEditRoute(
     onSignedOut: () -> Unit,
     viewModel: ProfileEditViewModel = hiltViewModel(),
     onDeleteAccount: (() -> Unit)? = null,
+    onExportData: (() -> Unit)? = null,
 ) {
     val s by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.signedOut) { if (s.signedOut) onSignedOut() }
@@ -93,6 +94,11 @@ fun ProfileEditRoute(
             }
             OutlinedButton(onClick = viewModel::signOut, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.profile_sign_out))
+            }
+            if (onExportData != null) {
+                OutlinedButton(onClick = onExportData, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth().testTag(AccountEntryTags.OPEN_EXPORT)) {
+                    Text(stringResource(R.string.profile_export_data))
+                }
             }
             if (onDeleteAccount != null) {
                 TextButton(onClick = onDeleteAccount, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth().testTag(AccountEntryTags.OPEN_DELETE_ACCOUNT)) {

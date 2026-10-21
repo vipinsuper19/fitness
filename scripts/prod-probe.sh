@@ -5,9 +5,12 @@
 # leave -> DELETE /me -> login must be 401.
 #   scripts/prod-probe.sh               # against prod (or API=... for another origin)
 #   scripts/prod-probe.sh --self-test   # same script against a local stub; run first
-# Safety: credentials live only in a mode-600 state file (/tmp/prod-probe.state) so the
-# EXIT trap can always log in and DELETE /me, even if a step fails; the file is
-# removed once login returns 401. All JSON bodies are built with jq (no hand quoting).
+# Safety: credentials live only in a per-run mode-600 state file (mktemp under umask 077)
+# so the EXIT trap can always log in and DELETE /me, even if a step fails; the file is
+# removed once login returns 401, and its path is printed if cleanup could not finish.
+# The password and token never appear in any process's argv: jq reads them from the
+# state file (--rawfile), and curl reads request bodies and the Authorization header
+# from mode-600 temp files (--data-binary @file, -H @file). All JSON is built with jq.
 # Never prints tokens or the password.
 set -euo pipefail
 if [ "${1:-}" = --self-test ]; then
@@ -36,19 +39,23 @@ PY
   API="http://127.0.0.1:$PORT/api/v1" bash "$0"; rc=$?; kill "$SP"; rm -f "$STUB"; exit $rc
 fi
 API="${API:-https://fitness-api-6pcc.onrender.com/api/v1}"
-ST=/tmp/prod-probe.state; B=/tmp/probe2.body
-E="probe-$(openssl rand -hex 4)@example.invalid"; P="Pr0be-$(openssl rand -hex 12)"
-(umask 077; printf '%s\n%s\n' "$E" "$P" > "$ST")
+umask 077
+ST="$(mktemp -t prod-probe.state.XXXXXXXX)"; B="$(mktemp -t prod-probe.body.XXXXXXXX)"
+BF="$(mktemp -t prod-probe.req.XXXXXXXX)"; HF="$(mktemp -t prod-probe.hdr.XXXXXXXX)"
+E="probe-$(openssl rand -hex 4)@example.invalid"
+# The password is generated straight into the state file; it is never a shell argument.
+{ printf '%s\n' "$E"; printf 'Pr0be-'; openssl rand -hex 12; } > "$ST"
 T=""; DEL=0; CREATED=0
 uid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 now() { TZ=Asia/Kolkata date +%H:%M:%S; }
-cred() { jq -nc --arg e "$(sed -n 1p "$ST")" --arg p "$(sed -n 2p "$ST")" "$1"; }
+# cred FILTER: JSON built from the state file ($e email, $p password) without argv exposure.
+cred() { jq -nc --rawfile s "$ST" '($s | split("\n")) as $l | $l[0] as $e | $l[1] as $p | '"$1"; }
 # r METHOD PATH [BODY] [IDEMPOTENCY_KEY]; sets C, body in $B
 r() {
   local a=(-sS -o "$B" -w '%{http_code}' --max-time 90 -X "$1" "$API$2" -H 'Content-Type: application/json')
-  [ -n "$T" ] && a+=(-H "Authorization: Bearer $T")
+  if [ -n "$T" ]; then printf 'Authorization: Bearer %s\n' "$T" > "$HF"; a+=(-H "@$HF"); fi
   [ -n "${4:-}" ] && a+=(-H "Idempotency-Key: $4")
-  [ -n "${3:-}" ] && a+=(--data-binary "$3")
+  if [ -n "${3:-}" ]; then printf '%s' "$3" > "$BF"; a+=(--data-binary "@$BF"); fi
   C="$(curl "${a[@]}" || echo 000)"
   echo "$(now) IST | $1 $2 | $C"
 }
@@ -61,7 +68,8 @@ cleanup() {
     r DELETE /me "$(cred '{password:$p}')"; [ "$C" = 204 ] && DEL=1
   fi
   T=""; r POST /auth/login "$(cred '{email:$e,password:$p}')"; echo "  ^ login after delete (expect 401)"
-  [ "$C" = 401 ] && rm -f "$ST"; rm -f "$B"
+  if [ "$C" = 401 ]; then rm -f "$ST"; else echo "  cleanup unfinished; credentials kept in $ST (mode 600)"; fi
+  rm -f "$B" "$BF" "$HF"
 }
 trap cleanup EXIT
 echo "account $E"

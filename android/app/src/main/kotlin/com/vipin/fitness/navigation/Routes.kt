@@ -28,6 +28,7 @@ sealed interface Route : NavKey {
     @Serializable data object Achievements : Route
 
     @Serializable data object DeleteAccount : Route
+    @Serializable data object ExportData : Route
 }
 
 /** Back-stack moves, kept pure so they can be unit tested. */
