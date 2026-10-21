@@ -1175,6 +1175,39 @@ paths:
               schema: { $ref: '#/components/schemas/DailyNutrition' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /nutrition/summary:
+    get:
+      tags: [nutrition]
+      operationId: getNutritionSummary
+      summary: Nutrition totals and averages by day, week or month
+      description: |
+        Read-only; no XP and no Idempotency-Key. Same range rules as `/progress/summary`: `from` must be on or before `to`,
+        at most 366 days, dates within years 1900–2100 (otherwise `400`). Days are local dates in the profile timezone.
+        `week` periods start on Monday and `month` periods are calendar months; the first and last periods are clipped to
+        `from`/`to`, and `period` is the first date of the (clipped) period. Every period in the range is returned.
+        `null` means nothing logged, never 0. Food logs count with the nutrients snapshotted at log time, including logs of
+        foods that were later deleted. Rules and rounding: `docs/specs/nutrition-summary.md`.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: bucket
+          in: query
+          required: false
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        '200':
+          description: One point per period, in date order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NutritionSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /body-measurements:
     get:
       tags: [progress]
@@ -2179,6 +2212,75 @@ components:
         waterMl: { type: integer, minimum: 0 }
         calorieTargetKcal: { type: [integer, 'null'] }
         waterTargetMl: { type: [integer, 'null'] }
+
+    NutritionTargets:
+      type: object
+      description: The profile's current daily targets (targets are not stored historically). A target the user has not set is null.
+      required: [kcal, proteinG, carbsG, fatG, waterMl]
+      properties:
+        kcal: { type: [integer, 'null'], description: '`dailyCalorieTargetKcal`' }
+        proteinG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        carbsG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        fatG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        waterMl: { type: [integer, 'null'], description: '`dailyWaterTargetMl`' }
+    NutritionAdherence:
+      type: object
+      description: Average per logged day as a percentage of the daily target (one decimal, HALF_UP). Null for a target that is not set.
+      required: [kcalPct, proteinPct, carbsPct, fatPct, waterPct]
+      properties:
+        kcalPct: { type: [number, 'null'], minimum: 0 }
+        proteinPct: { type: [number, 'null'], minimum: 0 }
+        carbsPct: { type: [number, 'null'], minimum: 0 }
+        fatPct: { type: [number, 'null'], minimum: 0 }
+        waterPct: { type: [number, 'null'], minimum: 0, description: Average water per day with any water logged, against waterMl }
+    NutritionSummaryPoint:
+      type: object
+      required: [period, daysInPeriod, daysLogged, totals, avgPerLoggedDay, waterMl, adherence, entryCount, entriesMissing]
+      properties:
+        period: { type: string, format: date, description: First date of the period, clipped to `from` }
+        daysInPeriod: { type: integer, minimum: 1, description: Days of the period inside from..to }
+        daysLogged: { type: integer, minimum: 0, description: Days in the period with at least one food log }
+        totals:
+          description: Sum of the period's food logs; null when nothing was logged
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/Nutrients'
+        avgPerLoggedDay:
+          description: '`totals` divided by `daysLogged` (not `daysInPeriod`); null when nothing was logged'
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/Nutrients'
+        waterMl: { type: [integer, 'null'], minimum: 0, description: Total water in the period; null when none was logged }
+        adherence:
+          description: Null when nothing was logged or no target is set
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/NutritionAdherence'
+        entryCount: { type: integer, minimum: 0, description: Food log entries counted in `totals` }
+        entriesMissing:
+          type: object
+          description: As in `DailyNutrition`, over the period's entries
+          required: [fiberG, sugarG, sodiumMg]
+          properties:
+            fiberG: { type: integer, minimum: 0 }
+            sugarG: { type: integer, minimum: 0 }
+            sodiumMg: { type: integer, minimum: 0 }
+    NutritionSummary:
+      type: object
+      required: [from, to, bucket, timezone, targets, points]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        bucket: { type: string, enum: [day, week, month] }
+        timezone: { type: string, description: Profile timezone used for local dates (IANA, e.g. Asia/Kolkata) }
+        targets:
+          description: Null when the user has set no nutrition or water target
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/NutritionTargets'
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/NutritionSummaryPoint' }
 
     BodyMeasurement:
       type: object
