@@ -149,7 +149,8 @@ describeDb('plan management (HTTP + Postgres)', () => {
     expect((await list(t)).items).toEqual([]);
     expect((await list(t, '?status=archived')).items).toEqual([expect.objectContaining({ id: a.id, status: 'archived', isActive: false })]);
     expect((await as(t).post(`/api/v1/workout-plans/${a.id}/activate`).send({ resume: true }).expect(409)).body.code).toBe('PLAN_ARCHIVED');
-    expect((await as(t).patch(`/api/v1/workout-plans/${a.id}`).send({ ...(await as(t).post('/api/v1/workout-plans/generate').send(draft)).body, baseVersion: 1 }).expect(409)).body.code).toBe('PLAN_ARCHIVED');
+    const edit = { ...(await as(t).post('/api/v1/workout-plans/generate').send(draft).expect(200)).body, baseVersion: 1 };
+    expect((await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(edit).expect(409)).body.code).toBe('PLAN_ARCHIVED');
     await pause(t, a.id); // archived: 204, no change
     expect((await plan(t, a.id)).pausedAt).toBe(view.pausedAt);
     await as(await signUp()).delete(`/api/v1/workout-plans/${a.id}`).expect(404);
