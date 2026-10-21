@@ -14,6 +14,10 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import com.vipin.fitness.MainActivity
 import com.vipin.fitness.core.data.Profile
+import com.vipin.fitness.core.designsystem.AccountEntryTags
+import com.vipin.fitness.core.designsystem.DeleteAccountTags
+import com.vipin.fitness.core.designsystem.ExportTags
+import com.vipin.fitness.core.testing.FakeAccountRepository
 import com.vipin.fitness.core.testing.FakeProfileFlagsCache
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
@@ -95,7 +99,6 @@ class DeleteExportUiTest {
 
     // ---- account deletion ----
 
-    @Ignore("Pending Android P0: Delete account screen")
     @Test fun delete_requiresPassword_beforeConfirmIsEnabled() {
         openDelete()
         tag(DeleteAccountTags.CONFIRM).assertIsNotEnabled()
@@ -104,7 +107,6 @@ class DeleteExportUiTest {
         assertTrue(account.deleteCalls.isEmpty())
     }
 
-    @Ignore("Pending Android P0: Delete account screen")
     @Test fun delete_cancel_sendsNothing_andStaysSignedIn() {
         openDelete()
         tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
@@ -116,9 +118,8 @@ class DeleteExportUiTest {
         assertEquals(0, session.signOuts)
     }
 
-    @Ignore("Pending Android P0: Delete account screen")
     @Test fun delete_wrongPassword_showsError_staysSignedIn_andCanRetry() {
-        account.deleteResult = FakeAccountRepository.WRONG_PASSWORD
+        account.deleteResult = AccountResults.WRONG_PASSWORD
         openDelete()
         tag(DeleteAccountTags.PASSWORD).performTextInput("wrong-password")
         tag(DeleteAccountTags.CONFIRM).performClick()
@@ -129,9 +130,8 @@ class DeleteExportUiTest {
         tag(DeleteAccountTags.CONFIRM).assertIsEnabled()
     }
 
-    @Ignore("Pending Android P0: Delete account screen")
     @Test fun delete_serverError_showsMessage_retryReusesIdempotencyKey() {
-        account.deleteResult = FakeAccountRepository.SERVER_ERROR
+        account.deleteResult = AccountResults.SERVER_ERROR
         openDelete()
         tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
         tag(DeleteAccountTags.CONFIRM).performClick()
@@ -144,7 +144,6 @@ class DeleteExportUiTest {
         assertEquals("same action, outcome unknown → same key", account.deleteCalls[0].second, account.deleteCalls[1].second)
     }
 
-    @Ignore("Pending Android P0: Delete account screen")
     @Test fun delete_inFlight_showsProgress_andBlocksDoubleSubmit() {
         account.gate = CompletableDeferred()
         openDelete()
@@ -157,7 +156,6 @@ class DeleteExportUiTest {
         assertEquals(1, account.deleteCalls.size)
     }
 
-    @Ignore("Pending Android P0: Delete account screen")
     @Test fun delete_success_signsOut_toSignIn_andBackCannotReturn() {
         openDelete()
         tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
@@ -173,15 +171,14 @@ class DeleteExportUiTest {
         assertTrue(compose.onAllNodes(hasText("Sign out")).fetchSemanticsNodes().isEmpty())
     }
 
-    @Ignore("Pending Android P0: Delete account screen")
     @Test fun delete_lostSuccess_retryGets401_treatedAsDeleted_signsOutToSignIn() {
-        account.deleteResult = FakeAccountRepository.OFFLINE // 204 lost in transit: outcome unknown
+        account.deleteResult = AccountResults.OFFLINE // 204 lost in transit: outcome unknown
         openDelete()
         tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
         tag(DeleteAccountTags.CONFIRM).performClick()
         waitTag(DeleteAccountTags.ERROR)
         assertEquals(0, session.signOuts)
-        account.deleteResult = FakeAccountRepository.UNAUTHENTICATED // server already deleted; tokens revoked
+        account.deleteResult = AccountResults.UNAUTHENTICATED // server already deleted; tokens revoked
         tag(DeleteAccountTags.CONFIRM).performClick()
         waitText("New here? Create an account")
         assertEquals(2, account.deleteCalls.size)
@@ -218,7 +215,7 @@ class DeleteExportUiTest {
 
     @Ignore("Pending Android P0: Data export screen")
     @Test fun export_error_showsRetry_andRetrySucceeds() {
-        account.exportResult = FakeAccountRepository.SERVER_ERROR
+        account.exportResult = AccountResults.SERVER_ERROR
         openExport()
         tag(ExportTags.START).performClick()
         waitTag(ExportTags.ERROR)
@@ -232,7 +229,7 @@ class DeleteExportUiTest {
 
     @Ignore("Pending Android P0: Data export screen")
     @Test fun export_rateLimited_showsWaitMessage() {
-        account.exportResult = FakeAccountRepository.RATE_LIMITED
+        account.exportResult = AccountResults.RATE_LIMITED
         openExport()
         tag(ExportTags.START).performClick()
         waitTag(ExportTags.ERROR)
