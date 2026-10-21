@@ -233,6 +233,15 @@ describeDb('T10: profile, goals, exercises, workout plans (HTTP + Postgres)', ()
       const active = (await as(alice).post(`/api/v1/workout-plans/${plan.id}/activate`).expect(200)).body;
       expect(active.isActive).toBe(true);
       expect(Date.parse(active.activatedAt)).toBeGreaterThanOrEqual(Date.parse(plan.createdAt));
+      expect(active).toMatchObject({ currentWeek: 1, planEnded: false });
+      expect(plan).toMatchObject({ currentWeek: null, planEnded: null });
+      // 15 IST days after activation is week 3 of 4; 40 days is past the end: capped at 4 with planEnded.
+      const back = (days: number) => prisma.workoutPlan.update({ where: { id: plan.id }, data: { activatedAt: new Date(Date.now() - days * 86_400_000) } });
+      await back(15);
+      expect((await as(alice).get('/api/v1/workout-plans/active').expect(200)).body).toMatchObject({ currentWeek: 3, planEnded: false });
+      await back(40);
+      expect((await as(alice).get('/api/v1/workout-plans/active').expect(200)).body).toMatchObject({ currentWeek: 4, planEnded: true });
+      await prisma.workoutPlan.update({ where: { id: plan.id }, data: { activatedAt: new Date(active.activatedAt) } });
       expect((await as(alice).get('/api/v1/workout-plans/active').expect(200)).body.id).toBe(plan.id);
 
       const edited = { ...draft, generator: 'custom', name: 'My 3-day plan', workouts: draft.workouts.slice(0, 2), baseVersion: 1 };

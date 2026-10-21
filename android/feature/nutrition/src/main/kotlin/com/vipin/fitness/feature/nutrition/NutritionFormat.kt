@@ -5,6 +5,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.NumberFormat
 import java.time.LocalDate
+import com.vipin.fitness.core.common.time.APP_ZONE
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -12,7 +13,7 @@ import java.util.Locale
 /** India first: en-IN formatting, metric units, dates in Asia/Kolkata. */
 internal object NutritionFormat {
     val LOCALE: Locale = Locale.forLanguageTag("en-IN")
-    val ZONE: ZoneId = ZoneId.of("Asia/Kolkata")
+    val ZONE: ZoneId = APP_ZONE
     private val dateFmt = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", LOCALE)
 
     fun number(v: Double, maxDecimals: Int = 1): String =
