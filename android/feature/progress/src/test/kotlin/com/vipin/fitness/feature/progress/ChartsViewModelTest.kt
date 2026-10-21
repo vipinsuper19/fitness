@@ -71,4 +71,32 @@ class ChartsViewModelTest {
         assertEquals("80 kg", ProgressFormat.measurement(MeasurementKind.WEIGHT, 80.0, UnitSystem.METRIC))
         assertEquals("35.4 in", ProgressFormat.measurement(MeasurementKind.WAIST, 90.0, UnitSystem.IMPERIAL))
     }
+
+    @Test fun waterBodyFatAndWaistSeriesKeepGapsAndConvertWaist() {
+        repo.points = mapOf(
+            oct21.minusDays(1) to ProgressPoint(oct21.minusDays(1), bodyFatPct = 18.3, waistCm = 90.0, waterMl = 2500),
+            oct21 to ProgressPoint(oct21, waterMl = 0),
+        )
+        val vm = ChartsViewModel(repo, units, clock)
+        vm.setRange(ChartRange.WEEK)
+        var s = vm.state.value
+        assertEquals(listOf(null, 2500.0, 0.0), s.series(ChartMetric.WATER).takeLast(3))
+        assertEquals(listOf(null, 18.3, null), s.series(ChartMetric.BODY_FAT).takeLast(3))
+        assertEquals(listOf(null, 90.0, null), s.series(ChartMetric.WAIST).takeLast(3))
+        units.units.value = UnitSystem.IMPERIAL
+        s = vm.state.value
+        assertEquals(35.43, s.series(ChartMetric.WAIST)[5]!!, 0.01)
+        assertEquals(18.3, s.series(ChartMetric.BODY_FAT)[5]!!, 0.0) // percent never converts
+        assertEquals(84.5, s.series(ChartMetric.WATER)[5]!!, 0.1)
+    }
+
+    @Test fun chartValuesUseUnitsAndHalfUp() {
+        assertEquals("2.5 L", ProgressFormat.chartValue(ChartMetric.WATER, 2500.0, UnitSystem.METRIC))
+        assertEquals("1.26 L", ProgressFormat.chartValue(ChartMetric.WATER, 1255.0, UnitSystem.METRIC))
+        assertEquals("750 ml", ProgressFormat.chartValue(ChartMetric.WATER, 750.0, UnitSystem.METRIC))
+        assertEquals("84.5 fl oz", ProgressFormat.chartValue(ChartMetric.WATER, 84.535, UnitSystem.IMPERIAL))
+        assertEquals("18.3 %", ProgressFormat.chartValue(ChartMetric.BODY_FAT, 18.25, UnitSystem.METRIC))
+        assertEquals("35.5 in", ProgressFormat.chartValue(ChartMetric.WAIST, 35.45, UnitSystem.IMPERIAL))
+        assertEquals("90.1 cm", ProgressFormat.chartValue(ChartMetric.WAIST, 90.05, UnitSystem.METRIC))
+    }
 }

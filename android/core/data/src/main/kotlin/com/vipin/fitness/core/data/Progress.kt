@@ -52,6 +52,10 @@ data class ProgressPoint(
     val activeMinutes: Int? = null,
     val energyKcal: Double? = null,
     val xpEarned: Int? = null,
+    val bodyFatPct: Double? = null,
+    val waistCm: Double? = null,
+    /** Total water that day; null = nothing logged. */
+    val waterMl: Int? = null,
 )
 
 /** [points] has exactly one entry per day from [from] to [to]; days the server left out are all gaps. */
@@ -102,7 +106,10 @@ fun ProgressSummaryDto.toDomain(): ProgressSummary {
         from = start,
         to = end,
         points = days.map { d ->
-            byDate[d]?.let { ProgressPoint(d, it.weightKg, it.workoutsCompleted, it.activeMinutes, it.energyKcal, it.xpEarned) }
+            byDate[d]?.let { ProgressPoint(
+                d, it.weightKg, it.workoutsCompleted, it.activeMinutes, it.energyKcal, it.xpEarned,
+                bodyFatPct = it.bodyFatPct, waistCm = it.waistCm, waterMl = it.waterMl,
+            ) }
                 ?: ProgressPoint(d)
         },
         streakDays = streakDays,

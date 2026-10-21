@@ -97,4 +97,14 @@ class HomeViewModelTest {
         assertEquals("50.7 fl oz", HomeFormat.water(1500, com.vipin.fitness.core.common.UnitSystem.IMPERIAL))
         assertEquals("3", HomeFormat.number(2.5, 0))
     }
+
+    @Test fun planWeekShowsCurrentFinishedOrHidden() {
+        val base = plan("PPL", DayOfWeek.WEDNESDAY to "Legs")
+        workouts.refreshResult = { ApiResult.Success(ActivePlan.Some(base.copy(currentWeek = 3, planEnded = false))) }
+        assertEquals(PlanWeek.Current(3, 8), vm().state.value.plan.value().week)
+        workouts.refreshResult = { ApiResult.Success(ActivePlan.Some(base.copy(currentWeek = 8, planEnded = true))) }
+        assertEquals(PlanWeek.Finished, vm().state.value.plan.value().week)
+        workouts.refreshResult = { ApiResult.Success(ActivePlan.Some(base)) }
+        assertNull(vm().state.value.plan.value().week)
+    }
 }

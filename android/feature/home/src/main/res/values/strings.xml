@@ -4,6 +4,8 @@
     <string name="home_retry">Retry</string>
     <string name="home_plan_title">Today\'s plan</string>
     <string name="home_plan_none">No active plan yet. Pick or build one in Workout.</string>
+    <string name="home_plan_week">Week %1$d of %2$d</string>
+    <string name="home_plan_finished">Plan finished</string>
     <string name="home_plan_rest">Rest day. Recover well.</string>
     <string name="home_plan_exercises">%1$d exercises</string>
     <string name="home_nutrition_title">Today\'s nutrition</string>

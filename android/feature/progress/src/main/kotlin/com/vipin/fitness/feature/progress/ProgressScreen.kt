@@ -98,6 +98,9 @@ private fun ChartsScreen(vm: ChartsViewModel) {
 private fun ChartCard(metric: ChartMetric, values: List<Double?>, units: UnitSystem) {
     val title = when (metric) {
         ChartMetric.WEIGHT -> stringResource(R.string.chart_weight, ProgressFormat.unitLabel(MeasureDimension.MASS, units))
+        ChartMetric.BODY_FAT -> stringResource(R.string.chart_body_fat)
+        ChartMetric.WAIST -> stringResource(R.string.chart_waist, ProgressFormat.unitLabel(MeasureDimension.LENGTH, units))
+        ChartMetric.WATER -> stringResource(R.string.chart_water)
         ChartMetric.ENERGY -> stringResource(R.string.chart_energy)
         ChartMetric.ACTIVE_MINUTES -> stringResource(R.string.chart_active_minutes)
         ChartMetric.WORKOUTS -> stringResource(R.string.chart_workouts)
@@ -112,7 +115,7 @@ private fun ChartCard(metric: ChartMetric, values: List<Double?>, units: UnitSys
                 val min = present.min()
                 val max = present.max()
                 Text(
-                    stringResource(R.string.chart_min_max, ProgressFormat.number(min), ProgressFormat.number(max), present.size, values.size),
+                    stringResource(R.string.chart_min_max, ProgressFormat.chartValue(metric, min, units), ProgressFormat.chartValue(metric, max, units), present.size, values.size),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 LineChart(values, Modifier.fillMaxWidth().height(120.dp).semantics { contentDescription = title })

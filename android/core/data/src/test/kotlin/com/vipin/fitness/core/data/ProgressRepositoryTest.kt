@@ -79,13 +79,17 @@ class ProgressRepositoryTest {
     @Test fun summaryKeepsNullsAndFillsMissingDaysAsGaps() = runTest {
         server.enqueue(MockResponse(code = 200, body = """{"from":"2026-10-19","to":"2026-10-21","streakDays":2,"points":[
             {"date":"2026-10-19","weightKg":null,"workoutsCompleted":0,"activeMinutes":0,"energyKcal":0,"xpEarned":0},
-            {"date":"2026-10-21","weightKg":80.2,"workoutsCompleted":1,"activeMinutes":40,"energyKcal":null,"xpEarned":50}]}"""))
+            {"date":"2026-10-21","weightKg":80.2,"bodyFatPct":18.3,"waistCm":null,"waterMl":2250,"workoutsCompleted":1,"activeMinutes":40,"energyKcal":null,"xpEarned":50}]}"""))
         val s = (repo.summary(day.minusDays(2), day) as ApiResult.Success).value
         assertEquals(3, s.points.size)
         assertNull(s.points[0].weightKg)
         assertEquals(0.0, s.points[0].energyKcal!!, 0.0)
         assertEquals(ProgressPoint(day.minusDays(1)), s.points[1])
         assertNull(s.points[2].energyKcal)
+        assertEquals(18.3, s.points[2].bodyFatPct!!, 0.0)
+        assertNull(s.points[2].waistCm)
+        assertEquals(2250, s.points[2].waterMl)
+        assertNull(s.points[0].waterMl)
         assertEquals(2, s.streakDays)
         val url = server.takeRequest().url
         assertEquals("2026-10-19", url.queryParameter("from"))

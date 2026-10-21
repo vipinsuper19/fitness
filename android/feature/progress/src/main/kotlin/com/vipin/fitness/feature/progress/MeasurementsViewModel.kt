@@ -49,11 +49,15 @@ data class MeasurementForm(
             date = m.date,
             units = units,
             texts = MeasurementKind.entries.associateWith { k ->
-                m.values[k]?.let { ProgressFormat.input(toDisplay(k.dimension, it, units), if (units == UnitSystem.METRIC) 2 else 1) }.orEmpty()
+                m.values[k]?.let { ProgressFormat.input(toDisplay(k.dimension, it, units), editDecimals(k, units)) }.orEmpty()
             },
         )
     }
 }
+
+/** Weight in kg keeps 2 dp (stored as sent); body fat and lengths are stored at 1 dp, so show 1 dp. */
+internal fun editDecimals(k: MeasurementKind, units: UnitSystem): Int =
+    if (k.dimension == com.vipin.fitness.core.data.MeasureDimension.MASS && units == UnitSystem.METRIC) 2 else 1
 
 data class MeasurementsState(
     val today: LocalDate,

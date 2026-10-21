@@ -94,6 +94,11 @@ fun PlanDaySlot(
 /** Plan name and today's workout, or the rest-day / no-plan empty state. */
 @Composable
 fun DefaultPlanDayContent(d: PlanDay) {
+    when (val w = d.week) {
+        PlanWeek.Finished -> Text(stringResource(R.string.home_plan_finished), style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("plan_week"))
+        is PlanWeek.Current -> Text(stringResource(R.string.home_plan_week, w.week, w.of), style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("plan_week"))
+        null -> Unit
+    }
     when {
         d.plan == null -> Text(stringResource(R.string.home_plan_none))
         d.workout == null -> {
