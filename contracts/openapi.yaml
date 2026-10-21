@@ -1013,7 +1013,7 @@ paths:
       tags: [progress]
       operationId: updateBodyMeasurement
       summary: Edit a body measurement
-      description: Partial update, like the profile. An empty body `{}` is rejected with 400. A field left out stays unchanged; `null` clears a measurement. After the change the entry must still have at least one measurement, otherwise 400 VALIDATION_FAILED (fields name the cleared measurements).
+      description: 'Partial update, like the profile. `Idempotency-Key` is optional: with one, a retry with the same body replays the stored 200 (`Idempotent-Replayed: true`) and a different body under the same key is `409 IDEMPOTENCY_KEY_REUSED`; without one, a retry just applies the same values again. An empty body `{}` is rejected with 400. A field left out stays unchanged; `null` clears a measurement. After the change the entry must still have at least one measurement, otherwise 400 VALIDATION_FAILED (fields name the cleared measurements).'
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -1035,6 +1035,7 @@ paths:
       tags: [progress]
       operationId: deleteBodyMeasurement
       summary: Delete a body measurement
+      description: '`Idempotency-Key` is optional. With one, a retry replays `204` (`Idempotent-Replayed: true`) even though the entry is gone; without one, deleting it again is `404`.'
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -1055,7 +1056,7 @@ paths:
           in: query
           required: true
           schema: { type: string, format: date }
-      description: Days are local dates in the profile timezone. `from` must be on or before `to`, and the range can cover at most 366 days (otherwise `400`). `xpEarned` counts XP from workouts completed that day (by the session's local `completedAt`), excluding awards that were later reversed. Dates must be within years 1900–2100.
+      description: Days are local dates in the profile timezone. `from` must be on or before `to`, and the range can cover at most 366 days (otherwise `400`). `xpEarned` counts XP from workouts completed that day (by the session's local `completedAt`), excluding awards that were later reversed. Dates must be within years 1900–2100. Every day of the range is returned (see `points`). When several body measurements share a date, each series (`weightKg`, `bodyFatPct`, `waistCm`) takes its value from the latest entry that day that has one (by `createdAt`, then id). `waterMl` is the sum of that day's water log.
       responses:
         '200':
           description: One point per day; `null` means no data that day, never 0
@@ -1477,7 +1478,7 @@ components:
             baseVersion: { type: integer, minimum: 1 }
     WorkoutPlan:
       type: object
-      required: [id, version, name, weeks, workouts, isActive, source, createdAt, activatedAt]
+      required: [id, version, name, weeks, workouts, isActive, source, createdAt, activatedAt, currentWeek, planEnded]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         version: { type: integer, minimum: 1 }
@@ -1506,6 +1507,17 @@ components:
     SessionStart:
       type: object
       properties:
+        currentWeek:
+          type: [integer, 'null']
+          minimum: 1
+          description: |
+            1-based week of the active plan, counted in local calendar days in the profile
+            timezone (default `Asia/Kolkata`, same as the progress summary): the activation
+            day starts week 1 and every 7 local days later adds one. Capped at `weeks`
+            (see `planEnded`). Null unless this is the active plan.
+        planEnded:
+          type: [boolean, 'null']
+          description: True once the active plan's last week is over (then `currentWeek` stays at `weeks`). Null unless this is the active plan.
         plannedWorkoutId: { $ref: '#/components/schemas/Id' }
         planVersion: { type: integer, minimum: 1 }
         startedAt:
@@ -1756,32 +1768,35 @@ components:
       description: '`date` plus at least one measurement'
       properties:
         date: { type: string, format: date }
-        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400 }
-        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70 }
-        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
-        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
-        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
-        armCm: { type: [number, 'null'], minimum: 10, maximum: 100 }
-        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150 }
+        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400, description: At most 2 decimal places; stored as sent }
+        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        armCm: { type: [number, 'null'], minimum: 10, maximum: 100, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
     BodyMeasurementUpdate:
       type: object
       minProperties: 1
       description: Partial. Missing = unchanged; `null` clears a measurement. `date` cannot be null.
       properties:
         date: { type: string, format: date }
-        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400 }
-        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70 }
-        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
-        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
-        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250 }
-        armCm: { type: [number, 'null'], minimum: 10, maximum: 100 }
-        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150 }
+        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400, description: At most 2 decimal places; stored as sent }
+        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        armCm: { type: [number, 'null'], minimum: 10, maximum: 100, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
     ProgressPoint:
       type: object
-      required: [date, weightKg, workoutsCompleted, activeMinutes, energyKcal, xpEarned]
+      required: [date, weightKg, bodyFatPct, waistCm, waterMl, workoutsCompleted, activeMinutes, energyKcal, xpEarned]
       properties:
         date: { type: string, format: date }
         weightKg: { type: [number, 'null'], description: null = not measured that day }
+        bodyFatPct: { type: [number, 'null'], description: null = not measured that day }
+        waistCm: { type: [number, 'null'], description: null = not measured that day }
+        waterMl: { type: [integer, 'null'], minimum: 0, description: Total water logged that day; null = nothing logged }
         workoutsCompleted: { type: integer, minimum: 0 }
         activeMinutes: { type: integer, minimum: 0 }
         energyKcal: { type: [number, 'null'], description: null = nothing logged that day }
@@ -1792,7 +1807,10 @@ components:
       properties:
         from: { type: string, format: date }
         to: { type: string, format: date }
-        points: { type: array, items: { $ref: '#/components/schemas/ProgressPoint' } }
+        points:
+          type: array
+          description: Exactly one point for every day from `from` to `to` inclusive, in date order. Days without data are present with `null` metrics and 0 counts, never skipped.
+          items: { $ref: '#/components/schemas/ProgressPoint' }
         streakDays:
           type: integer
           minimum: 0

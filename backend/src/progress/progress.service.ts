@@ -6,8 +6,9 @@ import { isoDate, num, parseIsoDate } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
 import { dateRange, daySpan, localDate, nextDate, prevDate, startOfLocalDay } from '../common/time';
 import type { BodyMeasurement } from '../generated/prisma/client';
+import type { MeasurementField } from './progress.dto';
 import { PrismaService } from '../prisma/prisma.service';
-import { BodyMeasurementDto, BodyMeasurementUpdateDto, MEASUREMENT_FIELDS, MeasurementListQuery, SummaryQuery } from './progress.dto';
+import { BodyMeasurementDto, BodyMeasurementUpdateDto, MEASUREMENT_DECIMALS, MEASUREMENT_FIELDS, MeasurementListQuery, SummaryQuery } from './progress.dto';
 
 export interface MeasurementView {
   id: string;
@@ -25,6 +26,9 @@ export interface MeasurementView {
 export interface ProgressPoint {
   date: string;
   weightKg: number | null;
+  bodyFatPct: number | null;
+  waistCm: number | null;
+  waterMl: number | null;
   workoutsCompleted: number;
   activeMinutes: number;
   energyKcal: number | null;
@@ -59,8 +63,16 @@ export const toMeasurementView = (m: BodyMeasurement): MeasurementView => ({
 const invalid = (fields: Record<string, string>) =>
   new ApiError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Some fields are invalid.', { fields });
 
+/** Half-up rounding on the decimal value (72.25 -> 72.3), tolerant of binary float noise. */
+export function roundHalfUp(v: number, places: number): number {
+  const f = 10 ** places;
+  return Math.round(Number((Math.abs(v) * f).toFixed(6))) / f * Math.sign(v);
+}
+
+const stored = (f: MeasurementField, v: number | null | undefined) => (v == null ? v : roundHalfUp(v, MEASUREMENT_DECIMALS[f]));
+
 function measurementData(dto: BodyMeasurementDto) {
-  const values = Object.fromEntries(MEASUREMENT_FIELDS.map((f) => [f, dto[f] ?? null]));
+  const values = Object.fromEntries(MEASUREMENT_FIELDS.map((f) => [f, stored(f, dto[f]) ?? null]));
   if (MEASUREMENT_FIELDS.every((f) => values[f] === null)) {
     throw invalid({ date: 'add at least one measurement alongside the date' });
   }
@@ -109,7 +121,7 @@ export class ProgressService {
         throw invalid({ body: 'send at least one field to change' });
       }
       const data: Record<string, unknown> = {};
-      for (const f of MEASUREMENT_FIELDS) if (dto[f] !== undefined) data[f] = dto[f];
+      for (const f of MEASUREMENT_FIELDS) if (dto[f] !== undefined) data[f] = stored(f, dto[f]);
       if (dto.date !== undefined) data.date = parseIsoDate(dto.date)!;
       if (MEASUREMENT_FIELDS.every((f) => (f in data ? data[f] : row[f]) === null)) {
         throw invalid(Object.fromEntries(MEASUREMENT_FIELDS.filter((f) => f in data).map((f) => [f, 'the entry must keep at least one measurement'])));
@@ -140,11 +152,15 @@ export class ProgressService {
     const start = startOfLocalDay(q.from, tz);
     const end = startOfLocalDay(nextDate(q.to), tz);
 
-    const [measurements, sessions, foods] = await Promise.all([
+    const [measurements, sessions, foods, water] = await Promise.all([
       this.prisma.bodyMeasurement.findMany({
-        where: { userId, date: { gte: parseIsoDate(q.from)!, lte: parseIsoDate(q.to)! }, weightKg: { not: null } },
+        where: {
+          userId,
+          date: { gte: parseIsoDate(q.from)!, lte: parseIsoDate(q.to)! },
+          OR: [{ weightKg: { not: null } }, { bodyFatPct: { not: null } }, { waistCm: { not: null } }],
+        },
         orderBy: [{ date: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-        select: { date: true, weightKg: true },
+        select: { date: true, weightKg: true, bodyFatPct: true, waistCm: true },
       }),
       this.prisma.workoutSession.findMany({
         where: { userId, status: 'completed', completedAt: { gte: start, lt: end } },
@@ -154,6 +170,11 @@ export class ProgressService {
         by: ['date'],
         where: { userId, date: { gte: parseIsoDate(q.from)!, lte: parseIsoDate(q.to)! } },
         _sum: { energyKcal: true },
+      }),
+      this.prisma.waterLog.groupBy({
+        by: ['date'],
+        where: { userId, date: { gte: parseIsoDate(q.from)!, lte: parseIsoDate(q.to)! } },
+        _sum: { amountMl: true },
       }),
     ]);
     // XP is attributed to the day the session was completed (not when the award row was written).
@@ -176,9 +197,20 @@ export class ProgressService {
     );
 
     const points = new Map<string, ProgressPoint>(
-      days.map((d) => [d, { date: d, weightKg: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 }]),
+      days.map((d) => [d, { date: d, weightKg: null, bodyFatPct: null, waistCm: null, waterMl: null, workoutsCompleted: 0, activeMinutes: 0, energyKcal: null, xpEarned: 0 }]),
     );
-    for (const m of measurements) points.get(isoDate(m.date)!)!.weightKg = num(m.weightKg); // later rows win
+    // Several entries on one date: per series, the latest entry that day with a value wins
+    // (createdAt, then id), so rows are applied oldest first and later ones overwrite.
+    for (const m of measurements) {
+      const p = points.get(isoDate(m.date)!)!;
+      if (m.weightKg != null) p.weightKg = num(m.weightKg);
+      if (m.bodyFatPct != null) p.bodyFatPct = num(m.bodyFatPct);
+      if (m.waistCm != null) p.waistCm = num(m.waistCm);
+    }
+    for (const w of water) {
+      const p = points.get(isoDate(w.date)!);
+      if (p) p.waterMl = w._sum.amountMl ?? null;
+    }
     const activeSeconds = new Map<string, number>();
     for (const s of sessions) {
       const d = localDate(s.completedAt!, tz);
