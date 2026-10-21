@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AchievementsModule } from './achievements/achievements.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
 import { ExercisesModule } from './exercises/exercises.module';
@@ -31,6 +32,7 @@ import { XpModule } from './xp/xp.module';
     NutritionModule,
     MeModule,
     ProgressModule,
+    AchievementsModule,
   ],
 })
 export class AppModule {}

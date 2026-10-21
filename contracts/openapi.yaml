@@ -1156,7 +1156,7 @@ paths:
       tags: [challenges]
       operationId: listChallenges
       summary: The user's challenges, newest first
-      description: Expired challenges are marked `expired` when read (the server has no scheduler).
+      description: Re-evaluates first (progress, completion, expiry), so the list is current even if a background evaluation was missed. Expired challenges are marked `expired` when read (the server has no scheduler).
       parameters:
         - name: status
           in: query
@@ -1520,8 +1520,8 @@ components:
         waterLogs: { type: array, items: { $ref: '#/components/schemas/WaterLog' } }
         bodyMeasurements: { type: array, items: { $ref: '#/components/schemas/BodyMeasurement' } }
         xpLedger: { type: array, items: { $ref: '#/components/schemas/XpTransaction' } }
-        badges: { type: array, items: { $ref: '#/components/schemas/ExportedBadge' }, description: Earned badges. Present once badges ship. }
-        challenges: { type: array, items: { $ref: '#/components/schemas/Challenge' }, description: 'All challenges, any status. Present once challenges ship.' }
+        badges: { type: array, items: { $ref: '#/components/schemas/ExportedBadge' }, description: Earned badges }
+        challenges: { type: array, items: { $ref: '#/components/schemas/Challenge' }, description: 'All challenges, any status' }
         truncated:
           type: array
           items: { type: string }
@@ -2044,7 +2044,7 @@ components:
         target: { type: integer, minimum: 1, description: 'Must be one of the template''s `targets`' }
     Challenge:
       type: object
-      required: [id, templateCode, type, title, target, progress, unit, windowStart, windowEnd, timezone, waterGoalMl, status, joinedAt, completedAt, leftAt, xpAwarded]
+      required: [id, templateCode, type, title, target, progress, unit, windowStart, windowEnd, joinDate, timezone, waterGoalMl, status, joinedAt, completedAt, leftAt, xpAwarded]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         templateCode: { type: string }
@@ -2055,6 +2055,7 @@ components:
         unit: { type: string }
         windowStart: { type: string, format: date, description: 'Local date, inclusive' }
         windowEnd: { type: [string, 'null'], format: date, description: 'Local date, inclusive (Sunday for weekly); null = no deadline' }
+        joinDate: { type: string, format: date, description: 'Local date of joining (in `timezone`). Streak challenges count only days on or after it; personal workout challenges count workouts finished after `joinedAt`.' }
         timezone: { type: string, description: Profile timezone captured at join }
         waterGoalMl: { type: [integer, 'null'], description: Water goal captured at join (water templates only) }
         status: { $ref: '#/components/schemas/ChallengeStatus' }
