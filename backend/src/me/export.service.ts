@@ -51,7 +51,7 @@ export class ExportService {
         where: { plan: { userId } },
         orderBy: [{ createdAt: 'desc' }, { planId: 'desc' }, { version: 'desc' }],
         take: env.EXPORT_MAX_PLAN_VERSIONS + 1,
-        include: { workouts: { orderBy: { order: 'asc' } }, plan: { select: { id: true, source: true, createdAt: true, activatedAt: true } } },
+        include: { workouts: { orderBy: { order: 'asc' } }, plan: { select: { id: true, source: true, createdAt: true, activatedAt: true, pausedAt: true, archivedAt: true } } },
       }),
       env.EXPORT_MAX_PLAN_VERSIONS,
     );

@@ -1,11 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID,
   Max, MaxLength, Min, MinLength, ValidateNested,
 } from 'class-validator';
 
+import { PageQuery } from '../common/page.dto';
 import { GOAL_TYPES } from '../goals/goals.dto';
+import { PLAN_STATUSES, type PlanStatus } from './plans.service';
 import { EQUIPMENT } from '../exercises/exercises.dto';
 import { EXPERIENCE } from '../profile/profile.dto';
 import type { Equip, Goal, Level } from './generator';
@@ -102,4 +104,16 @@ export class WorkoutPlanUpdateDto extends WorkoutPlanDraftDto {
 export class PlanVersionQuery {
   @ApiPropertyOptional({ minimum: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1_000_000)
   version?: number;
+}
+
+/** `GET /workout-plans` query (contract listWorkoutPlans). */
+export class PlanListQuery extends PageQuery {
+  @ApiPropertyOptional({ enum: PLAN_STATUSES }) @IsOptional() @IsIn(PLAN_STATUSES)
+  status?: PlanStatus;
+}
+
+/** PlanActivate (contract): optional body of POST /workout-plans/{planId}/activate. */
+export class PlanActivateDto {
+  @ApiPropertyOptional({ default: false }) @IsOptional() @IsBoolean()
+  resume?: boolean;
 }
