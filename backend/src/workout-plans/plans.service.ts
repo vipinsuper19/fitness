@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 
 import { ApiError } from '../common/api-error';
 import { num } from '../common/decimal';
@@ -97,6 +97,8 @@ const invalid = (fields: Record<string, string>) =>
 
 @Injectable()
 export class PlansService {
+  private readonly logger = new Logger('PlansService');
+
   constructor(private readonly prisma: PrismaService) {}
 
   /** Never persists anything: a pure function of the request and the catalog. */
@@ -105,7 +107,21 @@ export class PlansService {
       select: { id: true, slug: true, name: true, primaryMuscle: true, secondaryMuscles: true, equipment: true, trackingType: true, difficulty: true },
       orderBy: { slug: 'asc' },
     });
-    return generatePlan(dto, catalog as CatalogExercise[]);
+    if (catalog.length === 0) {
+      // Server-side problem (unseeded database), not something the user can fix.
+      this.logger.error('generate: exercise catalog is empty; seed the database (npm run db:seed)');
+      throw new ApiError(HttpStatus.SERVICE_UNAVAILABLE, 'EXERCISE_CATALOG_EMPTY', 'Workout plans are temporarily unavailable. Please try again later.');
+    }
+    const draft = generatePlan(dto, catalog as CatalogExercise[]);
+    if (draft.workouts.length === 0) {
+      // Catalog exists but nothing fits this level/equipment (bodyweight is always allowed).
+      this.logger.warn(`generate: no exercises match level=${dto.experienceLevel} equipment=${(dto.equipment ?? []).join(',') || 'none'} (catalog size ${catalog.length})`);
+      throw new ApiError(HttpStatus.UNPROCESSABLE_ENTITY, 'NO_MATCHING_EXERCISES', 'No exercises match your experience level and equipment. Try adding equipment.', {
+        experienceLevel: dto.experienceLevel,
+        equipment: dto.equipment ?? [],
+      });
+    }
+    return draft;
   }
 
   async create(userId: string, dto: WorkoutPlanDraftDto): Promise<PlanView> {

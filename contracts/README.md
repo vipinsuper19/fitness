@@ -8,6 +8,7 @@ Source of truth for the API.
 
 ## Conventions
 - Errors: `{ code, message, details?, requestId }`. Clients branch on `code`.
+  - `POST /workout-plans/generate`: `422 NO_MATCHING_EXERCISES` means nothing fits the user's level and equipment (let them change inputs, e.g. add equipment); `503 EXERCISE_CATALOG_EMPTY` means the server's exercise catalog is not seeded (show "try again later"; for 5xx the `message` is generic, so branch on `code`). A 200 draft always has at least one workout.
 - Writes accept `Idempotency-Key` (UUID). It is required on session start, set logs, session completion, food, water and measurement logs. Replays return the stored response with `Idempotent-Replayed: true`.
 - A key is bound to its first request's method, path and body. Reuse elsewhere is `409 IDEMPOTENCY_KEY_REUSED`, never a replay.
 - Token-bearing responses (`/auth/register`, `/auth/login`, `/auth/refresh`) are never stored. A register retry returns `409 EMAIL_TAKEN` or fresh tokens.

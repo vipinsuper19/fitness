@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Post-deploy smoke test: health+DB, register -> delete -> login must fail.
+# Post-deploy smoke test: health+DB, register -> generate plan (>=1 workout)
+# -> delete -> login must fail. The account is deleted by the EXIT trap (and the
+# workflow's cleanup step) even when a step fails.
 # Never prints tokens, passwords or token-bearing bodies. 3 auth requests on
 # the happy path (+ at most 2 in cleanup), well under the auth rate limit.
 set -euo pipefail
@@ -67,6 +69,13 @@ req POST /auth/register "$(body_json '{email:$e,password:$p,displayName:"Smoke T
 CREATED=1; extract_token
 [ -n "$TOKEN" ] || { echo "::error::no accessToken in register response"; exit 1; }
 echo "  register -> 201"
+
+echo "2b) generate a workout plan (needs no profile; must have >= 1 workout)"
+req POST /workout-plans/generate '{"goal":"maintain","experienceLevel":"beginner","daysPerWeek":3,"sessionMinutes":30,"weeks":4}' "$TOKEN"
+if [ "$CODE" != 200 ]; then echo "::error::generate -> $CODE $(jq -c '{code,message}' "$TMP/body" 2>/dev/null || true) (EXERCISE_CATALOG_EMPTY = prod not seeded)"; exit 1; fi
+N="$(jq '.workouts | length' "$TMP/body" 2>/dev/null || echo 0)"; rm -f "$TMP/body"
+[ "${N:-0}" -ge 1 ] || { echo "::error::generate returned $N workouts (expected >= 1)"; exit 1; }
+echo "  generate -> 200, $N workouts"
 
 echo "3) delete account"
 req DELETE /me "$(body_json '{password:$p}')" "$TOKEN"

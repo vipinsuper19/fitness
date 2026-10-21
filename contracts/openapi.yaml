@@ -395,7 +395,7 @@ paths:
       tags: [workout-plans]
       operationId: generateWorkoutPlan
       summary: Build a draft plan (rule-based in the MVP; never persisted)
-      description: Pure function of the request and the catalog. Same input gives the same draft. Save it with `POST /workout-plans`.
+      description: Pure function of the request and the catalog. Same input gives the same draft. Save it with `POST /workout-plans`. A successful draft always has at least one workout; otherwise `422 NO_MATCHING_EXERCISES` or `503 EXERCISE_CATALOG_EMPTY`.
       requestBody:
         required: true
         content:
@@ -410,6 +410,16 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '422':
+          description: '`NO_MATCHING_EXERCISES`: the catalog has exercises but none fit this `experienceLevel` and `equipment` (bodyweight is always allowed). `details` echoes `experienceLevel` and `equipment`. The user can change their inputs, e.g. add equipment.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: '`EXERCISE_CATALOG_EMPTY`: the server has no exercise catalog (not seeded). A server-side problem the user cannot fix; show a "try again later" state. The response `message` is the generic 5xx text. Never an empty draft.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /workout-plans:
     post:
       tags: [workout-plans]
@@ -1223,7 +1233,7 @@ components:
         code:
           type: string
           description: Stable machine code (UPPER_SNAKE_CASE). Clients branch on this, not on `message`.
-          examples: [VALIDATION_FAILED, NOT_FOUND, IDEMPOTENCY_KEY_REUSED]
+          examples: [VALIDATION_FAILED, NOT_FOUND, IDEMPOTENCY_KEY_REUSED, NO_MATCHING_EXERCISES, EXERCISE_CATALOG_EMPTY]
         message:
           type: string
           description: Human-readable, safe to show
