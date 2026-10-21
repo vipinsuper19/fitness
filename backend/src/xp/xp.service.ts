@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { decodeTimeCursor, encodeCursor } from '../common/cursor';
-import type { Prisma, XPTransaction } from '../generated/prisma/client';
+import type { Prisma, XPTransaction, XpSourceType } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { balanceFor, XpBalance } from './xp.rules';
 
@@ -9,7 +9,7 @@ type Db = PrismaService | Prisma.TransactionClient;
 
 export interface XpEntryView {
   id: string;
-  sourceType: 'workout_session' | 'adjustment';
+  sourceType: XpSourceType;
   sourceId: string;
   amount: number;
   reason: string;

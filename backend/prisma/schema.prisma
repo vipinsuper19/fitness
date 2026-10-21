@@ -136,6 +136,22 @@ enum MealType {
 enum XpSourceType {
   workout_session
   adjustment
+  /// Bonus XP for an earned badge; sourceId = user_badges.id.
+  badge
+  /// Bonus XP for a completed challenge; sourceId = user_challenges.id.
+  challenge
+}
+
+enum ChallengeType {
+  weekly
+  personal
+}
+
+enum ChallengeStatus {
+  active
+  completed
+  expired
+  left
 }
 
 enum IdempotencyStatus {
@@ -166,6 +182,8 @@ model User {
   waterLogs        WaterLog[]
   bodyMeasurements BodyMeasurement[]
   xpTransactions   XPTransaction[]
+  badges           UserBadge[]
+  challenges       UserChallenge[]
   idempotencyKeys  IdempotencyKey[]
 
   @@map("users")
@@ -208,6 +226,9 @@ model UserProfile {
   onboardingCompleted    Boolean          @default(false) @map("onboarding_completed")
   /// At most one active plan per user, enforced by this single column.
   activePlanId           String?          @unique @map("active_plan_id") @db.Uuid
+  /// Badge catalog version this user was last fully evaluated against; a
+  /// lower value than the code's CATALOG_VERSION triggers the lazy backfill.
+  badgesEvaluatedVersion Int              @default(0) @map("badges_evaluated_version")
   updatedAt              DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -426,12 +447,12 @@ model FoodItem {
 /// Nutrient totals are snapshotted at log time (servings applied, or the
 /// user's override), so later catalog edits do not rewrite history.
 model FoodLog {
-  id              String   @id @default(uuid()) @db.Uuid
-  userId          String   @map("user_id") @db.Uuid
-  foodId          String   @map("food_id") @db.Uuid
-  date            DateTime @db.Date
-  mealType        MealType @map("meal_type")
-  servings        Decimal  @db.Decimal(6, 2)
+  id              String       @id @default(uuid()) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  foodId          String       @map("food_id") @db.Uuid
+  date            DateTime     @db.Date
+  mealType        MealType     @map("meal_type")
+  servings        Decimal      @db.Decimal(6, 2)
   /// Serving the nutrients were computed from, snapshotted at log time (and
   /// refreshed when servings are recomputed), so later food edits do not
   /// change what "2 servings" meant. Null only on rows logged before the
@@ -439,16 +460,16 @@ model FoodLog {
   servingSize     Decimal?     @map("serving_size") @db.Decimal(8, 2)
   servingUnit     ServingUnit? @map("serving_unit")
   gramsPerServing Decimal?     @map("grams_per_serving") @db.Decimal(8, 2)
-  energyKcal      Decimal  @map("energy_kcal") @db.Decimal(7, 1)
-  proteinG        Decimal  @map("protein_g") @db.Decimal(6, 1)
-  carbsG          Decimal  @map("carbs_g") @db.Decimal(6, 1)
-  fatG            Decimal  @map("fat_g") @db.Decimal(6, 1)
-  fiberG          Decimal? @map("fiber_g") @db.Decimal(6, 1)
-  sugarG          Decimal? @map("sugar_g") @db.Decimal(6, 1)
-  sodiumMg        Decimal? @map("sodium_mg") @db.Decimal(7, 1)
-  nutrientsEdited Boolean  @default(false) @map("nutrients_edited")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  energyKcal      Decimal      @map("energy_kcal") @db.Decimal(7, 1)
+  proteinG        Decimal      @map("protein_g") @db.Decimal(6, 1)
+  carbsG          Decimal      @map("carbs_g") @db.Decimal(6, 1)
+  fatG            Decimal      @map("fat_g") @db.Decimal(6, 1)
+  fiberG          Decimal?     @map("fiber_g") @db.Decimal(6, 1)
+  sugarG          Decimal?     @map("sugar_g") @db.Decimal(6, 1)
+  sodiumMg        Decimal?     @map("sodium_mg") @db.Decimal(7, 1)
+  nutrientsEdited Boolean      @default(false) @map("nutrients_edited")
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// NO ACTION, not RESTRICT: Postgres checks it at the end of the statement,
@@ -518,6 +539,62 @@ model XPTransaction {
   @@unique([userId, sourceType, sourceId])
   @@index([userId, createdAt])
   @@map("xp_transactions")
+}
+
+// ---------- badges & challenges (P1, docs/specs/badges-challenges.md) ----------
+
+/// An earned badge. The catalog (rules, titles, bonus XP) lives in code. The
+/// unique key makes awarding insert-first and idempotent, and a badge is never
+/// revoked, so the row is never deleted (except with the account).
+model UserBadge {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  badgeCode      String   @map("badge_code") @db.VarChar(40)
+  earnedAt       DateTime @default(now()) @map("earned_at") @db.Timestamptz(3)
+  catalogVersion Int      @map("catalog_version")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeCode])
+  @@index([userId, earnedAt])
+  @@map("user_badges")
+}
+
+/// A joined challenge. Window dates are local dates (inclusive) in the
+/// timezone captured at join; water templates also capture the water goal.
+/// windowEnd null = no deadline (template deadlineDays null).
+/// Weekly: one instance per (user, template, windowStart). At most one *active*
+/// per (user, template). Both are partial unique indexes (migration SQL only), so
+/// a personal challenge can be left and joined again on the same day.
+model UserChallenge {
+  id           String          @id @default(uuid()) @db.Uuid
+  userId       String          @map("user_id") @db.Uuid
+  templateCode String          @map("template_code") @db.VarChar(40)
+  type         ChallengeType
+  target       Int
+  windowStart  DateTime        @map("window_start") @db.Date
+  windowEnd    DateTime?       @map("window_end") @db.Date
+  timezone     String          @db.VarChar(64)
+  waterGoalMl  Int?            @map("water_goal_ml")
+  status       ChallengeStatus @default(active)
+  progress     Int             @default(0)
+  /// Bonus XP actually awarded on completion (after the 150/week cap; may be
+  /// 0). A ledger row exists only when > 0 (the ledger forbids 0 amounts); the
+  /// completed status, set in the same transaction, prevents a later payout.
+  xpAwarded    Int             @default(0) @map("xp_awarded")
+  joinedAt     DateTime        @default(now()) @map("joined_at") @db.Timestamptz(3)
+  /// Local date of joining in `timezone`; streak challenges count only streak
+  /// days on or after it.
+  joinDate     DateTime        @map("join_date") @db.Date
+  completedAt  DateTime?       @map("completed_at") @db.Timestamptz(3)
+  leftAt       DateTime?       @map("left_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, joinedAt(sort: Desc), id(sort: Desc)])
+  @@index([userId, status, joinedAt(sort: Desc), id(sort: Desc)])
+  @@map("user_challenges")
 }
 
 // ---------- idempotency ----------
