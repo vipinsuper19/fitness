@@ -232,8 +232,41 @@ describeDb('T14: nutrition (HTTP + Postgres)', () => {
       expect((await api(t).patch(`/api/v1/food-logs/${log.id}`).send({ mealType: 'snack' }).expect(200)).body.mealType).toBe('snack');
       expect((await api(t).get(`/api/v1/nutrition/daily?date=${DAY}`).expect(200)).body.totals.energyKcal).toBe(250);
       expect((await prisma.foodItem.findUniqueOrThrow({ where: { id: food.id } })).deletedAt).not.toBeNull();
-      expect((await api(t).get('/api/v1/me/export').expect(200)).body.customFoods.map((f: { id: string }) => f.id)).not.toContain(food.id);
+      // The export keeps the deleted food (with deletedAt) so its diary entries resolve.
+      const exported = (await api(t).get('/api/v1/me/export').expect(200)).body;
+      const gone = exported.customFoods.find((f: { id: string }) => f.id === food.id);
+      expect(gone).toMatchObject({ name: 'Sabudana khichdi', source: 'custom' });
+      expect(Date.parse(gone.deletedAt)).not.toBeNaN();
+      expect(exported.foodLogs.map((l: { foodId: string }) => l.foodId)).toContain(food.id);
       await api(t).delete(`/api/v1/food-logs/${log.id}`).expect(204);
+    });
+
+    it('trims brand on create and edit; a blank brand becomes null', async () => {
+      const t = await signUp();
+      const made = (await api(t).post('/api/v1/foods').send({ ...custom, brand: '  Haldiram  ' }).expect(201)).body;
+      expect(made.brand).toBe('Haldiram');
+      expect((await api(t).post('/api/v1/foods').send({ ...custom, brand: '   ' }).expect(201)).body.brand).toBeNull();
+      expect((await api(t).patch(`/api/v1/foods/${made.id}`).send({ brand: ' MTR ' }).expect(200)).body.brand).toBe('MTR');
+      expect((await api(t).patch(`/api/v1/foods/${made.id}`).send({ brand: '  ' }).expect(200)).body.brand).toBeNull();
+      expect((await api(t).get('/api/v1/me/export').expect(200)).body.customFoods.find((f: { id: string }) => f.id === made.id).deletedAt).toBeNull();
+    });
+
+    it('changing the unit away from g needs gramsPerServing; create keeps it optional', async () => {
+      const t = await signUp();
+      const grams = (await api(t).post('/api/v1/foods').send({ ...custom, servingSize: 100, servingUnit: 'g', gramsPerServing: null }).expect(201)).body;
+      const bad = await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingSize: 1, servingUnit: 'katori' }).expect(400);
+      expect(bad.body.details.fields).toHaveProperty('gramsPerServing');
+      expect((await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingSize: 1, servingUnit: 'katori', gramsPerServing: 150 }).expect(200)).body).toMatchObject({ servingUnit: 'katori', gramsPerServing: 150 });
+      // Another non-g unit is fine while grams are known; clearing grams on a non-g unit is not; back to g needs none.
+      expect((await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingUnit: 'cup' }).expect(200)).body).toMatchObject({ servingUnit: 'cup', gramsPerServing: 150 });
+      await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingUnit: 'plate', gramsPerServing: null }).expect(400);
+      expect((await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingUnit: 'g', gramsPerServing: null }).expect(200)).body.servingUnit).toBe('g');
+
+      // Create allows a non-g unit without grams (existing clients rely on it), and editing other fields of such a food still works.
+      const plate = (await api(t).post('/api/v1/foods').send({ ...custom, gramsPerServing: null }).expect(201)).body;
+      expect(plate).toMatchObject({ servingUnit: 'plate', gramsPerServing: null });
+      expect((await api(t).patch(`/api/v1/foods/${plate.id}`).send({ name: 'Veg thali' }).expect(200)).body.name).toBe('Veg thali');
+      await api(t).patch(`/api/v1/foods/${plate.id}`).send({ servingUnit: 'katori' }).expect(400);
     });
 
     it('servings, servingSize and gramsPerServing allow at most two decimals', async () => {

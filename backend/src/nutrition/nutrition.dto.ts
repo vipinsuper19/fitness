@@ -56,7 +56,8 @@ export class FoodCreateDto {
   @IsString() @MinLength(1) @MaxLength(120)
   name!: string;
 
-  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 80 }) @IsOptional() @IsString() @MaxLength(80)
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value))
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 80, description: 'Trimmed; blank becomes null' }) @IsOptional() @IsString() @MaxLength(80)
   brand?: string | null;
 
   @ApiProperty({ minimum: 0, exclusiveMinimum: true, maximum: 10000 }) @IsNumber(dp(2)) @Positive() @Max(10000)
@@ -138,7 +139,8 @@ export class FoodUpdateDto {
   @IsDefinedWhenPresent() @IsString() @MinLength(1) @MaxLength(120)
   name?: string;
 
-  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 80 }) @IsOptional() @IsString() @MaxLength(80)
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() || null : value))
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 80, description: 'Trimmed; blank becomes null' }) @IsOptional() @IsString() @MaxLength(80)
   brand?: string | null;
 
   @ApiPropertyOptional({ minimum: 0, exclusiveMinimum: true, maximum: 10000 }) @IsDefinedWhenPresent() @IsNumber(dp(2)) @Positive() @Max(10000)
