@@ -120,3 +120,9 @@ class FakeAccountRepository : com.vipin.fitness.core.data.AccountRepository {
         return exportResult
     }
 }
+
+class FakeConsentRepository(var consented: Boolean = false) : com.vipin.fitness.core.data.ConsentRepository {
+    var accepts = 0
+    override suspend fun hasConsented() = consented
+    override suspend fun accept() { accepts++; consented = true }
+}

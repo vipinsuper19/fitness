@@ -15,6 +15,7 @@ import com.vipin.fitness.feature.auth.RegisterRoute
 import com.vipin.fitness.feature.auth.SignInRoute
 import com.vipin.fitness.feature.onboarding.OnboardingRoute
 import com.vipin.fitness.feature.onboarding.ProfileEditRoute
+import com.vipin.fitness.feature.onboarding.ConsentGate
 import com.vipin.fitness.feature.achievements.AchievementsRoute
 import com.vipin.fitness.feature.auth.DeleteAccountRoute
 import com.vipin.fitness.feature.workout.ActiveSessionRoute
@@ -66,7 +67,8 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                     )
                 }
                 Route.Onboarding -> NavEntry(key) {
-                    OnboardingRoute(onFinished = { AppNavigation.onOnboardingFinished(stack) })
+                    // Consent first (once per user on this device), then the profile steps.
+                    ConsentGate { OnboardingRoute(onFinished = { AppNavigation.onOnboardingFinished(stack) }) }
                 }
                 Route.Main -> NavEntry(key) {
                     FitnessApp(

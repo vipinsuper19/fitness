@@ -66,4 +66,21 @@
     <string name="sync_now">Sync</string>
     <string name="cancel">Cancel</string>
     <string name="profile_delete_account">Delete account</string>
+    <string name="onb_why_about">Your age and sex help us estimate calorie needs and pick sensible starting weights.</string>
+    <string name="onb_why_body">Height and weight let us estimate calories and show your progress over time.</string>
+    <string name="onb_why_activity">How active and experienced you are decides how hard your first plan is.</string>
+    <string name="onb_why_goals">Diet, calorie and water goals personalise your daily targets on Home.</string>
+    <string name="consent_title">Before you start</string>
+    <string name="consent_why_title">Why we ask about you</string>
+    <string name="consent_why_body">To build your plan and daily targets we ask about your body, activity and diet, and we store the workouts, food, water and measurements you log. This is health data, so we only use it to run the app for you. We don\'t sell it or use it for ads.</string>
+    <string name="consent_control_title">You\'re in control</string>
+    <string name="consent_control_body">Every profile question is optional. You can change your answers, export everything as a file, or delete your account at any time from Profile.</string>
+    <string name="consent_not_medical">Fitness gives general guidance, not medical advice. Check with a doctor before starting a new exercise or diet programme.</string>
+    <string name="consent_agree">I agree to the Terms of Service and the Privacy Policy, and to Fitness using my health data as described above.</string>
+    <string name="consent_continue">Continue</string>
+    <string name="legal_privacy">Privacy Policy</string>
+    <string name="legal_terms">Terms of Service</string>
+    <string name="settings_help_legal">Help &amp; legal</string>
+    <string name="settings_help">Help &amp; FAQ</string>
+    <string name="settings_feedback">Send feedback</string>
 </resources>

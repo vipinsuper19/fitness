@@ -39,6 +39,14 @@ private fun OnboardingStep.title() = when (this) {
     OnboardingStep.GOALS -> R.string.onb_step_goals
 }
 
+/** "Why we ask" copy shown under each step's title. */
+internal fun OnboardingStep.why() = when (this) {
+    OnboardingStep.ABOUT -> R.string.onb_why_about
+    OnboardingStep.BODY -> R.string.onb_why_body
+    OnboardingStep.ACTIVITY -> R.string.onb_why_activity
+    OnboardingStep.GOALS -> R.string.onb_why_goals
+}
+
 @Composable
 fun OnboardingRoute(onFinished: () -> Unit, viewModel: OnboardingViewModel = hiltViewModel()) {
     val s by viewModel.state.collectAsStateWithLifecycle()
@@ -54,6 +62,7 @@ fun OnboardingRoute(onFinished: () -> Unit, viewModel: OnboardingViewModel = hil
             LinearProgressIndicator(progress = { (s.step.ordinal + 1f) / total }, modifier = Modifier.fillMaxWidth().padding(top = 32.dp))
             Text(stringResource(R.string.onb_step_of, s.step.ordinal + 1, total), style = MaterialTheme.typography.labelMedium)
             Text(stringResource(s.step.title()), style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(s.step.why()), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("onboarding_why"))
             Text(stringResource(R.string.onb_optional_note), style = MaterialTheme.typography.bodyMedium)
             ProfileFields(s.step.fields, s.form, s.errors, viewModel::onForm, viewModel::onUnits)
             s.error?.let { Text(it.resolve(), color = MaterialTheme.colorScheme.error) }
@@ -99,6 +108,7 @@ fun ProfileEditRoute(
                     Text(stringResource(R.string.profile_delete_account), color = MaterialTheme.colorScheme.error)
                 }
             }
+            SettingsLinks()
         }
     }
     if (s.unsyncedOnSignOut > 0) {
