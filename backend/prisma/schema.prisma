@@ -407,6 +407,9 @@ model FoodItem {
   isVegetarian    Boolean?    @map("is_vegetarian")
   source          FoodSource
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Soft delete for custom foods: hidden from search, GET and new logs, but the
+  /// row stays so existing diary entries (FK NO ACTION) keep their food.
+  deletedAt       DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
   owner User?     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   logs  FoodLog[]
@@ -425,6 +428,13 @@ model FoodLog {
   date            DateTime @db.Date
   mealType        MealType @map("meal_type")
   servings        Decimal  @db.Decimal(6, 2)
+  /// Serving the nutrients were computed from, snapshotted at log time (and
+  /// refreshed when servings are recomputed), so later food edits do not
+  /// change what "2 servings" meant. Null only on rows logged before the
+  /// snapshot existed and not backfilled; the API falls back to the food.
+  servingSize     Decimal?     @map("serving_size") @db.Decimal(8, 2)
+  servingUnit     ServingUnit? @map("serving_unit")
+  gramsPerServing Decimal?     @map("grams_per_serving") @db.Decimal(8, 2)
   energyKcal      Decimal  @map("energy_kcal") @db.Decimal(7, 1)
   proteinG        Decimal  @map("protein_g") @db.Decimal(6, 1)
   carbsG          Decimal  @map("carbs_g") @db.Decimal(6, 1)
