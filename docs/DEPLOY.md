@@ -22,7 +22,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
 | `JWT_REFRESH_SECRET` | yes | a different `openssl rand -base64 48` |
 | `CORS_ORIGINS` | optional | leave empty (the Android app doesn't need CORS) |
 
-   Preset in `render.yaml`: `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=1`, `SWAGGER_ENABLED=false`.
+   Preset in `render.yaml`: `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=2`, `SWAGGER_ENABLED=false`.
 
    Optional overrides; defaults come from `backend/src/config/env.ts`:
    - `JWT_ACCESS_TTL_SECONDS` (900), `JWT_REFRESH_TTL_DAYS` (30)

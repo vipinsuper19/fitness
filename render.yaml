@@ -25,7 +25,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: TRUST_PROXY_HOPS
-        value: "1"
+        value: "2"
       - key: SWAGGER_ENABLED
         value: "false"
       # Supabase session pooler (port 5432, IPv4) for both.
