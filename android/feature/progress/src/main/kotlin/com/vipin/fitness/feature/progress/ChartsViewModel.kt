@@ -2,6 +2,7 @@ package com.vipin.fitness.feature.progress
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vipin.fitness.core.common.UnitConversion
 import com.vipin.fitness.core.common.UnitSystem
 import com.vipin.fitness.core.data.MeasureDimension
 import com.vipin.fitness.core.data.ProgressRepository
@@ -25,7 +26,7 @@ import javax.inject.Inject
 enum class ChartRange(val days: Long) { WEEK(7), MONTH(30), QUARTER(90) }
 
 /** The metrics drawn from /progress/summary. */
-enum class ChartMetric { WEIGHT, ENERGY, ACTIVE_MINUTES, WORKOUTS }
+enum class ChartMetric { WEIGHT, BODY_FAT, WAIST, WATER, ENERGY, ACTIVE_MINUTES, WORKOUTS }
 
 data class ChartsState(
     val today: LocalDate,
@@ -42,6 +43,9 @@ data class ChartsState(
     fun series(metric: ChartMetric): List<Double?> = summary?.points.orEmpty().map { p ->
         when (metric) {
             ChartMetric.WEIGHT -> p.weightKg?.let { toDisplay(MeasureDimension.MASS, it, units) }
+            ChartMetric.BODY_FAT -> p.bodyFatPct
+            ChartMetric.WAIST -> p.waistCm?.let { toDisplay(MeasureDimension.LENGTH, it, units) }
+            ChartMetric.WATER -> p.waterMl?.let { if (units == UnitSystem.METRIC) it.toDouble() else UnitConversion.mlToFlOz(it.toDouble()) }
             ChartMetric.ENERGY -> p.energyKcal
             ChartMetric.ACTIVE_MINUTES -> p.activeMinutes?.toDouble()
             ChartMetric.WORKOUTS -> p.workoutsCompleted?.toDouble()

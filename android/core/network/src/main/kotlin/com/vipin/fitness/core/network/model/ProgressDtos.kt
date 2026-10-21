@@ -25,6 +25,9 @@ data class BodyMeasurementPageDto(val items: List<BodyMeasurementDto>, val nextC
 data class ProgressPointDto(
     val date: String,
     val weightKg: Double? = null,
+    val bodyFatPct: Double? = null,
+    val waistCm: Double? = null,
+    val waterMl: Int? = null,
     val workoutsCompleted: Int = 0,
     val activeMinutes: Int = 0,
     val energyKcal: Double? = null,

@@ -64,6 +64,8 @@ fun WorkoutPlanDto.toDomain() = WorkoutPlan(
     workouts = workouts.map { it.toDomain() }.sortedBy { it.day },
     isActive = isActive,
     source = source.toWireEnum<PlanSource>() ?: PlanSource.CUSTOM,
+    currentWeek = currentWeek,
+    planEnded = planEnded,
 )
 
 fun PlanGenerateRequest.toDto() = PlanGenerateRequestDto(

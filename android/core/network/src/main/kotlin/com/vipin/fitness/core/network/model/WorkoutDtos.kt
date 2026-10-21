@@ -74,4 +74,8 @@ data class WorkoutPlanDto(
     val isActive: Boolean,
     val source: String,
     val createdAt: String,
+    /** #37: 1-based week of the active plan (capped at [weeks]); null unless active. */
+    val currentWeek: Int? = null,
+    /** #37: true once the active plan's last week is over; null unless active. */
+    val planEnded: Boolean? = null,
 )

@@ -40,6 +40,24 @@ internal object ProgressFormat {
         MeasureDimension.PERCENT -> "%"
     }
 
+    /**
+     * A chart value (already in display units) with its unit. Body fat and lengths 1 dp; water in
+     * ml, or litres from 1,000 ml (2.5 L), or fl oz for imperial; counts as whole numbers.
+     */
+    fun chartValue(metric: ChartMetric, v: Double, units: UnitSystem): String = when (metric) {
+        ChartMetric.WEIGHT -> "${number(v)} ${unitLabel(MeasureDimension.MASS, units)}"
+        ChartMetric.BODY_FAT -> "${number(v)} %"
+        ChartMetric.WAIST -> "${number(v)} ${unitLabel(MeasureDimension.LENGTH, units)}"
+        ChartMetric.WATER -> when {
+            units == UnitSystem.IMPERIAL -> "${number(v)} fl oz"
+            v >= 1000 -> "${number(v / 1000, 2)} L"
+            else -> "${number(v, 0)} ml"
+        }
+        ChartMetric.ENERGY -> "${number(v, 0)} kcal"
+        ChartMetric.ACTIVE_MINUTES -> "${number(v, 0)} min"
+        ChartMetric.WORKOUTS -> number(v, 0)
+    }
+
     fun measurement(kind: MeasurementKind, metric: Double, units: UnitSystem) =
         "${number(toDisplay(kind.dimension, metric, units))} ${unitLabel(kind, units)}"
 }
