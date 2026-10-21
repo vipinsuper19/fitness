@@ -169,10 +169,24 @@ export class AchievementsService implements OnModuleDestroy {
   }
 
   private async updateChallenges(userId: string, f: Facts, now: Date): Promise<Omit<EvaluationResult, 'badgesAwarded'>> {
-    const out: Omit<EvaluationResult, 'badgesAwarded'> = { challengesCompleted: [], challengesExpired: [] };
-    if (!(await this.prisma.userChallenge.count({ where: { userId, status: 'active' } }))) return out;
-    await this.prisma.$transaction(async (tx) => {
+    if (!(await this.prisma.userChallenge.count({ where: { userId, status: 'active' } }))) return { challengesCompleted: [], challengesExpired: [] };
+    return this.prisma.$transaction(async (tx) => {
       await this.lock(tx, userId);
+      return this.applyChallenges(tx, userId, f, now);
+    });
+  }
+
+  /**
+   * Re-evaluates the user's active challenges inside a caller's transaction that already
+   * holds this user's lock (e.g. leave), so a target reached just now completes first.
+   */
+  async settleChallenges(tx: Tx, userId: string, now = new Date()): Promise<Omit<EvaluationResult, 'badgesAwarded'>> {
+    return this.applyChallenges(tx, userId, await this.facts(userId, now), now);
+  }
+
+  private async applyChallenges(tx: Tx, userId: string, f: Facts, now: Date): Promise<Omit<EvaluationResult, 'badgesAwarded'>> {
+    const out: Omit<EvaluationResult, 'badgesAwarded'> = { challengesCompleted: [], challengesExpired: [] };
+    {
       const active = await tx.userChallenge.findMany({ where: { userId, status: 'active' }, orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }] });
       for (const c of active) {
         const tpl = templateByCode(c.templateCode);
@@ -203,7 +217,7 @@ export class AchievementsService implements OnModuleDestroy {
           await tx.userChallenge.updateMany({ where: { id: c.id, status: 'active' }, data: { progress: count } });
         }
       }
-    });
+    }
     return out;
   }
 }

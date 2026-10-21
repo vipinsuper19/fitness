@@ -79,6 +79,9 @@ describeDb('badges & challenges API (HTTP + Postgres)', () => {
 
     it('requires auth and has no write route', async () => {
       await http().get('/api/v1/badges').expect(401);
+      await http().get('/api/v1/challenges/templates').expect(401);
+      await http().get('/api/v1/challenges').expect(401);
+      await http().post('/api/v1/challenges').set('Idempotency-Key', randomUUID()).send({ templateCode: 'WEEKLY_WORKOUTS', target: 3 }).expect(401);
       const u = await signUp();
       await as(u.token).post('/api/v1/badges').send({ code: 'STREAK_30' }).expect(404);
     });
@@ -157,6 +160,42 @@ describeDb('badges & challenges API (HTTP + Postgres)', () => {
       const ledger = (await as(u.token).get('/api/v1/xp/ledger').expect(200)).body.items;
       expect(ledger).toEqual(expect.arrayContaining([expect.objectContaining({ sourceType: 'challenge', sourceId: c.id, amount: 30 })]));
       expect((await as(u.token).post(`/api/v1/challenges/${c.id}/leave`, null).expect(409)).body.code).toBe('CHALLENGE_NOT_ACTIVE');
+    });
+
+    it('leave re-evaluates under the lock: a target reached just now completes instead of being left', async () => {
+      const u = await signUp();
+      await workout(u.id);
+      const c = (await as(u.token).post('/api/v1/challenges').send({ templateCode: 'WEEKLY_WORKOUTS', target: 2 }).expect(201)).body;
+      expect(c).toMatchObject({ status: 'active', progress: 1 });
+      await workout(u.id, new Date(Date.now() - 30_000)); // committed, but no evaluation has run yet
+      expect((await as(u.token).post(`/api/v1/challenges/${c.id}/leave`, null).expect(409)).body.code).toBe('CHALLENGE_NOT_ACTIVE');
+      expect(await prisma.userChallenge.findUniqueOrThrow({ where: { id: c.id } })).toMatchObject({ status: 'completed', xpAwarded: 30, leftAt: null });
+      expect(await prisma.xPTransaction.count({ where: { userId: u.id, sourceType: 'challenge' } })).toBe(1);
+    });
+
+    it('reads still answer 200 with stored data when the evaluation throws', async () => {
+      const u = await signUp();
+      await workout(u.id);
+      const c = (await as(u.token).post('/api/v1/challenges').send({ templateCode: 'PERSONAL_STREAK_N', target: 7 }).expect(201)).body;
+      const boom = jest.spyOn(engine, 'evaluateWithFacts').mockRejectedValue(new Error('db hiccup'));
+      try {
+        const badges = (await as(u.token).get('/api/v1/badges').expect(200)).body;
+        expect(badges.items.find((b: { code: string }) => b.code === 'FIRST_WORKOUT').earnedAt).not.toBeNull(); // stored award
+        expect(badges.earnedCount).toBe(1);
+        expect((await as(u.token).get('/api/v1/challenges').expect(200)).body.items.map((x: { id: string }) => x.id)).toEqual([c.id]);
+        expect((await as(u.token).get(`/api/v1/challenges/${c.id}`).expect(200)).body.status).toBe('active');
+        // Even the fallback facts read failing degrades to progress: null, not a 500.
+        const facts = jest.spyOn(engine, 'facts').mockRejectedValue(new Error('db down'));
+        try {
+          const b2 = (await as(u.token).get('/api/v1/badges').expect(200)).body;
+          expect(b2.items.find((b: { code: string }) => b.code === 'WORKOUTS_10').progress).toBeNull();
+        } finally {
+          facts.mockRestore();
+        }
+        expect(boom).toHaveBeenCalled();
+      } finally {
+        boom.mockRestore();
+      }
     });
 
     it('progresses through the write hook and shows it on GET', async () => {

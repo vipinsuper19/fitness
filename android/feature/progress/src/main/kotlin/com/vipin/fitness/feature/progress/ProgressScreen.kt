@@ -100,7 +100,7 @@ private fun ChartCard(metric: ChartMetric, values: List<Double?>, units: UnitSys
         ChartMetric.WEIGHT -> stringResource(R.string.chart_weight, ProgressFormat.unitLabel(MeasureDimension.MASS, units))
         ChartMetric.BODY_FAT -> stringResource(R.string.chart_body_fat)
         ChartMetric.WAIST -> stringResource(R.string.chart_waist, ProgressFormat.unitLabel(MeasureDimension.LENGTH, units))
-        ChartMetric.WATER -> stringResource(R.string.chart_water)
+        ChartMetric.WATER -> stringResource(R.string.chart_water, ProgressFormat.waterUnitLabel(units))
         ChartMetric.ENERGY -> stringResource(R.string.chart_energy)
         ChartMetric.ACTIVE_MINUTES -> stringResource(R.string.chart_active_minutes)
         ChartMetric.WORKOUTS -> stringResource(R.string.chart_workouts)

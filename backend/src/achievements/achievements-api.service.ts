@@ -53,14 +53,15 @@ export class AchievementsApiService {
   ) {}
 
   /** Evaluates (and marks the catalog version as evaluated); a failure is logged and the read still answers. */
-  private async heal(userId: string, now: Date): Promise<Facts> {
+  private async heal(userId: string, now: Date): Promise<Facts | null> {
     try {
       const { facts } = await this.engine.evaluateWithFacts(userId, now);
       await this.prisma.userProfile.updateMany({ where: { userId, badgesEvaluatedVersion: { lt: CATALOG_VERSION } }, data: { badgesEvaluatedVersion: CATALOG_VERSION } });
       return facts;
     } catch (e) {
+      // Never fail the read: answer with the stored data (the next write or read heals).
       this.logger.warn(`evaluate on read failed userId=${userId}: ${e instanceof Error ? e.message : String(e)}`);
-      return this.engine.facts(userId, now);
+      return this.engine.facts(userId, now).catch(() => null);
     }
   }
 
@@ -69,11 +70,11 @@ export class AchievementsApiService {
     const earned = new Map((await this.prisma.userBadge.findMany({ where: { userId } })).map((b) => [b.badgeCode, b]));
     const items = BADGES.map((b): BadgeView => {
       const row = earned.get(b.code);
-      const { current, target } = b.progress(facts);
+      const p = facts ? b.progress(facts) : null;
       return {
         code: b.code, title: b.title, description: b.description, family: b.family, bonusXp: b.bonusXp,
         earnedAt: row?.earnedAt.toISOString() ?? null,
-        progress: row ? null : { current: Math.min(current, target), target },
+        progress: row || !p ? null : { current: Math.min(p.current, p.target), target: p.target },
       };
     });
     return { items, earnedCount: items.filter((i) => i.earnedAt).length };
@@ -154,11 +155,14 @@ export class AchievementsApiService {
   }
 
   async leave(userId: string, id: string, now = new Date()): Promise<ChallengeView> {
-    await this.heal(userId, now); // a challenge that already ended can't be left
     return this.prisma.$transaction(async (tx) => {
       await this.engine.lock(tx, userId);
-      const c = await tx.userChallenge.findFirst({ where: { id, userId } });
-      if (!c) throw notFound('Challenge');
+      const own = await tx.userChallenge.findFirst({ where: { id, userId }, select: { id: true } });
+      if (!own) throw notFound('Challenge');
+      // Under the same per-user lock: a target reached just now completes (or a past window
+      // expires) before we decide, so leaving can't race a completion.
+      await this.engine.settleChallenges(tx, userId, now);
+      const c = (await tx.userChallenge.findUnique({ where: { id } }))!;
       if (c.status === 'left') return toChallengeView(c);
       if (c.status !== 'active') throw new ApiError(HttpStatus.CONFLICT, 'CHALLENGE_NOT_ACTIVE', 'This challenge has already ended.');
       return toChallengeView(await tx.userChallenge.update({ where: { id }, data: { status: 'left', leftAt: now } }));
