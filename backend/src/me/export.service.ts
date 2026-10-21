@@ -102,7 +102,7 @@ export class ExportService {
       return toSessionView({ ...s, sets: own }, now);
     });
 
-    const customFoods = cap('customFoods', await db.foodItem.findMany({ where: { ownerId: userId, deletedAt: null }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
+    const customFoods = cap('customFoods', await db.foodItem.findMany({ where: { ownerId: userId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const foodLogs = cap('foodLogs', await db.foodLog.findMany({ where: { userId }, orderBy: [{ date: 'desc' }, { id: 'desc' }], take: rows + 1, include: withFood }), rows);
     const waterLogs = cap('waterLogs', await db.waterLog.findMany({ where: { userId }, orderBy: [{ date: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const measurements = cap('bodyMeasurements', await db.bodyMeasurement.findMany({ where: { userId }, orderBy: [{ date: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
@@ -116,7 +116,8 @@ export class ExportService {
       // One entry per plan version (id + version), newest first.
       workoutPlans,
       workoutSessions,
-      customFoods: customFoods.map(toFoodView),
+      // Deleted custom foods are included (with deletedAt) so every foodLogs[].foodId resolves.
+      customFoods: customFoods.map((f) => ({ ...toFoodView(f), deletedAt: f.deletedAt?.toISOString() ?? null })),
       foodLogs: foodLogs.map(toLogView),
       waterLogs: waterLogs.map(toWaterView),
       bodyMeasurements: measurements.map(toMeasurementView),

@@ -770,9 +770,10 @@ paths:
       summary: Delete one of the caller's own custom foods
       description: |
         Soft delete. The food disappears from search, `GET /foods/{foodId}`, new
-        food logs (`404`) and the export's `customFoods`, but existing diary
+        food logs (`404`), but existing diary
         entries stay intact: they keep their food id, name, serving snapshot and
-        nutrients. A catalog food or another user's food is `404`.
+        nutrients. The export still lists it in `customFoods` with `deletedAt`.
+        A catalog food or another user's food is `404`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -1355,7 +1356,10 @@ components:
         goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
         workoutPlans: { type: array, items: { $ref: '#/components/schemas/WorkoutPlan' } }
         workoutSessions: { type: array, items: { $ref: '#/components/schemas/WorkoutSession' } }
-        customFoods: { type: array, items: { $ref: '#/components/schemas/Food' } }
+        customFoods:
+          type: array
+          description: All of the user's custom foods, including soft-deleted ones (with `deletedAt`), so every `foodLogs[].foodId` that refers to a custom food resolves.
+          items: { $ref: '#/components/schemas/ExportedFood' }
         foodLogs: { type: array, items: { $ref: '#/components/schemas/FoodLog' } }
         waterLogs: { type: array, items: { $ref: '#/components/schemas/WaterLog' } }
         bodyMeasurements: { type: array, items: { $ref: '#/components/schemas/BodyMeasurement' } }
@@ -1608,22 +1612,35 @@ components:
       required: [name, servingSize, servingUnit, nutrients]
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
-        brand: { type: [string, 'null'], maxLength: 80 }
+        brand: { type: [string, 'null'], maxLength: 80, description: Trimmed; a blank brand becomes null }
         servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         servingUnit: { $ref: '#/components/schemas/ServingUnit' }
         gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         nutrients: { $ref: '#/components/schemas/Nutrients' }
         isVegetarian: { type: [boolean, 'null'] }
+    ExportedFood:
+      allOf:
+        - $ref: '#/components/schemas/Food'
+        - type: object
+          required: [deletedAt]
+          properties:
+            deletedAt: { type: [string, 'null'], format: date-time, description: When the custom food was deleted; null while live }
     FoodUpdate:
       type: object
       minProperties: 1
       description: |
         Partial. A missing field stays unchanged; `brand`, `gramsPerServing` and
         `isVegetarian` may be null to clear them; `nutrients`, when sent, replaces
-        all values. An empty body is `400 VALIDATION_FAILED`.
+        all values. An empty body is `400 VALIDATION_FAILED`. `brand` is trimmed and a
+        blank brand becomes null.
+        Changing `servingUnit` to anything other than `g` requires a weight per serving:
+        if the resulting `gramsPerServing` is null, the request is `400 VALIDATION_FAILED`.
+        Create (`FoodCreate`) keeps `gramsPerServing` optional for every unit, for
+        compatibility with existing clients; the rule applies only when an edit changes
+        the unit, so editing other fields of such a food still works.
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
-        brand: { type: [string, 'null'], maxLength: 80 }
+        brand: { type: [string, 'null'], maxLength: 80, description: Trimmed; a blank brand becomes null }
         servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         servingUnit: { $ref: '#/components/schemas/ServingUnit' }
         gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
@@ -1658,6 +1675,9 @@ components:
         nutrientsOverride: { $ref: '#/components/schemas/Nutrients' }
     FoodLogUpdate:
       type: object
+      description: |
+        Changing `servings` on an entry without user-edited macros recomputes its nutrients
+        (and serving snapshot) from the food as it is now, not from the values at log time.
       properties:
         mealType: { $ref: '#/components/schemas/MealType' }
         servings: { type: number, exclusiveMinimum: 0, maximum: 100, description: At most two decimal places; more is `400 VALIDATION_FAILED` }

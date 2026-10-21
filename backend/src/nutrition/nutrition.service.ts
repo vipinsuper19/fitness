@@ -264,9 +264,19 @@ export class NutritionService {
     if (dto.gramsPerServing !== undefined) data.gramsPerServing = dto.gramsPerServing;
     if (dto.isVegetarian !== undefined) data.isVegetarian = dto.isVegetarian;
     if (dto.nutrients !== undefined) Object.assign(data, fromDto(dto.nutrients));
-    const { count } = await this.prisma.foodItem.updateMany({ where: { id, ...ownedBy(userId) }, data });
-    if (count !== 1) throw notFound('Food');
-    return toFoodView(await this.prisma.foodItem.findUniqueOrThrow({ where: { id } }));
+    return this.prisma.$transaction(async (tx) => {
+      const food = await tx.foodItem.findFirst({ where: { id, ...ownedBy(userId) } });
+      if (!food) throw notFound('Food');
+      // Changing the unit away from g needs a weight per serving (create keeps it optional; see the contract).
+      const unit = dto.servingUnit ?? food.servingUnit;
+      const grams = dto.gramsPerServing !== undefined ? dto.gramsPerServing : food.gramsPerServing;
+      if (dto.servingUnit !== undefined && dto.servingUnit !== food.servingUnit && unit !== 'g' && grams == null) {
+        throw invalid({ gramsPerServing: 'required when servingUnit changes to a unit other than g' });
+      }
+      const { count } = await tx.foodItem.updateMany({ where: { id, ...ownedBy(userId) }, data });
+      if (count !== 1) throw notFound('Food');
+      return toFoodView(await tx.foodItem.findUniqueOrThrow({ where: { id } }));
+    });
   }
 
   /**
