@@ -182,7 +182,7 @@ describeDb('badges & challenges API (HTTP + Postgres)', () => {
       expect((await as(u.token).get('/api/v1/challenges?status=left').expect(200)).body.items.map((c: { id: string }) => c.id)).toEqual([ids[0]]);
       await as(u.token).get('/api/v1/challenges?status=bogus').expect(400);
       await as(u.token).get('/api/v1/challenges?cursor=garbage').expect(400);
-      await as(u.token).get('/api/v1/challenges/not-a-uuid').expect(400);
+      await as(u.token).get('/api/v1/challenges/not-a-uuid').expect(404); // malformed ids are 404, like other resources
 
       const other = await signUp();
       expect((await as(other.token).get('/api/v1/challenges').expect(200)).body.items).toEqual([]);
