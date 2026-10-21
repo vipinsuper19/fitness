@@ -1,6 +1,6 @@
 package com.vipin.fitness.feature.home
 
-import com.vipin.fitness.core.data.ActivePlan
+import com.vipin.fitness.core.data.HomePlan
 import com.vipin.fitness.core.data.DailyNutrition
 import com.vipin.fitness.core.data.MealType
 import com.vipin.fitness.core.data.Nutrients
@@ -39,10 +39,10 @@ class HomeViewModelTest {
     }
 
     @Test fun showsTodaysPlanDayOrRestDay() {
-        home.plan = ActivePlan("p1", "Push Pull Legs", 8, listOf(PlanWorkout(3, "Legs", 5), PlanWorkout(1, "Push", 6)))
+        home.plan = HomePlan("p1", "Push Pull Legs", 8, listOf(PlanWorkout(3, "Legs", 5), PlanWorkout(1, "Push", 6)))
         val d = vm().state.value.plan.value()
         assertEquals("Legs", d.workout!!.name) // 21 Oct 2026 is a Wednesday (ISO 3)
-        home.plan = ActivePlan("p1", "PPL", 8, listOf(PlanWorkout(1, "Push", 6)))
+        home.plan = HomePlan("p1", "PPL", 8, listOf(PlanWorkout(1, "Push", 6)))
         val rest = vm().state.value.plan.value()
         assertEquals("PPL", rest.plan!!.name)
         assertNull(rest.workout)

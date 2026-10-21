@@ -28,8 +28,8 @@ internal object ProgressFormat {
             roundingMode = RoundingMode.HALF_UP
         }.format(BigDecimal.valueOf(v))
 
-    /** Plain number for an input field: no grouping, one decimal, half-up. */
-    fun input(v: Double): String = BigDecimal.valueOf(v).setScale(1, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+    /** Plain number for an input field: no grouping, up to [decimals] places, half-up. */
+    fun input(v: Double, decimals: Int = 1): String = BigDecimal.valueOf(v).setScale(decimals, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
 
     fun date(d: LocalDate): String = d.format(dateFmt)
     fun shortDate(d: LocalDate): String = d.format(shortDateFmt)

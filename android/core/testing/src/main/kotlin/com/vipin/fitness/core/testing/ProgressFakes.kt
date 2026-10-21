@@ -1,7 +1,7 @@
 package com.vipin.fitness.core.testing
 
 import com.vipin.fitness.core.common.UnitSystem
-import com.vipin.fitness.core.data.ActivePlan
+import com.vipin.fitness.core.data.HomePlan
 import com.vipin.fitness.core.data.BodyMeasurement
 import com.vipin.fitness.core.data.BodyMeasurementPage
 import com.vipin.fitness.core.data.DailyNutrition
@@ -18,6 +18,7 @@ import com.vipin.fitness.core.data.UnitPreference
 import com.vipin.fitness.core.data.XpBalance
 import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 
@@ -31,6 +32,8 @@ class FakeUnitPreference(units: UnitSystem = UnitSystem.METRIC) : UnitPreference
 class FakeProgressRepository : ProgressRepository {
     val items = mutableListOf<BodyMeasurement>()
     var pageSize = 20
+    /** When set, a "Load more" (cursor != null) suspends until completed. */
+    var pageGate: CompletableDeferred<Unit>? = null
     var failNext: ApiResult.Failure? = null
     var summaryFailure: ApiResult.Failure? = null
     val writes = mutableListOf<Pair<String, String>>()
@@ -42,6 +45,7 @@ class FakeProgressRepository : ProgressRepository {
     private var nextId = 1
 
     override suspend fun measurements(cursor: String?): ApiResult<BodyMeasurementPage> {
+        if (cursor != null) pageGate?.await()
         val sorted = items.sortedByDescending { it.date }
         val start = cursor?.toInt() ?: 0
         val page = sorted.drop(start).take(pageSize)
@@ -89,7 +93,7 @@ class FakeProgressRepository : ProgressRepository {
 }
 
 class FakeHomeRepository : HomeRepository {
-    var plan: ActivePlan? = null
+    var plan: HomePlan? = null
     var xp = XpBalance(0, 1, 0, 100)
     var nutrition: (LocalDate) -> DailyNutrition = { emptyDay(it) }
     var planFailure: ApiResult.Failure? = null
@@ -97,7 +101,7 @@ class FakeHomeRepository : HomeRepository {
     var nutritionFailure: ApiResult.Failure? = null
     val nutritionCalls = mutableListOf<LocalDate>()
 
-    override suspend fun activePlan(): ApiResult<ActivePlan?> = planFailure ?: ApiResult.Success(plan)
+    override suspend fun activePlan(): ApiResult<HomePlan?> = planFailure ?: ApiResult.Success(plan)
     override suspend fun xpBalance(): ApiResult<XpBalance> = xpFailure ?: ApiResult.Success(xp)
     override suspend fun dailyNutrition(date: LocalDate): ApiResult<DailyNutrition> {
         nutritionCalls += date

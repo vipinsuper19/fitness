@@ -26,7 +26,7 @@ interface ProgressRepository {
 /** Reads for the Home dashboard. */
 interface HomeRepository {
     /** Success(null) when the user has no active plan. */
-    suspend fun activePlan(): ApiResult<ActivePlan?>
+    suspend fun activePlan(): ApiResult<HomePlan?>
     suspend fun xpBalance(): ApiResult<XpBalance>
     suspend fun dailyNutrition(date: LocalDate): ApiResult<DailyNutrition>
 }
@@ -68,7 +68,7 @@ class DefaultHomeRepository @Inject constructor(
     private val nutrition: NutritionApi,
     private val json: Json,
 ) : HomeRepository {
-    override suspend fun activePlan(): ApiResult<ActivePlan?> = apiCall(json) {
+    override suspend fun activePlan(): ApiResult<HomePlan?> = apiCall(json) {
         val r = api.activePlan()
         if (!r.isSuccessful) throw HttpException(r)
         if (r.code() == 204) null else r.body()?.toDomain()

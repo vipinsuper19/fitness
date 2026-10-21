@@ -147,4 +147,29 @@ class MeasurementsViewModelTest {
         assertEquals(listOf("m0", "m1", "m2"), vm.state.value.items.map { it.id })
         assertNull(vm.state.value.nextCursor)
     }
+
+    @Test fun reloadDuringLoadMoreResetsPagingAndLoadMoreStillWorks() {
+        repo.pageSize = 2
+        repeat(3) { i -> repo.items += BodyMeasurement("m$i", oct21.minusDays(i.toLong()), mapOf(WEIGHT to 80.0)) }
+        val vm = vm()
+        repo.pageGate = kotlinx.coroutines.CompletableDeferred()
+        vm.loadMore()
+        assertTrue(vm.state.value.loadingMore)
+        vm.load()
+        assertEquals(false, vm.state.value.loadingMore)
+        assertEquals(listOf("m0", "m1"), vm.state.value.items.map { it.id })
+        repo.pageGate = null
+        vm.loadMore()
+        assertEquals(false, vm.state.value.loadingMore)
+        assertEquals(listOf("m0", "m1", "m2"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun metricEditShowsTwoDecimals() {
+        val vm = vm()
+        vm.startEdit(BodyMeasurement("x", oct21, mapOf(WEIGHT to 80.25, WAIST to 90.0)))
+        assertEquals("80.25", vm.state.value.form!!.texts[WEIGHT])
+        assertEquals("90", vm.state.value.form!!.texts[WAIST])
+        vm.save()
+        assertTrue(repo.writes.isEmpty())
+    }
 }

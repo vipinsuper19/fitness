@@ -33,11 +33,15 @@ import com.vipin.fitness.core.data.XpBalance
  * tracking) can add or replace one via [extraSlots] without touching the others.
  */
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier, extraSlots: LazyListScope.(HomeState) -> Unit = {}) {
+fun HomeScreen(
+    modifier: Modifier = Modifier,
+    planDayContent: @Composable (PlanDay) -> Unit = { DefaultPlanDayContent(it) },
+    extraSlots: LazyListScope.(HomeState) -> Unit = {},
+) {
     val vm: HomeViewModel = hiltViewModel()
     val s by vm.state.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
-    HomeContent(s, onRetry = vm::refresh, modifier = modifier, extraSlots = extraSlots)
+    HomeContent(s, onRetry = vm::refresh, modifier = modifier, planDayContent = planDayContent, extraSlots = extraSlots)
 }
 
 @Composable
@@ -45,6 +49,7 @@ fun HomeContent(
     s: HomeState,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+    planDayContent: @Composable (PlanDay) -> Unit = { DefaultPlanDayContent(it) },
     extraSlots: LazyListScope.(HomeState) -> Unit = {},
 ) {
     LazyColumn(
@@ -52,7 +57,7 @@ fun HomeContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item(key = "plan") { PlanDaySlot(s.plan, onRetry) }
+        item(key = "plan") { PlanDaySlot(s.plan, onRetry, planDayContent) }
         item(key = "nutrition") { NutritionSlot(s.nutrition, s.units, onRetry) }
         item(key = "streak") { StreakSlot(s.streak, onRetry) }
         item(key = "xp") { XpSlot(s.xp, onRetry) }
@@ -78,22 +83,30 @@ fun <T> SlotCard(title: String, slot: Slot<T>, onRetry: () -> Unit, tag: String,
     }
 }
 
+/** Today's plan card. [content] renders a loaded plan day; T13 can pass start/resume content here. */
 @Composable
-fun PlanDaySlot(slot: Slot<PlanDay>, onRetry: () -> Unit) =
-    SlotCard(stringResource(R.string.home_plan_title), slot, onRetry, "slot_plan") { d ->
-        when {
-            d.plan == null -> Text(stringResource(R.string.home_plan_none))
-            d.workout == null -> {
-                Text(d.plan.name, style = MaterialTheme.typography.bodySmall)
-                Text(stringResource(R.string.home_plan_rest))
-            }
-            else -> {
-                Text(d.plan.name, style = MaterialTheme.typography.bodySmall)
-                Text(d.workout.name, style = MaterialTheme.typography.headlineSmall)
-                Text(stringResource(R.string.home_plan_exercises, d.workout.exerciseCount))
-            }
+fun PlanDaySlot(
+    slot: Slot<PlanDay>,
+    onRetry: () -> Unit,
+    content: @Composable (PlanDay) -> Unit = { DefaultPlanDayContent(it) },
+) = SlotCard(stringResource(R.string.home_plan_title), slot, onRetry, "slot_plan", content)
+
+/** Plan name and today's workout, or the rest-day / no-plan empty state. */
+@Composable
+fun DefaultPlanDayContent(d: PlanDay) {
+    when {
+        d.plan == null -> Text(stringResource(R.string.home_plan_none))
+        d.workout == null -> {
+            Text(d.plan.name, style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.home_plan_rest))
+        }
+        else -> {
+            Text(d.plan.name, style = MaterialTheme.typography.bodySmall)
+            Text(d.workout.name, style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.home_plan_exercises, d.workout.exerciseCount))
         }
     }
+}
 
 @Composable
 fun NutritionSlot(slot: Slot<DailyNutrition>, units: UnitSystem, onRetry: () -> Unit) =

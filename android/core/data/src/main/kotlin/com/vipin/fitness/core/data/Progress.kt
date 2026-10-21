@@ -61,7 +61,7 @@ data class ProgressSummary(val from: LocalDate, val to: LocalDate, val points: L
 data class XpBalance(val total: Int, val level: Int, val xpIntoLevel: Int, val xpForNextLevel: Int)
 
 /** The active plan as Home needs it: workouts keyed by ISO weekday (1 = Monday). */
-data class ActivePlan(val id: String, val name: String, val weeks: Int, val workouts: List<PlanWorkout>) {
+data class HomePlan(val id: String, val name: String, val weeks: Int, val workouts: List<PlanWorkout>) {
     /** The workout for [date], or null on a rest day. */
     fun workoutOn(date: LocalDate): PlanWorkout? = workouts.firstOrNull { it.dayOfWeek == date.dayOfWeek.value }
 }
@@ -120,4 +120,4 @@ fun ProgressSummaryDto.toDomain(): ProgressSummary {
 
 fun XpBalanceDto.toDomain() = XpBalance(total, level, xpIntoLevel, xpForNextLevel)
 
-fun ActivePlanDto.toDomain() = ActivePlan(id, name, weeks, workouts.map { PlanWorkout(it.dayOfWeek, it.name, it.exercises.size) })
+fun ActivePlanDto.toDomain() = HomePlan(id, name, weeks, workouts.map { PlanWorkout(it.dayOfWeek, it.name, it.exercises.size) })

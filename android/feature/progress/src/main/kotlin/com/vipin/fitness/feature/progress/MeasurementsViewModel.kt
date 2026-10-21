@@ -51,7 +51,7 @@ data class MeasurementForm(
             date = m.date,
             units = units,
             texts = MeasurementKind.entries.associateWith { k ->
-                m.values[k]?.let { ProgressFormat.input(toDisplay(k.dimension, it, units)) }.orEmpty()
+                m.values[k]?.let { ProgressFormat.input(toDisplay(k.dimension, it, units), if (units == UnitSystem.METRIC) 2 else 1) }.orEmpty()
             },
         )
     }
@@ -83,6 +83,8 @@ class MeasurementsViewModel @Inject constructor(
     internal var newKey: () -> String = ::newIdempotencyKey
     private val keys = RetryKeys { newKey() }
     private var loadJob: Job? = null
+    /** Separate from [loadJob], so a reload never strands an in-flight page with loadingMore = true. */
+    private var pageJob: Job? = null
 
     init {
         viewModelScope.launch { units.units.collect { u -> _state.update { it.copy(units = u) } } }
@@ -91,7 +93,8 @@ class MeasurementsViewModel @Inject constructor(
 
     fun load() {
         loadJob?.cancel()
-        _state.update { it.copy(loading = it.items.isEmpty(), loadError = null) }
+        pageJob?.cancel() // the reload replaces the list and cursor; a stale page must not append
+        _state.update { it.copy(loading = it.items.isEmpty(), loadError = null, loadingMore = false) }
         loadJob = viewModelScope.launch {
             when (val r = repo.measurements()) {
                 is ApiResult.Success -> _state.update { it.copy(loading = false, items = r.value.items, nextCursor = r.value.nextCursor) }
@@ -105,7 +108,7 @@ class MeasurementsViewModel @Inject constructor(
         val cursor = s.nextCursor ?: return
         if (s.loadingMore || s.loading) return
         _state.update { it.copy(loadingMore = true) }
-        loadJob = viewModelScope.launch {
+        pageJob = viewModelScope.launch {
             when (val r = repo.measurements(cursor)) {
                 is ApiResult.Success -> _state.update {
                     it.copy(loadingMore = false, items = (it.items + r.value.items).distinctBy { m -> m.id }, nextCursor = r.value.nextCursor)

@@ -3,7 +3,7 @@ package com.vipin.fitness.feature.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.common.UnitSystem
-import com.vipin.fitness.core.data.ActivePlan
+import com.vipin.fitness.core.data.HomePlan
 import com.vipin.fitness.core.data.DailyNutrition
 import com.vipin.fitness.core.data.HomeRepository
 import com.vipin.fitness.core.data.PlanWorkout
@@ -36,7 +36,7 @@ sealed interface Slot<out T> {
 }
 
 /** Today's plan day: [workout] null means a rest day; [plan] null means no active plan. */
-data class PlanDay(val plan: ActivePlan?, val workout: PlanWorkout?)
+data class PlanDay(val plan: HomePlan?, val workout: PlanWorkout?)
 
 /** Streak from /progress/summary, plus whether a workout is already done today. */
 data class Streak(val days: Int, val workoutsToday: Int, val xpToday: Int)
