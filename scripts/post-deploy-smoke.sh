@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Post-deploy smoke test: health+DB, register -> generate plan (>=1 workout)
+# Post-deploy smoke test: health+DB, register -> generate plan (>=1 workout) -> badges catalog
 # -> delete -> login must fail. The account is deleted by the EXIT trap (and the
 # workflow's cleanup step) even when a step fails.
 # Never prints tokens, passwords or token-bearing bodies. 3 auth requests on
@@ -76,6 +76,13 @@ if [ "$CODE" != 200 ]; then echo "::error::generate -> $CODE $(jq -c '{code,mess
 N="$(jq '.workouts | length' "$TMP/body" 2>/dev/null || echo 0)"; rm -f "$TMP/body"
 [ "${N:-0}" -ge 1 ] || { echo "::error::generate returned $N workouts (expected >= 1)"; exit 1; }
 echo "  generate -> 200, $N workouts"
+
+echo "2c) badges catalog (GET /badges must be 200 with a non-empty catalog)"
+req GET /badges "" "$TOKEN"
+if [ "$CODE" != 200 ]; then echo "::error::GET /badges -> $CODE $(jq -c '{code,message}' "$TMP/body" 2>/dev/null || true)"; exit 1; fi
+NB="$(jq '.items | length' "$TMP/body" 2>/dev/null || echo 0)"; rm -f "$TMP/body"
+[ "${NB:-0}" -ge 1 ] || { echo "::error::GET /badges returned $NB badges (expected a non-empty catalog)"; exit 1; }
+echo "  badges -> 200, $NB badges"
 
 echo "3) delete account"
 req DELETE /me "$(body_json '{password:$p}')" "$TOKEN"
