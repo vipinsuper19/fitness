@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -8,8 +8,8 @@ import { IdempotencyKeyHeader } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
 import type { WorkoutPlanDraft } from './generator';
-import { PlanGenerateDto, PlanVersionQuery, WorkoutPlanDraftDto, WorkoutPlanUpdateDto } from './plans.dto';
-import { PlansService, PlanView } from './plans.service';
+import { PlanActivateDto, PlanGenerateDto, PlanListQuery, PlanVersionQuery, WorkoutPlanDraftDto, WorkoutPlanUpdateDto } from './plans.dto';
+import { PlansService, PlanSummary, PlanView } from './plans.service';
 
 @ApiTags('workout-plans')
 @ApiBearerAuth()
@@ -39,6 +39,11 @@ export class PlansController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<PlanView | undefined> {
     return this.idem.run({ userId, key, req, res, status: 201, handler: () => this.plans.create(userId, dto) });
+  }
+
+  @Get()
+  list(@CurrentUserId() userId: string, @Query() q: PlanListQuery): Promise<{ items: PlanSummary[]; nextCursor: string | null }> {
+    return this.plans.list(userId, q);
   }
 
   @Get('active')
@@ -74,10 +79,35 @@ export class PlansController {
   activate(
     @CurrentUserId() userId: string,
     @Param('planId', IdParamPipe) id: string,
+    @Body() dto: PlanActivateDto,
     @IdempotencyKeyHeader() key: string | undefined,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<PlanView | undefined> {
-    return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.activate(userId, id) });
+    return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.activate(userId, id, dto?.resume === true) });
+  }
+
+  @Post(':planId/deactivate')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  async deactivate(
+    @CurrentUserId() userId: string,
+    @Param('planId', IdParamPipe) id: string,
+    @IdempotencyKeyHeader() key: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    await this.idem.run({ userId, key, req, res, status: 204, handler: () => this.plans.deactivate(userId, id) });
+  }
+
+  @Delete(':planId')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  async archive(
+    @CurrentUserId() userId: string,
+    @Param('planId', IdParamPipe) id: string,
+    @IdempotencyKeyHeader() key: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    await this.idem.run({ userId, key, req, res, status: 204, handler: () => this.plans.archive(userId, id) });
   }
 }
