@@ -25,8 +25,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: TRUST_PROXY_HOPS
-        # 2 = Cloudflare edge + Render proxy in front of the app.
-        value: "2"
+        # 3 = 127.0.0.1 socket + Render internal 10.x proxy + Cloudflare edge
+        # (confirmed in prod logs, Oct 21). Higher would trust forged
+        # left-hand X-Forwarded-For entries.
+        value: "3"
       - key: SWAGGER_ENABLED
         value: "false"
       # Supabase session pooler (port 5432, IPv4) for both.

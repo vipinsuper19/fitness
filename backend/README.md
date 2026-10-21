@@ -24,7 +24,7 @@ Validated at startup by `src/config/env.ts` (zod). The app refuses to start on a
 | `AUTH_RATE_LIMIT_PER_MINUTE` | per client IP on `/auth/*` (except refresh) and `/me`; default 10 |
 | `AUTH_REFRESH_RATE_LIMIT_PER_MINUTE` | per client IP on `/auth/refresh`; default 30 |
 | `LOGIN_MAX_FAILURES_PER_ACCOUNT` | failed logins per email per 15 min before 429; default 5 (in-memory, per instance) |
-| `TRUST_PROXY_HOPS` | Express `trust proxy`; default 1 in code; set to 2 on Render (Cloudflare edge + Render proxy) |
+| `TRUST_PROXY_HOPS` | Express `trust proxy`; default 1 in code; set to 3 on Render (127.0.0.1 socket + Render internal 10.x proxy + Cloudflare edge, confirmed in prod logs Oct 21); higher trusts forged left-hand X-Forwarded-For entries |
 | `CORS_ORIGINS`, `SWAGGER_ENABLED` | optional |
 
 Secrets are set in the Render and Supabase dashboards only, never in the repo. There is no AI provider or key; AI features use rule-based fallbacks.
@@ -38,7 +38,7 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 The Blueprint in `render.yaml` defines the `fitness-api` web service: Free plan, Singapore region, root directory `backend`, health check `/health`. `autoDeploy` is off, so deploy with **Manual Deploy**. The step-by-step guide is in `docs/DEPLOY.md`.
 - **Build:** `npm ci --include=dev --no-audit --no-fund && npm run build`, which runs `prisma generate` and `tsc`.
 - **Start:** `npm run migrate:deploy && npm start`. The Free plan has no pre-deploy step, so pending migrations are applied on every start. This is safe to repeat.
-- **Preset env:** `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=2` (Cloudflare edge + Render proxy in front of the app), `SWAGGER_ENABLED=false`.
+- **Preset env:** `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=3` (Express counts the 127.0.0.1 socket and Render's internal 10.x proxy as the first two hops, and Cloudflare's edge as the third (confirmed in production logs on Oct 21). Do not set it higher: extra hops make forged left-hand X-Forwarded-For entries trusted, so clients could spoof their IP and dodge per-IP rate limits.), `SWAGGER_ENABLED=false`.
 - **Entered in the dashboard (`sync: false`):**
   - `DATABASE_URL` and `DIRECT_URL`: both the Supabase session pooler URI, port 5432 (IPv4).
   - `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`: different values, at least 32 characters each (`openssl rand -base64 48`).
@@ -91,7 +91,7 @@ The Blueprint in `render.yaml` defines the `fitness-api` web service: Free plan,
   - a global `ValidationPipe` (whitelist, unknown fields rejected; errors are `400 VALIDATION_FAILED` with `details.fields`)
   - one error shape everywhere
   - throttling on auth routes (`429 RATE_LIMITED` with `Retry-After`), a looser bucket for refresh, and a per-account cap on failed logins
-  - `trust proxy` set to `TRUST_PROXY_HOPS` (2 on Render: Cloudflare + Render proxy); verify `req.ip` after the first deploy
+  - `trust proxy` set to `TRUST_PROXY_HOPS` (3 on Render: 127.0.0.1 socket + Render 10.x proxy + Cloudflare edge; never higher); verify `req.ip` after the first deploy
 
 ## Profile, goals, exercises and workout plans (T10)
 - **`GET/PUT /me/profile`:**
