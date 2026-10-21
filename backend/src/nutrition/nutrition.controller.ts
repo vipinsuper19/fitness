@@ -6,7 +6,8 @@ import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
-import { DateQuery, FoodCreateDto, FoodLogCreateDto, FoodLogUpdateDto, FoodSearchQuery, FoodUpdateDto, WaterLogDto, WaterLogUpdateDto } from './nutrition.dto';
+import { NutritionSummary, NutritionSummaryService } from './nutrition-summary.service';
+import { DateQuery, NutritionSummaryQuery, FoodCreateDto, FoodLogCreateDto, FoodLogUpdateDto, FoodSearchQuery, FoodUpdateDto, WaterLogDto, WaterLogUpdateDto } from './nutrition.dto';
 import { DailyNutrition, FoodLogView, FoodView, NutritionService, WaterLogView } from './nutrition.service';
 
 interface Ctx {
@@ -21,6 +22,7 @@ export class NutritionController {
   constructor(
     private readonly nutrition: NutritionService,
     private readonly idem: IdempotentWriteService,
+    private readonly summaries: NutritionSummaryService,
   ) {}
 
   private run<T>(userId: string, key: string | undefined, { req, res }: Ctx, status: number, handler: () => Promise<T>) {
@@ -156,6 +158,11 @@ export class NutritionController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
     await this.run(userId, key, { req, res }, 204, () => this.nutrition.deleteWater(userId, id));
+  }
+
+  @Get('nutrition/summary')
+  summary(@CurrentUserId() userId: string, @Query() q: NutritionSummaryQuery): Promise<NutritionSummary> {
+    return this.summaries.summary(userId, q);
   }
 
   @Get('nutrition/daily')
