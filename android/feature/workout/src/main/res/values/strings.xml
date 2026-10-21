@@ -148,4 +148,20 @@
     <string name="badges_earned_title">Badge earned!</string>
     <string name="badge_bonus_xp">Bonus XP: +%1$d</string>
     <string name="badges_coming_soon">Badges and challenges are coming soon.</string>
+    <string name="workout_history">Workout history</string>
+    <string name="history_title">Workout history</string>
+    <string name="history_empty_title">No workouts yet</string>
+    <string name="history_empty_body">Finished workouts show up here.</string>
+    <string name="history_offline">You\'re offline. Connect to see your past workouts.</string>
+    <string name="history_failed">Couldn\'t load your workouts. Please try again.</string>
+    <string name="history_not_found">This workout is no longer available.</string>
+    <plurals name="history_sets">
+        <item quantity="one">%d set</item>
+        <item quantity="other">%d sets</item>
+    </plurals>
+    <string name="history_difficulty">Difficulty: %1$d/5</string>
+    <string name="history_unknown_exercise">Exercise</string>
+    <string name="history_set_n">Set %1$d</string>
+    <string name="history_skipped">skipped</string>
+    <string name="history_no_sets">No sets were logged.</string>
 </resources>
