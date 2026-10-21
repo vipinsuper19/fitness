@@ -598,7 +598,9 @@ paths:
         it stopped (weeks are then counted from the shifted date in local calendar
         days, as usual). The shift is always the full pause, even if other plans were
         active in between. `resume: true` on a plan that was never paused (or has no
-        `activatedAt`) activates normally. Activating the plan that is already active
+        `activatedAt`) activates normally. Resuming a plan that had already ended gives
+        `currentWeek = weeks` and `planEnded: true` (the usual cap); a default activate
+        starts it over at week 1. Activating the plan that is already active
         changes nothing, with or without `resume`.
         The previously active plan becomes `inactive` (not paused).
         Servers before this change ignore the body, so `resume` there restarts at week 1.
