@@ -33,7 +33,10 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
    - `PORT` is set by Render.
 3. Build: `npm ci --include=dev && npm run build` (`prisma generate` + `tsc`).
    Start: `npm run migrate:deploy && npm start`. Migrations are idempotent, and the Free plan has no pre-deploy step.
-4. `autoDeploy` is off, so deploy by hand: **Manual Deploy → Deploy latest commit**.
+4. `autoDeploy` is on: **every merge to main that touches `backend/**` or `render.yaml` deploys to Render automatically.** Android-only and docs-only merges don't (Render `buildFilter`).
+   - The `post-deploy-smoke` workflow then runs automatically on the same pushes. It waits up to ~6 min for the service to restart (`/health` uptime lower than the time since the push), then runs the smoke test (health + DB, register → delete account → login fails, test user always cleaned up).
+   - If no restart is seen in time, the workflow **fails** rather than smoke-testing the old build: check the deploy in the Render dashboard. A free instance waking from spin-down also resets uptime, which can let the wait pass early; the smoke then still checks the live service.
+   - Manual run: Actions → post-deploy-smoke → Run workflow (`skip_wait` defaults to true).
 5. Optional one-time seed (exercises and Indian foods; safe to re-run). Render Free has no shell, so run it locally against the same URL: `cd backend && DATABASE_URL=... DIRECT_URL=... npm run db:seed`.
 
 ## 3. Verify

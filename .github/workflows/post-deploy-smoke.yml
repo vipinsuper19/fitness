@@ -1,36 +1,62 @@
 name: post-deploy-smoke
 
-# Manual smoke test against a deployed API: health + DB, then a throwaway
-# account is registered, deleted, and login is confirmed to fail.
+# Smoke test against the deployed API: health + DB, then a throwaway account
+# is registered, deleted, and login is confirmed to fail.
+# On push to main (backend or render.yaml changes) it first waits for Render's
+# auto-deploy to restart the service; see scripts/wait-for-deploy.sh.
 on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "render.yaml"
+      - ".github/workflows/post-deploy-smoke.yml"
+      - "scripts/post-deploy-smoke.sh"
+      - "scripts/wait-for-deploy.sh"
   workflow_dispatch:
     inputs:
       base_url:
         description: API origin (no /api/v1)
         default: https://fitness-api-6pcc.onrender.com
         required: true
+      skip_wait:
+        description: Skip waiting for a new Render deploy
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
+# Serialize overlapping runs (e.g. two quick merges); never cancel one midway,
+# so its cleanup step always runs.
 concurrency:
   group: post-deploy-smoke
   cancel-in-progress: false
 
+env:
+  BASE_URL: ${{ inputs.base_url || 'https://fitness-api-6pcc.onrender.com' }}
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Wait for the new Render deploy
+        if: github.event_name == 'push' || !inputs.skip_wait
+        env:
+          HEAD_COMMIT_TS: ${{ github.event.head_commit.timestamp }}
+          WAIT_SECONDS: "360"
+        run: |
+          if [ -n "$HEAD_COMMIT_TS" ]; then SINCE_EPOCH="$(date -d "$HEAD_COMMIT_TS" +%s)"; else SINCE_EPOCH="$(date +%s)"; fi
+          export SINCE_EPOCH
+          scripts/wait-for-deploy.sh
       - name: Smoke test (always cleans up its user on exit)
         env:
-          BASE_URL: ${{ inputs.base_url }}
           SMOKE_STATE: ${{ runner.temp }}/smoke-user
         run: scripts/post-deploy-smoke.sh
       - name: Cleanup leftover smoke user
         if: always()
         env:
-          BASE_URL: ${{ inputs.base_url }}
           SMOKE_STATE: ${{ runner.temp }}/smoke-user
         run: scripts/post-deploy-smoke.sh cleanup
