@@ -1,0 +1,232 @@
+package com.vipin.fitness.ui
+
+import android.content.Intent
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.test.core.app.ActivityScenario
+import androidx.test.core.app.ApplicationProvider
+import com.vipin.fitness.MainActivity
+import com.vipin.fitness.core.data.Profile
+import com.vipin.fitness.core.testing.FakeProfileFlagsCache
+import com.vipin.fitness.core.testing.FakeProfileRepository
+import com.vipin.fitness.core.testing.FakeSessionRepository
+import dagger.hilt.android.testing.HiltAndroidRule
+import dagger.hilt.android.testing.HiltAndroidTest
+import dagger.hilt.android.testing.HiltTestApplication
+import kotlinx.coroutines.CompletableDeferred
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Ignore
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import javax.inject.Inject
+
+/**
+ * Test-first (Android P0): account deletion and data export, reached from the existing Profile
+ * screen. Tags come from ProposedAccountContract.kt. Un-ignore each test as its screen lands.
+ */
+@HiltAndroidTest
+@RunWith(RobolectricTestRunner::class)
+@Config(application = HiltTestApplication::class)
+class DeleteExportUiTest {
+    @get:Rule(order = 0) val hilt = HiltAndroidRule(this)
+    @get:Rule(order = 1) val compose = createEmptyComposeRule()
+
+    @Inject lateinit var session: FakeSessionRepository
+    @Inject lateinit var profiles: FakeProfileRepository
+    @Inject lateinit var flags: FakeProfileFlagsCache
+    @Inject lateinit var account: FakeAccountRepository
+    private var scenario: ActivityScenario<MainActivity>? = null
+
+    @Before fun setUp() {
+        hilt.inject()
+        session.signedIn = true; flags.completed = true
+        profiles.profile = Profile(displayName = "Asha", onboardingCompleted = true)
+    }
+    @After fun tearDown() { scenario?.close() }
+
+    private fun waitTag(t: String) = compose.waitUntil(5_000) { compose.onAllNodes(hasTestTag(t)).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitText(t: String) = compose.waitUntil(5_000) { compose.onAllNodes(hasText(t, substring = true)).fetchSemanticsNodes().isNotEmpty() }
+    private fun absent(t: String) = compose.onAllNodes(hasTestTag(t)).fetchSemanticsNodes().isEmpty()
+    private fun tag(t: String) = compose.onNodeWithTag(t)
+
+    private fun openProfile() {
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        waitTag("open_profile")
+        tag("open_profile").performClick()
+        waitText("Profile")
+    }
+    private fun openDelete() {
+        openProfile()
+        tag(AccountEntryTags.OPEN_DELETE_ACCOUNT).performScrollTo().performClick()
+        waitTag(DeleteAccountTags.SCREEN)
+    }
+    private fun openExport() {
+        openProfile()
+        tag(AccountEntryTags.OPEN_EXPORT).performScrollTo().performClick()
+        waitTag(ExportTags.SCREEN)
+    }
+
+    /** Runs now: guards the proposed tag list against typos/duplicates. */
+    @Test fun proposedTagsAreUnique() {
+        val all = listOf(
+            AccountEntryTags.OPEN_DELETE_ACCOUNT, AccountEntryTags.OPEN_EXPORT,
+            DeleteAccountTags.SCREEN, DeleteAccountTags.PASSWORD, DeleteAccountTags.CONFIRM, DeleteAccountTags.CANCEL,
+            DeleteAccountTags.PROGRESS, DeleteAccountTags.ERROR,
+            ExportTags.SCREEN, ExportTags.START, ExportTags.PROGRESS, ExportTags.SUCCESS, ExportTags.ERROR, ExportTags.RETRY,
+        )
+        assertEquals(all.size, all.toSet().size)
+        assertTrue(all.none { it == "open_profile" })
+    }
+
+    // ---- account deletion ----
+
+    @Ignore("Pending Android P0: Delete account screen")
+    @Test fun delete_requiresPassword_beforeConfirmIsEnabled() {
+        openDelete()
+        tag(DeleteAccountTags.CONFIRM).assertIsNotEnabled()
+        tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
+        tag(DeleteAccountTags.CONFIRM).assertIsEnabled()
+        assertTrue(account.deleteCalls.isEmpty())
+    }
+
+    @Ignore("Pending Android P0: Delete account screen")
+    @Test fun delete_cancel_sendsNothing_andStaysSignedIn() {
+        openDelete()
+        tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
+        tag(DeleteAccountTags.CANCEL).performClick()
+        compose.waitForIdle()
+        assertTrue(absent(DeleteAccountTags.SCREEN))
+        waitText("Profile")
+        assertTrue(account.deleteCalls.isEmpty())
+        assertEquals(0, session.signOuts)
+    }
+
+    @Ignore("Pending Android P0: Delete account screen")
+    @Test fun delete_wrongPassword_showsError_staysSignedIn_andCanRetry() {
+        account.deleteResult = FakeAccountRepository.WRONG_PASSWORD
+        openDelete()
+        tag(DeleteAccountTags.PASSWORD).performTextInput("wrong-password")
+        tag(DeleteAccountTags.CONFIRM).performClick()
+        waitTag(DeleteAccountTags.ERROR)
+        waitText("password")
+        assertEquals(0, session.signOuts)
+        tag(DeleteAccountTags.SCREEN).assertExists()
+        tag(DeleteAccountTags.CONFIRM).assertIsEnabled()
+    }
+
+    @Ignore("Pending Android P0: Delete account screen")
+    @Test fun delete_serverError_showsMessage_retryReusesIdempotencyKey() {
+        account.deleteResult = FakeAccountRepository.SERVER_ERROR
+        openDelete()
+        tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
+        tag(DeleteAccountTags.CONFIRM).performClick()
+        waitTag(DeleteAccountTags.ERROR)
+        assertEquals(0, session.signOuts)
+        account.deleteResult = com.vipin.fitness.core.network.ApiResult.Success(Unit)
+        tag(DeleteAccountTags.CONFIRM).performClick()
+        waitText("Sign in")
+        assertEquals(2, account.deleteCalls.size)
+        assertEquals("same action, outcome unknown → same key", account.deleteCalls[0].second, account.deleteCalls[1].second)
+    }
+
+    @Ignore("Pending Android P0: Delete account screen")
+    @Test fun delete_inFlight_showsProgress_andBlocksDoubleSubmit() {
+        account.gate = CompletableDeferred()
+        openDelete()
+        tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
+        tag(DeleteAccountTags.CONFIRM).performClick()
+        waitTag(DeleteAccountTags.PROGRESS)
+        tag(DeleteAccountTags.CONFIRM).assertIsNotEnabled()
+        account.gate!!.complete(Unit)
+        waitText("New here? Create an account")
+        assertEquals(1, account.deleteCalls.size)
+    }
+
+    @Ignore("Pending Android P0: Delete account screen")
+    @Test fun delete_success_signsOut_toSignIn_andBackCannotReturn() {
+        openDelete()
+        tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
+        tag(DeleteAccountTags.CONFIRM).performClick()
+        waitText("New here? Create an account")
+        assertEquals("correct horse", account.deleteCalls.single().first)
+        assertEquals(1, session.signOuts)
+        assertEquals(false, session.isSignedIn())
+        scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        assertTrue(absent(DeleteAccountTags.SCREEN))
+        assertTrue(absent("open_profile"))
+        assertTrue(compose.onAllNodes(hasText("Sign out")).fetchSemanticsNodes().isEmpty())
+    }
+
+    // ---- data export ----
+
+    @Ignore("Pending Android P0: Data export screen")
+    @Test fun export_showsProgress_thenSuccess_andSharesJsonFile() {
+        account.gate = CompletableDeferred()
+        openExport()
+        tag(ExportTags.START).performClick()
+        waitTag(ExportTags.PROGRESS)
+        tag(ExportTags.START).assertIsNotEnabled()
+        account.gate!!.complete(Unit)
+        waitTag(ExportTags.SUCCESS)
+        assertEquals(1, account.exports)
+        val started = shadowOf(ApplicationProvider.getApplicationContext<HiltTestApplication>()).nextStartedActivity
+        assertNotNull("expected a share chooser or save-file intent", started)
+        val inner = if (started.action == Intent.ACTION_CHOOSER) started.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!! else started
+        assertTrue(inner.action in setOf(Intent.ACTION_SEND, Intent.ACTION_CREATE_DOCUMENT))
+        assertEquals("application/json", inner.type)
+        if (inner.action == Intent.ACTION_SEND) {
+            val uri = inner.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)!!
+            assertEquals("content", uri.scheme) // FileProvider, never file://
+            assertTrue(inner.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        }
+    }
+
+    @Ignore("Pending Android P0: Data export screen")
+    @Test fun export_error_showsRetry_andRetrySucceeds() {
+        account.exportResult = FakeAccountRepository.SERVER_ERROR
+        openExport()
+        tag(ExportTags.START).performClick()
+        waitTag(ExportTags.ERROR)
+        waitTag(ExportTags.RETRY)
+        account.exportResult = com.vipin.fitness.core.network.ApiResult.Success("""{"exportedAt":"2026-10-21T11:30:00Z","user":{"id":"u1"}}""")
+        tag(ExportTags.RETRY).performClick()
+        waitTag(ExportTags.SUCCESS)
+        assertTrue(absent(ExportTags.ERROR))
+        assertEquals(2, account.exports)
+    }
+
+    @Ignore("Pending Android P0: Data export screen")
+    @Test fun export_rateLimited_showsWaitMessage() {
+        account.exportResult = FakeAccountRepository.RATE_LIMITED
+        openExport()
+        tag(ExportTags.START).performClick()
+        waitTag(ExportTags.ERROR)
+        waitText("hour") // e.g. "You can export 5 times an hour. Try again later."
+    }
+
+    @Ignore("Pending Android P0: Data export screen")
+    @Test fun export_offline_showsError_withRetry() {
+        account.exportResult = com.vipin.fitness.core.network.ApiResult.Failure(com.vipin.fitness.core.network.ApiError.Network)
+        openExport()
+        tag(ExportTags.START).performClick()
+        waitTag(ExportTags.ERROR)
+        waitTag(ExportTags.RETRY)
+        assertTrue(absent(ExportTags.SUCCESS))
+    }
+}
