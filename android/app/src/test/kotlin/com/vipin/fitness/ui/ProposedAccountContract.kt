@@ -81,5 +81,8 @@ class FakeAccountRepository : AccountRepository {
         val WRONG_PASSWORD = ApiResult.Failure(ApiError.Http(403, "INVALID_PASSWORD", "Wrong password", "req-1"))
         val SERVER_ERROR = ApiResult.Failure(ApiError.Http(500, "INTERNAL", "Internal error", "req-2"))
         val RATE_LIMITED = ApiResult.Failure(ApiError.Http(429, "RATE_LIMITED", "Too many requests", "req-3"))
+        /** Prod: same-key retry after a successful (lost) 204 → 401, tokens already revoked. */
+        val UNAUTHENTICATED = ApiResult.Failure(ApiError.Http(401, "UNAUTHENTICATED", "Unauthenticated", "req-4"))
+        val OFFLINE = ApiResult.Failure(ApiError.Network)
     }
 }
