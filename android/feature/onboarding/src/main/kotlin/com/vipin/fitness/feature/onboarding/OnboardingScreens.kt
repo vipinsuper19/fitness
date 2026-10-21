@@ -1,0 +1,104 @@
+package com.vipin.fitness.feature.onboarding
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.vipin.fitness.core.designsystem.UiText
+
+private fun OnboardingStep.title() = when (this) {
+    OnboardingStep.ABOUT -> R.string.onb_step_about
+    OnboardingStep.BODY -> R.string.onb_step_body
+    OnboardingStep.ACTIVITY -> R.string.onb_step_activity
+    OnboardingStep.GOALS -> R.string.onb_step_goals
+}
+
+@Composable
+fun OnboardingRoute(onFinished: () -> Unit, viewModel: OnboardingViewModel = hiltViewModel()) {
+    val s by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(s.finished) { if (s.finished) onFinished() }
+    when {
+        s.loading -> Loading()
+        s.loadError != null -> LoadError(s.loadError!!, viewModel::load)
+        else -> Column(
+            Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            val total = OnboardingStep.entries.size
+            LinearProgressIndicator(progress = { (s.step.ordinal + 1f) / total }, modifier = Modifier.fillMaxWidth().padding(top = 32.dp))
+            Text(stringResource(R.string.onb_step_of, s.step.ordinal + 1, total), style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(s.step.title()), style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.onb_optional_note), style = MaterialTheme.typography.bodyMedium)
+            ProfileFields(s.step.fields, s.form, s.errors, viewModel::onForm, viewModel::onUnits)
+            s.error?.let { Text(it.resolve(), color = MaterialTheme.colorScheme.error) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (s.step.ordinal > 0) TextButton(onClick = viewModel::back, enabled = !s.saving) { Text(stringResource(R.string.onb_back)) }
+                Box(Modifier.weight(1f))
+                OutlinedButton(onClick = viewModel::skip, enabled = !s.saving) { Text(stringResource(R.string.onb_skip)) }
+                Button(onClick = viewModel::next, enabled = !s.saving) {
+                    Text(stringResource(if (s.step.isLast) R.string.onb_finish else R.string.onb_next))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileEditRoute(onSignedOut: () -> Unit, viewModel: ProfileEditViewModel = hiltViewModel()) {
+    val s by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(s.signedOut) { if (s.signedOut) onSignedOut() }
+    when {
+        s.loading -> Loading()
+        s.loadError != null -> LoadError(s.loadError!!, viewModel::load)
+        else -> Column(
+            Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(stringResource(R.string.profile_title), style = MaterialTheme.typography.headlineMedium)
+            ProfileFields(ProfileField.entries.toSet(), s.form, s.errors, viewModel::onForm, viewModel::onUnits)
+            s.error?.let { Text(it.resolve(), color = MaterialTheme.colorScheme.error) }
+            if (s.saved) Text(stringResource(R.string.profile_saved), color = MaterialTheme.colorScheme.primary)
+            Button(onClick = viewModel::save, enabled = !s.saving, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.profile_save))
+            }
+            OutlinedButton(onClick = viewModel::signOut, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.profile_sign_out))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Loading() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+}
+
+@Composable
+private fun LoadError(error: UiText, onRetry: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(error.resolve())
+        Button(onClick = onRetry, modifier = Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.retry)) }
+    }
+}

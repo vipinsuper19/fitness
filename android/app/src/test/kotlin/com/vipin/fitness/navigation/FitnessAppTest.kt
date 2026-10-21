@@ -16,6 +16,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class FitnessAppTest {
     @get:Rule val compose = createComposeRule()
+    private var profileOpened = false
 
     @Test
     fun tabsAreInExpectedOrderAndStartAtHome() {
@@ -28,7 +29,7 @@ class FitnessAppTest {
 
     @Test
     fun startsOnHomeAndSwitchesTabs() {
-        compose.setContent { FitnessTheme { FitnessApp() } }
+        compose.setContent { FitnessTheme { FitnessApp(onOpenProfile = { profileOpened = true }) } }
         compose.onNodeWithText("Home is coming soon.").assertExists()
 
         compose.onNodeWithTag("tab_HOME").assertIsSelected()
@@ -40,5 +41,8 @@ class FitnessAppTest {
 
         compose.onNodeWithTag("tab_PROGRESS").performClick()
         compose.onNodeWithText("Progress is coming soon.").assertExists()
+
+        compose.onNodeWithTag("open_profile").performClick()
+        assertEquals(true, profileOpened)
     }
 }

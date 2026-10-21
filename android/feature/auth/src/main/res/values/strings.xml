@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_sign_in_title">Sign in</string>
+    <string name="auth_register_title">Create account</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_password_hint">At least 8 characters</string>
+    <string name="auth_display_name">Name (optional)</string>
+    <string name="auth_sign_in">Sign in</string>
+    <string name="auth_create_account">Create account</string>
+    <string name="auth_go_register">New here? Create an account</string>
+    <string name="auth_go_sign_in">Already have an account? Sign in</string>
+    <string name="auth_sign_in_instead">Sign in instead</string>
+    <string name="auth_error_email">Enter a valid email address</string>
+    <string name="auth_error_password_short">Password must be at least 8 characters</string>
+    <string name="auth_error_password_required">Enter your password</string>
+    <string name="auth_error_invalid_credentials">Wrong email or password</string>
+    <string name="auth_error_email_taken">An account with this email already exists.</string>
+    <string name="auth_error_rate_limited">Too many attempts. Wait a minute and try again.</string>
+    <string name="auth_error_network">Can\'t reach the server. Check your connection and try again.</string>
+    <string name="auth_error_in_progress">We\'re still creating your account. Wait a moment, then try again.</string>
+    <string name="auth_error_try_again">That didn\'t go through. Please try again.</string>
+    <string name="auth_error_generic">Something went wrong. Please try again.</string>
+    <string name="auth_session_expired">Your session ended. Please sign in again.</string>
+</resources>

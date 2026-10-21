@@ -8,8 +8,10 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import com.vipin.fitness.core.datastore.EncryptedTokenStore
 import com.vipin.fitness.core.datastore.AesGcmTokenCipher
 import com.vipin.fitness.core.datastore.KeystoreKeyProvider
+import com.vipin.fitness.core.datastore.ProfileFlagsCache
 import com.vipin.fitness.core.datastore.SecretKeyProvider
 import com.vipin.fitness.core.datastore.TokenCipher
+import com.vipin.fitness.core.datastore.UserPreferencesRepository
 import com.vipin.fitness.core.network.auth.TokenStore
 import dagger.Binds
 import dagger.Module
@@ -23,6 +25,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 abstract class DataStoreModule {
     @Binds abstract fun tokenStore(impl: EncryptedTokenStore): TokenStore
+    @Binds abstract fun profileFlags(impl: UserPreferencesRepository): ProfileFlagsCache
     @Binds abstract fun keyProvider(impl: KeystoreKeyProvider): SecretKeyProvider
 
     companion object {

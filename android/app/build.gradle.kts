@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -51,11 +52,14 @@ android {
 
 dependencies {
     implementation(projects.core.common)
+    implementation(projects.core.data)
     implementation(projects.core.database)
     implementation(projects.core.datastore)
     implementation(projects.core.designsystem)
     implementation(projects.core.network)
+    implementation(projects.feature.auth)
     implementation(projects.feature.home)
+    implementation(projects.feature.onboarding)
     implementation(projects.feature.workout)
     implementation(projects.feature.nutrition)
     implementation(projects.feature.progress)
@@ -68,6 +72,12 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
@@ -75,6 +85,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
+    testImplementation(projects.core.testing)
     testImplementation(libs.androidx.junit)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
