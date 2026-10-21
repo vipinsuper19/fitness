@@ -69,7 +69,11 @@ fun OnboardingRoute(onFinished: () -> Unit, viewModel: OnboardingViewModel = hil
 }
 
 @Composable
-fun ProfileEditRoute(onSignedOut: () -> Unit, viewModel: ProfileEditViewModel = hiltViewModel()) {
+fun ProfileEditRoute(
+    onSignedOut: () -> Unit,
+    viewModel: ProfileEditViewModel = hiltViewModel(),
+    onDeleteAccount: (() -> Unit)? = null,
+) {
     val s by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.signedOut) { if (s.signedOut) onSignedOut() }
     when {
@@ -88,6 +92,11 @@ fun ProfileEditRoute(onSignedOut: () -> Unit, viewModel: ProfileEditViewModel = 
             }
             OutlinedButton(onClick = viewModel::signOut, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.profile_sign_out))
+            }
+            if (onDeleteAccount != null) {
+                TextButton(onClick = onDeleteAccount, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth().testTag("open_delete_account")) {
+                    Text(stringResource(R.string.profile_delete_account), color = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }

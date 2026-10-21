@@ -22,4 +22,12 @@
     <string name="auth_error_try_again">That didn\'t go through. Please try again.</string>
     <string name="auth_error_generic">Something went wrong. Please try again.</string>
     <string name="auth_session_expired">Your session ended. Please sign in again.</string>
+    <string name="delete_account_title">Delete account</string>
+    <string name="delete_account_warning">This permanently deletes your account and all your data: profile, plans, workouts, food and water logs, measurements, XP, badges and challenges. It can\'t be undone.</string>
+    <string name="delete_account_unsynced">Workouts or logs on this phone that haven\'t synced yet are deleted too. Export your data first if you want a copy.</string>
+    <string name="delete_account_password">Enter your password to confirm</string>
+    <string name="delete_account_confirm">Delete my account</string>
+    <string name="delete_account_cancel">Cancel</string>
+    <string name="delete_account_wrong_password">That password isn\'t right. Your account was not deleted.</string>
+    <string name="delete_account_offline">Couldn\'t reach the server, so your account was not deleted yet. Check your connection and try again.</string>
 </resources>

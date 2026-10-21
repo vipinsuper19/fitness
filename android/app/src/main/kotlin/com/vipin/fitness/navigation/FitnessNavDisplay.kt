@@ -16,6 +16,7 @@ import com.vipin.fitness.feature.auth.SignInRoute
 import com.vipin.fitness.feature.onboarding.OnboardingRoute
 import com.vipin.fitness.feature.onboarding.ProfileEditRoute
 import com.vipin.fitness.feature.achievements.AchievementsRoute
+import com.vipin.fitness.feature.auth.DeleteAccountRoute
 import com.vipin.fitness.feature.workout.ActiveSessionRoute
 import com.vipin.fitness.feature.workout.ExerciseDetailRoute
 import com.vipin.fitness.feature.workout.ExerciseLibraryRoute
@@ -84,7 +85,10 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                     )
                 }
                 Route.Profile -> NavEntry(key) {
-                    ProfileEditRoute(onSignedOut = { AppNavigation.onSignedOut(stack) })
+                    ProfileEditRoute(
+                        onSignedOut = { AppNavigation.onSignedOut(stack) },
+                        onDeleteAccount = { backStack.add(Route.DeleteAccount) },
+                    )
                 }
                 Route.WorkoutNewPlan -> NavEntry(key) {
                     NewPlanRoute(
@@ -119,6 +123,10 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                 }
                 is Route.SessionSummary -> NavEntry(key) {
                     SessionSummaryRoute(route.localId, onDone = { AppNavigation.backToMain(stack) })
+                }
+                Route.DeleteAccount -> NavEntry(key) {
+                    // Deleted: same landing as sign-out (fresh SignIn, nothing to go back to).
+                    DeleteAccountRoute(onDeleted = { AppNavigation.onSignedOut(stack) }, onCancel = { AppNavigation.pop(stack) })
                 }
                 Route.Achievements -> NavEntry(key) {
                     AchievementsRoute()
