@@ -51,4 +51,5 @@ internal fun ChallengeDto.toDomain() = Challenge(
     completedAt = completedAt?.let(Instant::parse),
     leftAt = leftAt?.let(Instant::parse),
     xpAwarded = xpAwarded,
+    joinDate = joinDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
 )

@@ -88,6 +88,8 @@ data class Challenge(
     val completedAt: Instant?,
     val leftAt: Instant?,
     val xpAwarded: Int,
+    /** Local date of joining, in [timezone]. Streak challenges count only days from it. */
+    val joinDate: LocalDate? = null,
 ) {
     val fraction: Float get() = if (target <= 0) 0f else (progress.toFloat() / target).coerceIn(0f, 1f)
 

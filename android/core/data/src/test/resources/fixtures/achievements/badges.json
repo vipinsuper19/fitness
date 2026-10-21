@@ -1,0 +1,197 @@
+{
+  "items": [
+    {
+      "code": "FIRST_WORKOUT",
+      "title": "First workout",
+      "description": "Complete your first workout.",
+      "family": "workout",
+      "bonusXp": 10,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 1
+      }
+    },
+    {
+      "code": "WORKOUTS_10",
+      "title": "10 workouts",
+      "description": "Complete 10 workouts.",
+      "family": "workout",
+      "bonusXp": 25,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 10
+      }
+    },
+    {
+      "code": "WORKOUTS_50",
+      "title": "50 workouts",
+      "description": "Complete 50 workouts.",
+      "family": "workout",
+      "bonusXp": 50,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 50
+      }
+    },
+    {
+      "code": "WORKOUTS_100",
+      "title": "100 workouts",
+      "description": "Complete 100 workouts.",
+      "family": "workout",
+      "bonusXp": 100,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 100
+      }
+    },
+    {
+      "code": "STREAK_3",
+      "title": "3-day streak",
+      "description": "Complete a workout on 3 consecutive days.",
+      "family": "streak",
+      "bonusXp": 15,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 3
+      }
+    },
+    {
+      "code": "STREAK_7",
+      "title": "7-day streak",
+      "description": "Complete a workout on 7 consecutive days.",
+      "family": "streak",
+      "bonusXp": 30,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 7
+      }
+    },
+    {
+      "code": "STREAK_30",
+      "title": "30-day streak",
+      "description": "Complete a workout on 30 consecutive days.",
+      "family": "streak",
+      "bonusXp": 100,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 30
+      }
+    },
+    {
+      "code": "SETS_500",
+      "title": "500 sets",
+      "description": "Complete 500 sets in finished workouts.",
+      "family": "workout",
+      "bonusXp": 50,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 500
+      }
+    },
+    {
+      "code": "HOUR_TOTAL_10",
+      "title": "10 hours",
+      "description": "Train for 10 hours of active time in total.",
+      "family": "workout",
+      "bonusXp": 30,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 600
+      }
+    },
+    {
+      "code": "LONG_SESSION_60",
+      "title": "Hour of power",
+      "description": "Finish one workout with at least 60 minutes of active time.",
+      "family": "workout",
+      "bonusXp": 20,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 60
+      }
+    },
+    {
+      "code": "FIRST_FOOD_LOG",
+      "title": "First meal logged",
+      "description": "Log your first food.",
+      "family": "nutrition",
+      "bonusXp": 5,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 1
+      }
+    },
+    {
+      "code": "FOOD_LOG_7_DAYS",
+      "title": "Food diary week",
+      "description": "Log food on 7 consecutive days.",
+      "family": "nutrition",
+      "bonusXp": 20,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 7
+      }
+    },
+    {
+      "code": "HYDRATED_7",
+      "title": "Well hydrated",
+      "description": "Reach your daily water goal on 7 days.",
+      "family": "hydration",
+      "bonusXp": 20,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 7
+      }
+    },
+    {
+      "code": "FIRST_MEASUREMENT",
+      "title": "First check-in",
+      "description": "Log your first body measurement.",
+      "family": "measurement",
+      "bonusXp": 5,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 1
+      }
+    },
+    {
+      "code": "MEASURE_4_WEEKS",
+      "title": "Steady check-ins",
+      "description": "Log body measurements in 4 different weeks.",
+      "family": "measurement",
+      "bonusXp": 20,
+      "earnedAt": null,
+      "progress": {
+        "current": 0,
+        "target": 4
+      }
+    },
+    {
+      "code": "LEVEL_5",
+      "title": "Level 5",
+      "description": "Reach level 5 from workout XP.",
+      "family": "level",
+      "bonusXp": 0,
+      "earnedAt": null,
+      "progress": {
+        "current": 1,
+        "target": 5
+      }
+    }
+  ],
+  "earnedCount": 0
+}

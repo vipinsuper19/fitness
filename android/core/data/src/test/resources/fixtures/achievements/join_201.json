@@ -1,0 +1,19 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "templateCode": "WEEKLY_WORKOUTS",
+  "type": "weekly",
+  "title": "Workouts this week",
+  "target": 3,
+  "progress": 0,
+  "unit": "workouts",
+  "windowStart": "2026-10-19",
+  "windowEnd": "2026-10-25",
+  "joinDate": "2026-10-21",
+  "timezone": "Asia/Kolkata",
+  "waterGoalMl": null,
+  "status": "active",
+  "joinedAt": "2026-10-21T11:19:51.227Z",
+  "completedAt": null,
+  "leftAt": null,
+  "xpAwarded": 0
+}
