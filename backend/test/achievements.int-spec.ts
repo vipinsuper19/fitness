@@ -124,7 +124,7 @@ describeDb('badges & challenges engine (Postgres)', () => {
       // Last week's award does not count (Sun 23:00 IST).
       await challenge(u, { templateCode: 'WEEKLY_FOOD_LOG_DAYS', windowStart: d('2026-10-12'), windowEnd: d('2026-10-18'), status: 'completed', target: 3, progress: 3, xpAwarded: 150, completedAt: at('2026-10-18', 23) });
       const a = await challenge(u, {});
-      const b = await challenge(u, { templateCode: 'WEEKLY_ACTIVE_MINUTES', target: 60 });
+      const b = await challenge(u, { templateCode: 'WEEKLY_ACTIVE_MINUTES', target: 60, joinedAt: at('2026-10-19', 9) }); // joined later: evaluated (and capped) second
       await workout(u, at('2026-10-19'));
       await workout(u, at('2026-10-20'));
       const r = await engine.evaluate(u, NOW);

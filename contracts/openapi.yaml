@@ -55,7 +55,7 @@ info:
     name: Proprietary
     identifier: LicenseRef-Proprietary
 servers:
-  - url: https://fitness-api.onrender.com/api/v1
+  - url: https://fitness-api-6pcc.onrender.com/api/v1
     description: Render (production)
   - url: http://localhost:3000/api/v1
     description: Local
