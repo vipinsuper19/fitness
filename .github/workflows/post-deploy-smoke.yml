@@ -1,7 +1,8 @@
 name: post-deploy-smoke
 
 # Smoke test against the deployed API: health + DB, then a throwaway account
-# is registered, deleted, and login is confirmed to fail.
+# is registered, generates a workout plan (must contain >= 1 workout, i.e. the
+# exercise catalog is seeded), is deleted, and login is confirmed to fail.
 # On push to main (backend or render.yaml changes) it first waits for Render's
 # auto-deploy to restart the service; see scripts/wait-for-deploy.sh.
 on:
