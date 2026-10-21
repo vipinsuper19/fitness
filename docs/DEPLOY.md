@@ -22,9 +22,9 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
 | `JWT_REFRESH_SECRET` | yes | a different `openssl rand -base64 48` |
 | `CORS_ORIGINS` | optional | leave empty (the Android app doesn't need CORS) |
 
-   Preset in `render.yaml`: `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=2`, `SWAGGER_ENABLED=false`.
+   Preset in `render.yaml`: `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=3`, `SWAGGER_ENABLED=false`.
 
-   `TRUST_PROXY_HOPS=2` is set because two proxies sit in front of the app on Render: Cloudflare's edge, then Render's own load balancer. Express has to skip both to get the real client IP, which per-IP rate limiting needs. After the first deploy, check `req.ip`. Eleven quick `POST /auth/login` calls should get a `429` on the 11th, while other networks are unaffected.
+   `TRUST_PROXY_HOPS=3`: Express counts the 127.0.0.1 socket and Render's internal 10.x proxy as the first two hops, and Cloudflare's edge as the third (confirmed in production logs on Oct 21). Express has to skip all three to get the real client IP, which per-IP rate limiting needs. **Warning:** Do not set it higher: extra hops make forged left-hand X-Forwarded-For entries trusted, so clients could spoof their IP and dodge per-IP rate limits. After the first deploy, check `req.ip`. Eleven quick `POST /auth/login` calls should get a `429` on the 11th, while other networks are unaffected.
 
    Optional overrides; defaults come from `backend/src/config/env.ts`:
    - `JWT_ACCESS_TTL_SECONDS` (900), `JWT_REFRESH_TTL_DAYS` (30)
