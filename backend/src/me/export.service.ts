@@ -50,7 +50,7 @@ export class ExportService {
         where: { plan: { userId } },
         orderBy: [{ createdAt: 'desc' }, { planId: 'desc' }, { version: 'desc' }],
         take: env.EXPORT_MAX_PLAN_VERSIONS + 1,
-        include: { workouts: { orderBy: { order: 'asc' } }, plan: { select: { id: true, source: true, createdAt: true } } },
+        include: { workouts: { orderBy: { order: 'asc' } }, plan: { select: { id: true, source: true, createdAt: true, activatedAt: true } } },
       }),
       env.EXPORT_MAX_PLAN_VERSIONS,
     );
@@ -116,7 +116,8 @@ export class ExportService {
       // One entry per plan version (id + version), newest first.
       workoutPlans,
       workoutSessions,
-      customFoods: customFoods.map(toFoodView),
+      // Deleted custom foods are included (with deletedAt) so every foodLogs[].foodId resolves.
+      customFoods: customFoods.map((f) => ({ ...toFoodView(f), deletedAt: f.deletedAt?.toISOString() ?? null })),
       foodLogs: foodLogs.map(toLogView),
       waterLogs: waterLogs.map(toWaterView),
       bodyMeasurements: measurements.map(toMeasurementView),

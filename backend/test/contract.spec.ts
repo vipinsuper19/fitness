@@ -48,9 +48,9 @@ describe('contracts/openapi.yaml', () => {
       'post /workout-sessions', 'post /workout-sessions/{sessionId}/sets',
       'patch /workout-sessions/{sessionId}', 'post /workout-sessions/{sessionId}/complete',
       'get /workout-sessions/history',
-      'get /foods/search', 'post /foods', 'get /food-logs', 'post /food-logs',
+      'get /foods/search', 'post /foods', 'get /foods/{foodId}', 'patch /foods/{foodId}', 'delete /foods/{foodId}', 'get /food-logs', 'post /food-logs',
       'patch /food-logs/{foodLogId}', 'delete /food-logs/{foodLogId}',
-      'get /water-logs', 'post /water-logs', 'get /nutrition/daily',
+      'get /water-logs', 'post /water-logs', 'patch /water-logs/{waterLogId}', 'delete /water-logs/{waterLogId}', 'get /nutrition/daily',
       'get /body-measurements', 'post /body-measurements', 'get /progress/summary',
       'get /xp/ledger', 'get /xp/balance',
     ];

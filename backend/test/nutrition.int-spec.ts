@@ -159,6 +159,126 @@ describeDb('T14: nutrition (HTTP + Postgres)', () => {
     });
   });
 
+  describe('custom food edits and serving snapshots', () => {
+    it('food log entries carry the serving they were computed from', async () => {
+      const t = await signUp();
+      const log = (await api(t).post('/api/v1/food-logs').send({ foodId: ROTI, date: DAY, mealType: 'lunch', servings: 2 }).expect(201)).body;
+      expect(log).toMatchObject({ servingSize: 1, servingUnit: 'piece', gramsPerServing: 40 });
+      const listed = (await api(t).get(`/api/v1/food-logs?date=${DAY}`).expect(200)).body.items[0];
+      expect(listed).toMatchObject({ servingSize: 1, servingUnit: 'piece', gramsPerServing: 40 });
+      const noGrams = (await api(t).post('/api/v1/foods').send({ ...custom, gramsPerServing: null }).expect(201)).body;
+      const l2 = (await api(t).post('/api/v1/food-logs').send({ foodId: noGrams.id, date: DAY, mealType: 'snack', servings: 1 }).expect(201)).body;
+      expect(l2).toMatchObject({ servingSize: 1, servingUnit: 'plate', gramsPerServing: null });
+    });
+
+    it('GET returns catalog and own foods; another user, unknown or deleted is 404', async () => {
+      const a = await signUp();
+      const b = await signUp();
+      expect((await api(a).get(`/api/v1/foods/${ROTI}`).expect(200)).body).toMatchObject({ id: ROTI, source: 'catalog' });
+      const food = (await api(a).post('/api/v1/foods').send(custom).expect(201)).body;
+      expect((await api(a).get(`/api/v1/foods/${food.id}`).expect(200)).body).toMatchObject({ id: food.id, source: 'custom' });
+      await api(b).get(`/api/v1/foods/${food.id}`).expect(404);
+      await api(a).get(`/api/v1/foods/${randomUUID()}`).expect(404);
+      await api(a).get('/api/v1/foods/not-a-uuid').expect(404);
+    });
+
+    it('PATCH is partial, owner-only, and leaves existing entries snapshotted', async () => {
+      const a = await signUp();
+      const b = await signUp();
+      const food = (await api(a).post('/api/v1/foods').send(custom).expect(201)).body;
+      const log = (await api(a).post('/api/v1/food-logs').send({ foodId: food.id, date: DAY, mealType: 'breakfast', servings: 2 }).expect(201)).body;
+      expect(log.nutrients.energyKcal).toBe(500);
+
+      const key = randomUUID();
+      const edited = (await api(a).patch(`/api/v1/foods/${food.id}`, key).send({ servingSize: 0.5, gramsPerServing: null, nutrients: { energyKcal: 130, proteinG: 2.5, carbsG: 23, fatG: 3 } }).expect(200)).body;
+      expect(edited).toMatchObject({ name: 'Ghar ka poha', servingSize: 0.5, servingUnit: 'plate', gramsPerServing: null, isVegetarian: true, nutrients: { energyKcal: 130 } });
+      expect((await api(a).patch(`/api/v1/foods/${food.id}`, key).send({ servingSize: 0.5, gramsPerServing: null, nutrients: { energyKcal: 130, proteinG: 2.5, carbsG: 23, fatG: 3 } }).expect(200)).headers['idempotent-replayed']).toBe('true');
+      expect((await api(a).patch(`/api/v1/foods/${food.id}`).send({ name: 'Kanda poha', brand: null }).expect(200)).body).toMatchObject({ name: 'Kanda poha', servingSize: 0.5, brand: null });
+
+      const kept = (await api(a).get(`/api/v1/food-logs?date=${DAY}`).expect(200)).body.items[0];
+      expect(kept).toMatchObject({ foodName: 'Kanda poha', servingSize: 1, gramsPerServing: 150, servings: 2, nutrients: { energyKcal: 500 } });
+      // Recomputing the entry follows the food as it is now, snapshot included.
+      const recomputed = (await api(a).patch(`/api/v1/food-logs/${log.id}`).send({ servings: 3 }).expect(200)).body;
+      expect(recomputed).toMatchObject({ servingSize: 0.5, gramsPerServing: null, nutrients: { energyKcal: 390 } });
+
+      await api(a).patch(`/api/v1/foods/${food.id}`).send({}).expect(400);
+      await api(a).patch(`/api/v1/foods/${food.id}`).send({ name: null }).expect(400);
+      await api(a).patch(`/api/v1/foods/${food.id}`).send({ servingSize: 1.005 }).expect(400);
+      await api(a).patch(`/api/v1/foods/${food.id}`).send({ servingUnit: 'bowl' }).expect(400);
+      await api(b).patch(`/api/v1/foods/${food.id}`).send({ name: 'mine now' }).expect(404);
+      const catalog = await api(a).patch(`/api/v1/foods/${ROTI}`).send({ name: 'Roti' }).expect(404);
+      expect(catalog.body.code).toBe('NOT_FOUND');
+      await api(a).delete(`/api/v1/foods/${ROTI}`).expect(404);
+      await api(b).delete(`/api/v1/foods/${food.id}`).expect(404);
+      expect((await api(a).get(`/api/v1/foods/${ROTI}`).expect(200)).body.name).toBe('Roti / chapati (whole wheat)');
+    });
+
+    it('DELETE is a soft delete: hidden everywhere new, existing entries intact', async () => {
+      const t = await signUp();
+      const food = (await api(t).post('/api/v1/foods').send({ ...custom, name: 'Sabudana khichdi' }).expect(201)).body;
+      const log = (await api(t).post('/api/v1/food-logs').send({ foodId: food.id, date: DAY, mealType: 'lunch', servings: 1 }).expect(201)).body;
+      const key = randomUUID();
+      await api(t).delete(`/api/v1/foods/${food.id}`, key).expect(204);
+      expect((await api(t).delete(`/api/v1/foods/${food.id}`, key).expect(204)).headers['idempotent-replayed']).toBe('true');
+      await api(t).delete(`/api/v1/foods/${food.id}`).expect(404);
+
+      await api(t).get(`/api/v1/foods/${food.id}`).expect(404);
+      await api(t).patch(`/api/v1/foods/${food.id}`).send({ name: 'x' }).expect(404);
+      expect((await api(t).get('/api/v1/foods/search?query=sabudana').expect(200)).body.items.map((f: { id: string }) => f.id)).not.toContain(food.id);
+      await api(t).post('/api/v1/food-logs').send({ foodId: food.id, date: DAY, mealType: 'dinner', servings: 1 }).expect(404);
+
+      const entries = (await api(t).get(`/api/v1/food-logs?date=${DAY}`).expect(200)).body.items;
+      expect(entries).toEqual([expect.objectContaining({ id: log.id, foodId: food.id, foodName: 'Sabudana khichdi', servingUnit: 'plate', nutrients: expect.objectContaining({ energyKcal: 250 }) })]);
+      expect((await api(t).patch(`/api/v1/food-logs/${log.id}`).send({ mealType: 'snack' }).expect(200)).body.mealType).toBe('snack');
+      expect((await api(t).get(`/api/v1/nutrition/daily?date=${DAY}`).expect(200)).body.totals.energyKcal).toBe(250);
+      expect((await prisma.foodItem.findUniqueOrThrow({ where: { id: food.id } })).deletedAt).not.toBeNull();
+      // The export keeps the deleted food (with deletedAt) so its diary entries resolve.
+      const exported = (await api(t).get('/api/v1/me/export').expect(200)).body;
+      const gone = exported.customFoods.find((f: { id: string }) => f.id === food.id);
+      expect(gone).toMatchObject({ name: 'Sabudana khichdi', source: 'custom' });
+      expect(Date.parse(gone.deletedAt)).not.toBeNaN();
+      expect(exported.foodLogs.map((l: { foodId: string }) => l.foodId)).toContain(food.id);
+      await api(t).delete(`/api/v1/food-logs/${log.id}`).expect(204);
+    });
+
+    it('trims brand on create and edit; a blank brand becomes null', async () => {
+      const t = await signUp();
+      const made = (await api(t).post('/api/v1/foods').send({ ...custom, brand: '  Haldiram  ' }).expect(201)).body;
+      expect(made.brand).toBe('Haldiram');
+      expect((await api(t).post('/api/v1/foods').send({ ...custom, brand: '   ' }).expect(201)).body.brand).toBeNull();
+      expect((await api(t).patch(`/api/v1/foods/${made.id}`).send({ brand: ' MTR ' }).expect(200)).body.brand).toBe('MTR');
+      expect((await api(t).patch(`/api/v1/foods/${made.id}`).send({ brand: '  ' }).expect(200)).body.brand).toBeNull();
+      expect((await api(t).get('/api/v1/me/export').expect(200)).body.customFoods.find((f: { id: string }) => f.id === made.id).deletedAt).toBeNull();
+    });
+
+    it('changing the unit away from g needs gramsPerServing; create keeps it optional', async () => {
+      const t = await signUp();
+      const grams = (await api(t).post('/api/v1/foods').send({ ...custom, servingSize: 100, servingUnit: 'g', gramsPerServing: null }).expect(201)).body;
+      const bad = await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingSize: 1, servingUnit: 'katori' }).expect(400);
+      expect(bad.body.details.fields).toHaveProperty('gramsPerServing');
+      expect((await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingSize: 1, servingUnit: 'katori', gramsPerServing: 150 }).expect(200)).body).toMatchObject({ servingUnit: 'katori', gramsPerServing: 150 });
+      // Another non-g unit is fine while grams are known; clearing grams on a non-g unit is not; back to g needs none.
+      expect((await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingUnit: 'cup' }).expect(200)).body).toMatchObject({ servingUnit: 'cup', gramsPerServing: 150 });
+      await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingUnit: 'plate', gramsPerServing: null }).expect(400);
+      expect((await api(t).patch(`/api/v1/foods/${grams.id}`).send({ servingUnit: 'g', gramsPerServing: null }).expect(200)).body.servingUnit).toBe('g');
+
+      // Create allows a non-g unit without grams (existing clients rely on it), and editing other fields of such a food still works.
+      const plate = (await api(t).post('/api/v1/foods').send({ ...custom, gramsPerServing: null }).expect(201)).body;
+      expect(plate).toMatchObject({ servingUnit: 'plate', gramsPerServing: null });
+      expect((await api(t).patch(`/api/v1/foods/${plate.id}`).send({ name: 'Veg thali' }).expect(200)).body.name).toBe('Veg thali');
+      await api(t).patch(`/api/v1/foods/${plate.id}`).send({ servingUnit: 'katori' }).expect(400);
+    });
+
+    it('servings, servingSize and gramsPerServing allow at most two decimals', async () => {
+      const t = await signUp();
+      await api(t).post('/api/v1/food-logs').send({ foodId: ROTI, date: DAY, mealType: 'lunch', servings: 1.25 }).expect(201);
+      await api(t).post('/api/v1/food-logs').send({ foodId: ROTI, date: DAY, mealType: 'lunch', servings: 1.255 }).expect(400);
+      await api(t).post('/api/v1/foods').send({ ...custom, servingSize: 1.25, gramsPerServing: 37.5 }).expect(201);
+      await api(t).post('/api/v1/foods').send({ ...custom, servingSize: 1.255 }).expect(400);
+      await api(t).post('/api/v1/foods').send({ ...custom, gramsPerServing: 37.555 }).expect(400);
+    });
+  });
+
   describe('water and daily totals', () => {
     it('logs, edits and deletes water, owner-only', async () => {
       const a = await signUp();
@@ -166,7 +286,13 @@ describeDb('T14: nutrition (HTTP + Postgres)', () => {
       const w = (await api(a).post('/api/v1/water-logs').send({ date: DAY, amountMl: 250 }).expect(201)).body;
       expect(w).toMatchObject({ date: DAY, amountMl: 250 });
       expect((await api(a).patch(`/api/v1/water-logs/${w.id}`).send({ date: DAY, amountMl: 300 }).expect(200)).body.amountMl).toBe(300);
-      await api(a).patch(`/api/v1/water-logs/${w.id}`).send({ amountMl: 300 }).expect(400);
+      // Partial PATCH (like measurements): one field changes, the other stays; empty or null is 400.
+      expect((await api(a).patch(`/api/v1/water-logs/${w.id}`).send({ amountMl: 350 }).expect(200)).body).toMatchObject({ date: DAY, amountMl: 350 });
+      expect((await api(a).patch(`/api/v1/water-logs/${w.id}`).send({ date: '2026-10-19' }).expect(200)).body).toMatchObject({ date: '2026-10-19', amountMl: 350 });
+      await api(a).patch(`/api/v1/water-logs/${w.id}`).send({}).expect(400);
+      await api(a).patch(`/api/v1/water-logs/${w.id}`).send({ amountMl: null }).expect(400);
+      await api(a).patch(`/api/v1/water-logs/${w.id}`).send({ date: null }).expect(400);
+      expect((await api(a).patch(`/api/v1/water-logs/${w.id}`).send({ date: DAY, amountMl: 300 }).expect(200)).body).toMatchObject({ date: DAY, amountMl: 300 });
       await api(a).post('/api/v1/water-logs').send({ date: DAY, amountMl: 0 }).expect(400);
       await api(a).post('/api/v1/water-logs').send({ date: DAY, amountMl: 5001 }).expect(400);
       await api(a).post('/api/v1/water-logs', null).send({ date: DAY, amountMl: 200 }).expect(400);

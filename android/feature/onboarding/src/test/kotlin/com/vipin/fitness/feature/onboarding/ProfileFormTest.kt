@@ -71,4 +71,23 @@ class ProfileFormTest {
         val f = initial.copy(displayName = "A", weight = "70")
         assertEquals(ProfileChanges(displayName = Field.Set("A")), f.changes(setOf(ProfileField.NAME), initial, year))
     }
+
+    // #27: convert from the unrounded value and round once.
+    @Test fun lbToKgRoundsOnce() {
+        val f = ProfileForm(units = UnitSystem.IMPERIAL, weight = "154").withUnits(UnitSystem.METRIC)
+        assertEquals("69.9", f.weight)
+    }
+
+    @Test fun ftInToCmAndBack() {
+        val cm = ProfileForm(units = UnitSystem.IMPERIAL, heightFt = "5", heightIn = "7.5").withUnits(UnitSystem.METRIC)
+        assertEquals("171.5", cm.heightCm)
+        val back = cm.withUnits(UnitSystem.IMPERIAL)
+        assertEquals("5" to "8", back.heightFt to back.heightIn)
+    }
+
+    @Test fun cmToFtInAndBack() {
+        val imp = ProfileForm(units = UnitSystem.METRIC, heightCm = "171.45").withUnits(UnitSystem.IMPERIAL)
+        assertEquals("5" to "8", imp.heightFt to imp.heightIn)
+        assertEquals("172.7", imp.withUnits(UnitSystem.METRIC).heightCm)
+    }
 }

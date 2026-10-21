@@ -226,17 +226,18 @@ describeDb('T10: profile, goals, exercises, workout plans (HTTP + Postgres)', ()
       expect((await as(alice).get('/api/v1/workout-plans/active')).status).toBe(204);
 
       const plan = (await as(alice).post('/api/v1/workout-plans').send(draft).expect(201)).body;
-      expect(plan).toMatchObject({ version: 1, name: draft.name, weeks: 4, source: 'rule_based', isActive: false });
+      expect(plan).toMatchObject({ version: 1, name: draft.name, weeks: 4, source: 'rule_based', isActive: false, activatedAt: null });
       expect(plan.workouts.map((w: { dayOfWeek: number }) => w.dayOfWeek)).toEqual([1, 3, 5]);
       expect(plan.workouts[0].exercises.map((e: { exerciseId: string }) => e.exerciseId)).toEqual(draft.workouts[0].exercises.map((e: { exerciseId: string }) => e.exerciseId));
 
       const active = (await as(alice).post(`/api/v1/workout-plans/${plan.id}/activate`).expect(200)).body;
       expect(active.isActive).toBe(true);
+      expect(Date.parse(active.activatedAt)).toBeGreaterThanOrEqual(Date.parse(plan.createdAt));
       expect((await as(alice).get('/api/v1/workout-plans/active').expect(200)).body.id).toBe(plan.id);
 
       const edited = { ...draft, generator: 'custom', name: 'My 3-day plan', workouts: draft.workouts.slice(0, 2), baseVersion: 1 };
       const v2 = (await as(alice).patch(`/api/v1/workout-plans/${plan.id}`).send(edited).expect(200)).body;
-      expect(v2).toMatchObject({ id: plan.id, version: 2, name: 'My 3-day plan', source: 'custom', isActive: true });
+      expect(v2).toMatchObject({ id: plan.id, version: 2, name: 'My 3-day plan', source: 'custom', isActive: true, activatedAt: active.activatedAt });
       expect(v2.workouts).toHaveLength(2);
 
       const v1 = (await as(alice).get(`/api/v1/workout-plans/${plan.id}?version=1`).expect(200)).body;
@@ -264,12 +265,19 @@ describeDb('T10: profile, goals, exercises, workout plans (HTTP + Postgres)', ()
       const draft = (await as(bob).post('/api/v1/workout-plans/generate').send({ ...genReq, daysPerWeek: 4 }).expect(200)).body;
       const p1 = (await as(bob).post('/api/v1/workout-plans').send(draft).expect(201)).body;
       const p2 = (await as(bob).post('/api/v1/workout-plans').send({ ...draft, generator: 'custom', name: 'Second' }).expect(201)).body;
-      await as(bob).post(`/api/v1/workout-plans/${p1.id}/activate`).expect(200);
-      await as(bob).post(`/api/v1/workout-plans/${p2.id}/activate`).expect(200);
-      expect((await as(bob).get(`/api/v1/workout-plans/${p1.id}`).expect(200)).body.isActive).toBe(false);
+      const a1 = (await as(bob).post(`/api/v1/workout-plans/${p1.id}/activate`).expect(200)).body.activatedAt as string;
+      const a2 = (await as(bob).post(`/api/v1/workout-plans/${p2.id}/activate`).expect(200)).body.activatedAt as string;
+      expect(Date.parse(a2)).toBeGreaterThanOrEqual(Date.parse(a1));
+      const old = (await as(bob).get(`/api/v1/workout-plans/${p1.id}`).expect(200)).body;
+      // The previous plan is no longer active but keeps when it was last activated.
+      expect(old).toMatchObject({ isActive: false, activatedAt: a1 });
       expect((await as(bob).get('/api/v1/workout-plans/active').expect(200)).body.id).toBe(p2.id);
-      // Activating again is harmless.
-      await as(bob).post(`/api/v1/workout-plans/${p2.id}/activate`).expect(200);
+      // Activating again is harmless and keeps the original timestamp.
+      expect((await as(bob).post(`/api/v1/workout-plans/${p2.id}/activate`).expect(200)).body.activatedAt).toBe(a2);
+      // Re-activating an older plan stamps it again.
+      await new Promise((r) => setTimeout(r, 5));
+      const again = (await as(bob).post(`/api/v1/workout-plans/${p1.id}/activate`).expect(200)).body.activatedAt as string;
+      expect(Date.parse(again)).toBeGreaterThan(Date.parse(a1));
     });
 
     it('rejects unknown exercises, bad rep ranges, duplicate order and unknown fields', async () => {
