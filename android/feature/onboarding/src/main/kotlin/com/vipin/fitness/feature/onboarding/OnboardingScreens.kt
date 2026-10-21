@@ -18,6 +18,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -87,6 +90,24 @@ fun ProfileEditRoute(onSignedOut: () -> Unit, viewModel: ProfileEditViewModel = 
                 Text(stringResource(R.string.profile_sign_out))
             }
         }
+    }
+    if (s.unsyncedOnSignOut > 0) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelSignOut,
+            title = { Text(stringResource(R.string.sign_out_unsynced_title)) },
+            text = { Text(pluralStringResource(R.plurals.sign_out_unsynced, s.unsyncedOnSignOut, s.unsyncedOnSignOut)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmSignOut, modifier = Modifier.testTag("sign_out_anyway")) {
+                    Text(stringResource(R.string.sign_out_anyway), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = viewModel::cancelSignOut) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = viewModel::signOut, modifier = Modifier.testTag("sign_out_sync")) { Text(stringResource(R.string.sync_now)) }
+                }
+            },
+        )
     }
 }
 

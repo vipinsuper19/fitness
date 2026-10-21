@@ -6,6 +6,7 @@ import com.vipin.fitness.core.testing.testExercise
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import java.time.DayOfWeek.FRIDAY
 import java.time.DayOfWeek.MONDAY
@@ -67,7 +68,7 @@ class PlanBuilderStoreTest {
         assertEquals(60, e.durationSeconds)
     }
 
-    @Test fun clearUserStateDropsDraftPreviewAndProgress() {
+    @Test fun clearUserStateDropsDraftPreviewAndProgress() = runTest {
         store.setName("Mine")
         store.addExercise(MONDAY, testExercise("a"), "Monday")
         store.setPreview(store.custom.value.toDraft())

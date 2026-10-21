@@ -6,6 +6,9 @@ import com.vipin.fitness.core.data.HomeRepository
 import com.vipin.fitness.core.data.ProgressRepository
 import com.vipin.fitness.core.data.UnitPreference
 import com.vipin.fitness.core.data.UserScopedState
+import com.vipin.fitness.core.data.session.WorkoutSessionRepository
+import com.vipin.fitness.core.data.sync.OfflineSync
+import com.vipin.fitness.core.data.sync.SyncScheduler
 import com.vipin.fitness.core.data.workout.WorkoutRepository
 import com.vipin.fitness.core.data.di.DataModule
 import com.vipin.fitness.core.data.di.ProgressDataModule
@@ -19,7 +22,10 @@ import com.vipin.fitness.core.testing.FakeProgressRepository
 import com.vipin.fitness.core.testing.FakeUnitPreference
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
+import com.vipin.fitness.core.testing.FakeOfflineSync
+import com.vipin.fitness.core.testing.FakeSyncScheduler
 import com.vipin.fitness.core.testing.FakeWorkoutRepository
+import com.vipin.fitness.core.testing.FakeWorkoutSessionRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -35,12 +41,18 @@ abstract class FakeDataModule {
     @Binds abstract fun session(f: FakeSessionRepository): SessionRepository
     @Binds abstract fun profile(f: FakeProfileRepository): ProfileRepository
     @Binds abstract fun workout(f: FakeWorkoutRepository): WorkoutRepository
+    @Binds abstract fun workoutSessions(f: FakeWorkoutSessionRepository): WorkoutSessionRepository
+    @Binds abstract fun sync(f: FakeSyncScheduler): SyncScheduler
+    @Binds abstract fun offlineSync(f: FakeOfflineSync): OfflineSync
     @Multibinds abstract fun userScopedState(): Set<UserScopedState>
 
     companion object {
         @Provides @Singleton fun fakeSession() = FakeSessionRepository()
         @Provides @Singleton fun fakeProfile() = FakeProfileRepository()
         @Provides @Singleton fun fakeWorkout() = FakeWorkoutRepository()
+        @Provides @Singleton fun fakeWorkoutSessions() = FakeWorkoutSessionRepository()
+        @Provides @Singleton fun fakeSync() = FakeSyncScheduler()
+        @Provides @Singleton fun fakeOfflineSync() = FakeOfflineSync()
     }
 }
 

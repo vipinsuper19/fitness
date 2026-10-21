@@ -8,6 +8,7 @@ import com.vipin.fitness.core.data.ProfileChanges
 import com.vipin.fitness.core.data.Sex
 import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
+import com.vipin.fitness.core.testing.FakeOfflineSync
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
 import com.vipin.fitness.core.testing.MainDispatcherRule
@@ -153,7 +154,7 @@ class OnboardingViewModelTest {
         val slow = object : SessionRepository by session {
             override suspend fun signOut() { gate.await(); session.signOut() }
         }
-        val vm = ProfileEditViewModel(repo, slow, clock)
+        val vm = ProfileEditViewModel(repo, slow, clock, FakeOfflineSync())
         vm.signOut(); vm.signOut()
         assertTrue(vm.state.value.signingOut)
         gate.complete(Unit)
@@ -177,10 +178,53 @@ class OnboardingViewModelTest {
         assertNull(vm.state.value.loadError)
     }
 
+    private val offline = FakeOfflineSync()
+
+    @Test fun signOutWithUnsyncedWorkoutsAsksFirst() {
+        repo.profile = Profile(displayName = "V", onboardingCompleted = true)
+        val session = FakeSessionRepository(signedIn = true)
+        offline.unsynced = 2
+        val vm = ProfileEditViewModel(repo, session, clock, offline)
+        vm.signOut()
+        assertEquals(1, offline.syncs)
+        assertEquals(2, vm.state.value.unsyncedOnSignOut)
+        assertEquals(0, session.signOuts)
+        vm.cancelSignOut()
+        assertEquals(0, vm.state.value.unsyncedOnSignOut)
+        assertEquals(0, session.signOuts)
+    }
+
+    @Test fun signOutSyncRetryThenNothingLeftSignsOut() {
+        repo.profile = Profile(displayName = "V", onboardingCompleted = true)
+        val session = FakeSessionRepository(signedIn = true)
+        offline.unsynced = 1
+        val vm = ProfileEditViewModel(repo, session, clock, offline)
+        vm.signOut()
+        offline.unsynced = 0 // network back
+        vm.signOut() // the dialog's Sync
+        assertEquals(2, offline.syncs)
+        assertEquals(1, session.signOuts)
+        assertTrue(vm.state.value.signedOut)
+    }
+
+    @Test fun signOutAnywayDeletesOnConfirm() {
+        repo.profile = Profile(displayName = "V", onboardingCompleted = true)
+        val session = FakeSessionRepository(signedIn = true)
+        offline.unsynced = 3
+        val vm = ProfileEditViewModel(repo, session, clock, offline)
+        vm.confirmSignOut() // nothing to confirm yet
+        assertEquals(0, session.signOuts)
+        vm.signOut()
+        vm.confirmSignOut()
+        vm.confirmSignOut()
+        assertEquals(1, session.signOuts)
+        assertTrue(vm.state.value.signedOut)
+    }
+
     @Test fun profileEditSavesDiffAndSignsOut() {
         repo.profile = Profile(displayName = "V", weightKg = 70.0, onboardingCompleted = true)
         val session = FakeSessionRepository(signedIn = true)
-        val vm = ProfileEditViewModel(repo, session, clock)
+        val vm = ProfileEditViewModel(repo, session, clock, offline)
         vm.save()
         assertTrue(repo.updates.isEmpty()) // nothing changed
         vm.onForm { it.copy(displayName = "", weight = "71") }
