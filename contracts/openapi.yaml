@@ -1514,10 +1514,10 @@ components:
             1-based week of the active plan, counted in local calendar days in the profile
             timezone (default `Asia/Kolkata`, same as the progress summary): the activation
             day starts week 1 and every 7 local days later adds one. Capped at `weeks`
-            (see `planEnded`). Null unless this is the active plan.
+            (see `planEnded`). Null unless this is the active plan, and also null if its `activatedAt` is null.
         planEnded:
           type: [boolean, 'null']
-          description: True once the active plan's last week is over (then `currentWeek` stays at `weeks`). Null unless this is the active plan.
+          description: True once the active plan's last week is over (then `currentWeek` stays at `weeks`). Null unless this is the active plan, and also null if its `activatedAt` is null.
         plannedWorkoutId: { $ref: '#/components/schemas/Id' }
         planVersion: { type: integer, minimum: 1 }
         startedAt:
@@ -1761,6 +1761,12 @@ components:
         armCm: { type: [number, 'null'] }
         thighCm: { type: [number, 'null'] }
         createdAt: { type: string, format: date-time }
+    Measurement1dp:
+      type: [number, 'null']
+      description: Body measurement value. At most 2 decimal places accepted (more is 400); stored and returned rounded half-up to 1 decimal place (e.g. 18.25 → 18.3, 69.96 → 70). `null` = not recorded / clear.
+    Measurement2dp:
+      type: [number, 'null']
+      description: Body measurement value. At most 2 decimal places accepted (more is 400); stored and returned as sent. `null` = not recorded / clear.
     BodyMeasurementCreate:
       type: object
       required: [date]
@@ -1768,26 +1774,26 @@ components:
       description: '`date` plus at least one measurement'
       properties:
         date: { type: string, format: date }
-        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400, description: At most 2 decimal places; stored as sent }
-        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        armCm: { type: [number, 'null'], minimum: 10, maximum: 100, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        weightKg: { $ref: '#/components/schemas/Measurement2dp', minimum: 20, maximum: 400 }
+        bodyFatPct: { $ref: '#/components/schemas/Measurement1dp', minimum: 2, maximum: 70 }
+        waistCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 30, maximum: 250 }
+        chestCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 30, maximum: 250 }
+        hipCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 30, maximum: 250 }
+        armCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 10, maximum: 100 }
+        thighCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 20, maximum: 150 }
     BodyMeasurementUpdate:
       type: object
       minProperties: 1
       description: Partial. Missing = unchanged; `null` clears a measurement. `date` cannot be null.
       properties:
         date: { type: string, format: date }
-        weightKg: { type: [number, 'null'], minimum: 20, maximum: 400, description: At most 2 decimal places; stored as sent }
-        bodyFatPct: { type: [number, 'null'], minimum: 2, maximum: 70, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        waistCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        chestCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        hipCm: { type: [number, 'null'], minimum: 30, maximum: 250, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        armCm: { type: [number, 'null'], minimum: 10, maximum: 100, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
-        thighCm: { type: [number, 'null'], minimum: 20, maximum: 150, description: At most 2 decimal places accepted; stored rounded half-up to 1 decimal place (e.g. 18.25 → 18.3) }
+        weightKg: { $ref: '#/components/schemas/Measurement2dp', minimum: 20, maximum: 400 }
+        bodyFatPct: { $ref: '#/components/schemas/Measurement1dp', minimum: 2, maximum: 70 }
+        waistCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 30, maximum: 250 }
+        chestCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 30, maximum: 250 }
+        hipCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 30, maximum: 250 }
+        armCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 10, maximum: 100 }
+        thighCm: { $ref: '#/components/schemas/Measurement1dp', minimum: 20, maximum: 150 }
     ProgressPoint:
       type: object
       required: [date, weightKg, bodyFatPct, waistCm, waterMl, workoutsCompleted, activeMinutes, energyKcal, xpEarned]
