@@ -22,7 +22,9 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
 | `JWT_REFRESH_SECRET` | yes | a different `openssl rand -base64 48` |
 | `CORS_ORIGINS` | optional | leave empty (the Android app doesn't need CORS) |
 
-   Preset in `render.yaml`: `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=1`, `SWAGGER_ENABLED=false`.
+   Preset in `render.yaml`: `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=2`, `SWAGGER_ENABLED=false`.
+
+   `TRUST_PROXY_HOPS=2` is set because two proxies sit in front of the app on Render: Cloudflare's edge, then Render's own load balancer. Express has to skip both to get the real client IP, which per-IP rate limiting needs. After the first deploy, check `req.ip`. Eleven quick `POST /auth/login` calls should get a `429` on the 11th, while other networks are unaffected.
 
    Optional overrides; defaults come from `backend/src/config/env.ts`:
    - `JWT_ACCESS_TTL_SECONDS` (900), `JWT_REFRESH_TTL_DAYS` (30)
@@ -45,5 +47,5 @@ Once the service exists, set the Android **debug** build's API base URL to `http
 ## Free-tier notes
 - **Cold starts (accepted):** Render Free spins down after ~15 min idle, so the first request after that takes **about 50 s**. **No keep-alive pinger is used**, by choice, to stay within the free plan; the app should show a loading state and retry.
 - Render Free has 512 MB RAM. argon2 (19 MiB per hash) fits.
-- `backend/Dockerfile` is an alternative (runtime `docker`). The Blueprint uses the native Node runtime because the Docker image prunes the Prisma CLI, which migrate-on-start needs.
+- `backend/Dockerfile` is an alternative (runtime `docker`). Since #17, `prisma` is a runtime dependency, so the Docker image keeps the Prisma CLI and `npm run migrate:deploy` works inside it. The Blueprint uses the native Node runtime anyway, to keep the build simple.
 - Node 22 is required (`engines: >=22`). argon2's native build fails on Node 20.
