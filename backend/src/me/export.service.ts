@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { toChallengeView, toExportedBadge } from '../achievements/achievements-api.service';
 import { toPublicUser } from '../auth/auth.service';
 import { notFound } from '../common/id-param.pipe';
 import { ENV } from '../config/config.module';
@@ -107,6 +108,8 @@ export class ExportService {
     const waterLogs = cap('waterLogs', await db.waterLog.findMany({ where: { userId }, orderBy: [{ date: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const measurements = cap('bodyMeasurements', await db.bodyMeasurement.findMany({ where: { userId }, orderBy: [{ date: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const xp = cap('xpLedger', await db.xPTransaction.findMany({ where: { userId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
+    const badges = cap('badges', await db.userBadge.findMany({ where: { userId }, orderBy: [{ earnedAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
+    const challenges = cap('challenges', await db.userChallenge.findMany({ where: { userId }, orderBy: [{ joinedAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
 
     return {
       exportedAt: now.toISOString(),
@@ -122,6 +125,8 @@ export class ExportService {
       waterLogs: waterLogs.map(toWaterView),
       bodyMeasurements: measurements.map(toMeasurementView),
       xpLedger: xp.map(toXpView),
+      badges: badges.map(toExportedBadge),
+      challenges: challenges.map(toChallengeView),
       truncated,
     };
   }
