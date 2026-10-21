@@ -28,7 +28,11 @@ import com.vipin.fitness.feature.workout.WorkoutScreen
 /** App shell: Material 3 scaffold with a bottom navigation bar over the four top-level tabs. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FitnessApp(onOpenProfile: () -> Unit, modifier: Modifier = Modifier) {
+fun FitnessApp(
+    onOpenProfile: () -> Unit,
+    modifier: Modifier = Modifier,
+    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m) },
+) {
     var current by rememberSaveable { mutableStateOf(TopLevelDestination.START) }
     Scaffold(
         modifier = modifier,
@@ -57,12 +61,15 @@ fun FitnessApp(onOpenProfile: () -> Unit, modifier: Modifier = Modifier) {
             }
         },
     ) { padding ->
-        val content = Modifier.padding(padding)
-        when (current) {
-            TopLevelDestination.HOME -> HomeScreen(content)
-            TopLevelDestination.WORKOUT -> WorkoutScreen(content)
-            TopLevelDestination.NUTRITION -> NutritionScreen(content)
-            TopLevelDestination.PROGRESS -> ProgressScreen(content)
-        }
+        tabContent(current, Modifier.padding(padding))
     }
+}
+
+/** The real screen for each tab. Tests can pass their own [FitnessApp] tabContent to stay free of Hilt. */
+@Composable
+private fun TabContent(dest: TopLevelDestination, modifier: Modifier) = when (dest) {
+    TopLevelDestination.HOME -> HomeScreen(modifier)
+    TopLevelDestination.WORKOUT -> WorkoutScreen(modifier)
+    TopLevelDestination.NUTRITION -> NutritionScreen(modifier)
+    TopLevelDestination.PROGRESS -> ProgressScreen(modifier)
 }

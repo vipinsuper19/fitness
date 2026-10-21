@@ -103,7 +103,7 @@ class AuthOnboardingUiTest {
         launch()
         type("Email", "asha@example.in"); type("Password", "correct horse")
         click("Sign in")
-        waitFor("Home is coming soon.")
+        waitFor("Today's plan")
     }
 
     // ---- registration ----
@@ -159,7 +159,7 @@ class AuthOnboardingUiTest {
         onStep(2); type("Height (cm)", "165"); type("Weight (kg)", "60"); click("Next")
         onStep(3); click("Moderate"); click("Beginner"); click("Next")
         onStep(4); click("Vegetarian"); type("Daily water target (ml)", "2500"); click("Finish")
-        waitFor("Home is coming soon.")
+        waitFor("Today's plan")
         val p = profiles.profile
         assertEquals("Asha", p.displayName); assertEquals(Sex.FEMALE, p.sex)
         assertEquals(165.0, p.heightCm); assertEquals(60.0, p.weightKg)
@@ -182,7 +182,7 @@ class AuthOnboardingUiTest {
         onStep(2); click("Skip")
         onStep(3); click("Skip")
         onStep(4); click("Skip")
-        waitFor("Home is coming soon.")
+        waitFor("Today's plan")
         assertEquals(null, profiles.profile.displayName)
         assertTrue(profiles.profile.onboardingCompleted)
         assertEquals(1, profiles.updates.size) // only the completion flag
@@ -254,7 +254,7 @@ class AuthOnboardingUiTest {
     private fun openProfile(p: Profile) {
         session.signedIn = true; flags.completed = true; profiles.profile = p
         launch()
-        waitFor("Home is coming soon.")
+        waitFor("Today's plan")
         compose.onNodeWithTag("open_profile").performClick()
         waitFor("Profile")
     }

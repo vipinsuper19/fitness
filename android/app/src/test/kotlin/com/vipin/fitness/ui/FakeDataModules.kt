@@ -2,12 +2,19 @@ package com.vipin.fitness.ui
 
 import com.vipin.fitness.core.data.ProfileRepository
 import com.vipin.fitness.core.data.SessionRepository
+import com.vipin.fitness.core.data.HomeRepository
+import com.vipin.fitness.core.data.ProgressRepository
+import com.vipin.fitness.core.data.UnitPreference
 import com.vipin.fitness.core.data.di.DataModule
+import com.vipin.fitness.core.data.di.ProgressDataModule
 import com.vipin.fitness.core.datastore.ProfileFlagsCache
 import com.vipin.fitness.core.datastore.di.DataStoreModule
 import com.vipin.fitness.core.network.auth.AuthTokens
 import com.vipin.fitness.core.network.auth.TokenStore
+import com.vipin.fitness.core.testing.FakeHomeRepository
 import com.vipin.fitness.core.testing.FakeProfileFlagsCache
+import com.vipin.fitness.core.testing.FakeProgressRepository
+import com.vipin.fitness.core.testing.FakeUnitPreference
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
 import dagger.Binds
@@ -43,5 +50,20 @@ abstract class FakeDataStoreModule {
             override fun save(tokens: AuthTokens) = Unit
             override fun clear() = Unit
         }
+    }
+}
+
+/** Test-only: Home and Progress read in-memory fakes (empty dashboard). */
+@Module
+@TestInstallIn(components = [SingletonComponent::class], replaces = [ProgressDataModule::class])
+abstract class FakeProgressDataModule {
+    @Binds abstract fun progress(f: FakeProgressRepository): ProgressRepository
+    @Binds abstract fun home(f: FakeHomeRepository): HomeRepository
+    @Binds abstract fun units(f: FakeUnitPreference): UnitPreference
+
+    companion object {
+        @Provides @Singleton fun fakeProgress() = FakeProgressRepository()
+        @Provides @Singleton fun fakeHome() = FakeHomeRepository()
+        @Provides @Singleton fun fakeUnits() = FakeUnitPreference()
     }
 }

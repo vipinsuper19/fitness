@@ -1,5 +1,6 @@
 package com.vipin.fitness.navigation
 
+import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.assertIsNotSelected
@@ -29,18 +30,18 @@ class FitnessAppTest {
 
     @Test
     fun startsOnHomeAndSwitchesTabs() {
-        compose.setContent { FitnessTheme { FitnessApp(onOpenProfile = { profileOpened = true }) } }
-        compose.onNodeWithText("Home is coming soon.").assertExists()
+        compose.setContent { FitnessTheme { FitnessApp(onOpenProfile = { profileOpened = true }, tabContent = { dest, m -> Text("${dest.name} content", m) }) } }
+        compose.onNodeWithText("HOME content").assertExists()
 
         compose.onNodeWithTag("tab_HOME").assertIsSelected()
 
         compose.onNodeWithTag("tab_WORKOUT").performClick()
-        compose.onNodeWithText("Workout is coming soon.").assertExists()
+        compose.onNodeWithText("WORKOUT content").assertExists()
         compose.onNodeWithTag("tab_WORKOUT").assertIsSelected()
         compose.onNodeWithTag("tab_HOME").assertIsNotSelected()
 
         compose.onNodeWithTag("tab_PROGRESS").performClick()
-        compose.onNodeWithText("Progress is coming soon.").assertExists()
+        compose.onNodeWithText("PROGRESS content").assertExists()
 
         compose.onNodeWithTag("open_profile").performClick()
         assertEquals(true, profileOpened)
