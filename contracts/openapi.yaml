@@ -46,6 +46,9 @@ info:
       reversed entry. A reversed award is **never re-awarded**: the original
       entry stays in the ledger, so completing, replaying or re-completing
       the same session awards nothing, and an entry can be reversed only once.
+      Session corrections and discards (PRD 5.3) are `session_correction`
+      entries whose `sourceId` is a `session_corrections` row id, one per
+      correction, so a session can be corrected many times.
     - **Ownership:** every user-owned resource is checked; another user's
       id returns `404 NOT_FOUND`, never 403, so ids are not enumerable.
     - **AI:** there is no AI provider in the MVP. "Generate" endpoints use
@@ -2237,15 +2240,17 @@ components:
         xpAwarded: { type: integer, minimum: 0, description: Bonus XP actually awarded (after the weekly cap); 0 until completed }
     XpSourceType:
       type: string
-      enum: [workout_session, adjustment, badge, challenge]
-      description: '`adjustment` is a server-side reversal or correction, never a client write. `badge` and `challenge` are bonus XP (`sourceId` = the earned badge or the challenge id); challenge bonus XP is capped at 150 per ISO week (Monday start, profile timezone), so an award can be smaller than the template''s `bonusXp`, or 0. Clients must accept unknown values.'
+      enum: [workout_session, adjustment, badge, challenge, session_correction]
+      description: '`adjustment` is a server-side reversal or correction, never a client write. `badge` and `challenge` are bonus XP (`sourceId` = the earned badge or the challenge id); challenge bonus XP is capped at 150 per ISO week (Monday start, profile timezone), so an award can be smaller than the template''s `bonusXp`, or 0. `session_correction` is a server-side XP change from correcting or discarding a completed session (positive or negative); its `sourceId` is a `session_corrections` row id, not the session or award id (see docs/specs/session-correction.md). Clients must accept unknown values.'
     XpTransaction:
       type: object
       required: [id, sourceType, sourceId, amount, reason, createdAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         sourceType: { $ref: '#/components/schemas/XpSourceType' }
-        sourceId: { $ref: '#/components/schemas/Id' }
+        sourceId:
+          allOf: [{ $ref: '#/components/schemas/Id' }]
+          description: 'Depends on `sourceType`: the session for `workout_session`, the reversed entry for `adjustment`, the user badge or challenge for `badge`/`challenge`, and a `session_corrections` row id for `session_correction`.'
         amount: { type: integer, description: Negative for reversals }
         reason: { type: string }
         createdAt: { type: string, format: date-time }
