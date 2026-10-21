@@ -35,7 +35,7 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 
 ## Deploy
 ### Render (native Node 22, per `render.yaml`)
-The Blueprint in `render.yaml` defines the `fitness-api` web service: Free plan, Singapore region, root directory `backend`, health check `/health`. `autoDeploy` is off, so deploy with **Manual Deploy**. The step-by-step guide is in `docs/DEPLOY.md`. Both files come from DevOps PR #14, which isn't merged yet.
+The Blueprint in `render.yaml` defines the `fitness-api` web service: Free plan, Singapore region, root directory `backend`, health check `/health`. `autoDeploy` is off, so deploy with **Manual Deploy**. The step-by-step guide is in `docs/DEPLOY.md`.
 - **Build:** `npm ci --include=dev --no-audit --no-fund && npm run build`, which runs `prisma generate` and `tsc`.
 - **Start:** `npm run migrate:deploy && npm start`. The Free plan has no pre-deploy step, so pending migrations are applied on every start. This is safe to repeat.
 - **Preset env:** `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=1` (Render puts one proxy in front of the app), `SWAGGER_ENABLED=false`.
