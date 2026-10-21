@@ -30,7 +30,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,13 +56,33 @@ class DeleteExportUiTest {
     private var scenario: ActivityScenario<MainActivity>? = null
 
     @Before fun setUp() {
+        resetFileProviderCache()
         hilt.inject()
         session.signedIn = true; flags.completed = true
         profiles.profile = Profile(displayName = "Asha", onboardingCompleted = true)
     }
+    /**
+     * Robolectric gives every test a fresh cacheDir, but androidx FileProvider caches its path roots
+     * in a static map for the JVM's lifetime. Without this, the real CacheExportFiles can't build a
+     * content:// URI after an earlier test in the same JVM (it fails as "Couldn't write the file").
+     * On a device cacheDir never moves, so this only affects tests.
+     */
+    private fun resetFileProviderCache() {
+        val f = androidx.core.content.FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
+        (f.get(null) as MutableMap<*, *>).clear()
+    }
+
     @After fun tearDown() { scenario?.close() }
 
-    private fun waitTag(t: String) = compose.waitUntil(5_000) { compose.onAllNodes(hasTestTag(t)).fetchSemanticsNodes().isNotEmpty() }
+    /**
+     * Also drains the Robolectric main looper: the export file is written on Dispatchers.IO, and its
+     * resume back onto Main is posted from another thread, which waitUntil alone doesn't run.
+     */
+    private fun waitTag(t: String) = compose.waitUntil(5_000) {
+        Thread.sleep(10) // real time for the IO thread; waitUntil runs on a virtual clock
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        compose.onAllNodes(hasTestTag(t)).fetchSemanticsNodes().isNotEmpty()
+    }
     private fun waitText(t: String) = compose.waitUntil(5_000) { compose.onAllNodes(hasText(t, substring = true)).fetchSemanticsNodes().isNotEmpty() }
     private fun absent(t: String) = compose.onAllNodes(hasTestTag(t)).fetchSemanticsNodes().isEmpty()
     private fun tag(t: String) = compose.onNodeWithTag(t)
@@ -191,7 +210,6 @@ class DeleteExportUiTest {
 
     // ---- data export ----
 
-    @Ignore("Pending Android P0: Data export screen")
     @Test fun export_showsProgress_thenSuccess_andSharesJsonFile() {
         account.gate = CompletableDeferred()
         openExport()
@@ -213,7 +231,6 @@ class DeleteExportUiTest {
         }
     }
 
-    @Ignore("Pending Android P0: Data export screen")
     @Test fun export_error_showsRetry_andRetrySucceeds() {
         account.exportResult = AccountResults.SERVER_ERROR
         openExport()
@@ -227,7 +244,6 @@ class DeleteExportUiTest {
         assertEquals(2, account.exports)
     }
 
-    @Ignore("Pending Android P0: Data export screen")
     @Test fun export_rateLimited_showsWaitMessage() {
         account.exportResult = AccountResults.RATE_LIMITED
         openExport()
@@ -236,7 +252,6 @@ class DeleteExportUiTest {
         waitText("hour") // e.g. "You can export 5 times an hour. Try again later."
     }
 
-    @Ignore("Pending Android P0: Data export screen")
     @Test fun export_offline_showsError_withRetry() {
         account.exportResult = com.vipin.fitness.core.network.ApiResult.Failure(com.vipin.fitness.core.network.ApiError.Network)
         openExport()
