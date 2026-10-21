@@ -16,7 +16,7 @@
 - `totals`: the sum of the period's food logs (`energyKcal`, `proteinG`, `carbsG`, `fatG`, `fiberG`, `sugarG`, `sodiumMg`), using the same per-entry nutrients as `/nutrition/daily`, so a day's numbers match the daily view.
 - `avgPerLoggedDay` = `totals / daysLogged`, where `daysLogged` counts days with at least one food log. Dividing by every day would make unlogged days look like fasting.
 - Optional nutrients follow `DailyNutrition`: `entriesMissing` counts entries without a value. A total is `null` when every entry lacks the nutrient, and partial otherwise.
-- `waterMl` is the period's **total** water. `waterDaysLogged` counts days with at least one water log, and `avgWaterMlPerLoggedDay` = `waterMl / waterDaysLogged` (integer, HALF_UP; `null` when no water was logged). `null` means nothing was logged, never 0. The same goes for `totals`, `avgPerLoggedDay` and `adherence` when no food was logged.
+- `waterMl` is the period's **total** water. `waterDaysLogged` counts days with at least one water log, and `avgWaterMlPerLoggedDay` = `waterMl / waterDaysLogged` (integer, HALF_UP; `null` when no water was logged). `null` means nothing was logged, never 0. The same goes for `totals` and `avgPerLoggedDay` when no food was logged (see Targets for when `adherence` is `null`).
 
 ## Targets
 
@@ -25,7 +25,9 @@
 - Adherence, each × 100 with one decimal HALF_UP:
   - `kcalPct` = `avgPerLoggedDay.energyKcal / targets.kcal`
   - `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro> / targets.<macro>`
-  - `waterPct` = `avgWaterMlPerLoggedDay / targets.waterMl` A pct is `null` when its target is `null`, and `adherence` is `null` when nothing was logged or no target is set.
+  - `waterPct` = `avgWaterMlPerLoggedDay / targets.waterMl`
+
+  `kcalPct`, `proteinPct`, `carbsPct` and `fatPct` are `null` when no food was logged in the period or their target is `null`. `waterPct` is `null` when no water was logged or `targets.waterMl` is `null`. A target of 0 is treated as `null`. `adherence` is `null` only when every pct is `null`.
 - **Follow-up:** macro targets (`proteinG`, `carbsG`, `fatG`) stay `null`, and so do their pcts, until a later profile change adds macro targets. That change is listed as a follow-up and is not part of this endpoint.
 - If targets are stored with history later, each day should use the target in effect that day. That would be an additive change, documented then.
 
@@ -40,4 +42,4 @@
 ## Implementation notes (for the backend PR)
 
 - Aggregate in SQL: group food logs by `date` and water logs by `date`, then fold the days into periods in code. Don't load raw entries for long ranges.
-- Planned tests: day/week/month clipping at both edges (a range starting on a Wednesday, a month boundary), null vs 0, `avgPerLoggedDay` using `daysLogged`, adherence nulls without targets, a soft-deleted food still counted, HALF_UP at .x5, the 366-day limit, and the auth guard.
+- Planned tests: day/week/month clipping at both edges (a range starting on a Wednesday, a month boundary), null vs 0, `avgPerLoggedDay` using `daysLogged`, adherence nulls (no food, no water, no target, a target of 0, and `adherence` null only when every pct is null), a soft-deleted food still counted, HALF_UP at .x5, the 366-day limit, and the auth guard.

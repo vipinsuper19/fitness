@@ -2264,7 +2264,9 @@ components:
     NutritionAdherence:
       type: object
       description: |
-        Percent of the daily target (one decimal, HALF_UP); null for a target that is not set.
+        Percent of the daily target (one decimal, HALF_UP). `kcalPct` and the macro pcts are null when no food was logged in
+        the period or their target is null; `waterPct` is null when no water was logged or `targets.waterMl` is null. A target
+        of 0 is treated as null.
         `kcalPct` = `avgPerLoggedDay.energyKcal` / `targets.kcal` × 100; `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro>` / `targets.<macro>` × 100
         (null until macro targets exist); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
       required: [kcalPct, proteinPct, carbsPct, fatPct, waterPct]
@@ -2295,7 +2297,7 @@ components:
         waterDaysLogged: { type: integer, minimum: 0, description: Days in the period with at least one water log }
         avgWaterMlPerLoggedDay: { type: [integer, 'null'], minimum: 0, description: '`waterMl` / `waterDaysLogged`, integer HALF_UP; null when no water was logged' }
         adherence:
-          description: Null when nothing was logged or no target is set
+          description: Null only when every pct would be null (see `NutritionAdherence`)
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/NutritionAdherence'
