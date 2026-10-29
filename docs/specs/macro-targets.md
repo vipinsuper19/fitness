@@ -16,14 +16,14 @@ Macro targets are **explicit only**. They are not derived from `dailyCalorieTarg
 `targets` in `/nutrition/summary` is non-null when **any** of kcal, water, protein, carbs or fat has a target, so a profile with only macro targets gets a `targets` object with `kcal` and `waterMl` null. It is `null` only when all five are unset.
 
 ## Effective date
-Targets take effect **from now** and are not stored historically. Every summary period, **including past ones**, uses the current targets (same as `dailyCalorieTargetKcal` and `dailyWaterTargetMl`).
+**Superseded by [target-history.md](target-history.md).** A change takes effect from **today's local date** (profile timezone), and earlier days keep the targets in effect then. The old rule, "current targets apply to every period including past ones", no longer holds; existing users were backfilled so past periods were unchanged at migration time.
 
 ## Nutrition summary wiring
-- `targets.proteinG/carbsG/fatG` = the profile's current `daily*TargetG` (null when unset).
+- `targets.proteinG/carbsG/fatG` = the `daily*TargetG` in effect (see [target-history.md](target-history.md); null when unset).
 - `proteinPct/carbsPct/fatPct` = `avgPerLoggedDay.<macro> / target × 100`, one decimal, HALF_UP, computed from the unrounded average; `null` when no food was logged or **its own** target is null. Each pct is independent: e.g. only protein set → `proteinPct` non-null, `carbsPct` and `fatPct` null. `adherence` is `null` only when every pct is null.
 
 ## Other surfaces
-- `GET /me/export` includes the new fields through `Profile`.
+- `GET /me/export` includes the new fields through `Profile`, and their dated history in `targetHistory`.
 - No change to badges, challenges or XP.
 
 ## Implementation notes
@@ -35,7 +35,7 @@ Targets take effect **from now** and are not stored historically. Every summary 
 - PUT with 0 → 200, stored and returned as `null` in the PUT response, `GET /me/profile` and `GET /me/export`.
 - Validation: -1, 1001, 12.5 and a string → 400; 0 and 1000 accepted.
 - Setting the calorie target leaves macro targets null (no derivation).
-- Summary: targets echoed; pcts computed for a set target (incl. HALF_UP at .x5 and the unrounded-average case); PUT 0 → target and pct null; only protein set → `proteinPct` non-null, `carbsPct`/`fatPct` null; targets changed today apply to a past period's summary; no food logged → macro pcts null; macros set but kcal/water unset → `adherence` non-null with only macro pcts.
+- Summary: targets echoed; pcts computed for a set target (incl. HALF_UP at .x5 and the unrounded-average case); PUT 0 → target and pct null; only protein set → `proteinPct` non-null, `carbsPct`/`fatPct` null; targets changed today do **not** change a past period's summary (see target-history.md); no food logged → macro pcts null; macros set but kcal/water unset → `adherence` non-null with only macro pcts.
 - Existing profiles after migration read the fields as null.
 - Data export includes the fields.
 - Auth guard.
