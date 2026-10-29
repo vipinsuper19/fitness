@@ -5,6 +5,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.vipin.fitness.core.network.model.retryAfterSeconds
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
 class RetryAfterTest {
@@ -42,5 +45,24 @@ class RetryAfterDefaultTest {
         assertEquals(0L, retryAfterFor(429, "0", 0))
         assertNull(retryAfterFor(503, null, 0))
         assertEquals(2_000L, retryAfterFor(503, "2", 0))
+    }
+
+    @Test fun headerThenDetailsThenDefault() {
+        assertEquals(5_000L, retryAfterFor(429, "5", 0, detailsSeconds = 9))   // header first
+        assertEquals(9_000L, retryAfterFor(429, null, 0, detailsSeconds = 9))  // then details
+        assertEquals(9_000L, retryAfterFor(429, "soon", 0, detailsSeconds = 9)) // bad header falls through
+        assertEquals(30_000L, retryAfterFor(429, null, 0, detailsSeconds = null)) // then 30 s
+        assertEquals(30_000L, retryAfterFor(429, null, 0, detailsSeconds = -1))
+        assertEquals(3_000L, retryAfterFor(503, null, 0, detailsSeconds = 3))
+    }
+
+    @Test fun detailsRetryAfterSecondsIsTolerant() {
+        fun d(s: String) = Json.parseToJsonElement(s) as JsonObject
+        assertEquals(42L, d("""{"retryAfterSeconds":42}""").retryAfterSeconds())
+        assertNull(d("""{"retryAfterSeconds":"42"}""").retryAfterSeconds())
+        assertNull(d("""{"retryAfterSeconds":1.5}""").retryAfterSeconds())
+        assertNull(d("""{"retryAfterSeconds":null}""").retryAfterSeconds())
+        assertNull(d("""{"other":1}""").retryAfterSeconds())
+        assertNull((null as JsonObject?).retryAfterSeconds())
     }
 }

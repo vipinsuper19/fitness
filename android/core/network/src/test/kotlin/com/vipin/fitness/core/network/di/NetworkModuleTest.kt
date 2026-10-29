@@ -79,6 +79,11 @@ class NetworkModuleTest {
         assertEquals(DEFAULT_RETRY_AFTER_MS, e.retryAfterMs)
         server.enqueue(MockResponse(code = 429, headers = Headers.headersOf("Retry-After", "5"), body = """{"code":"RATE_LIMITED","message":"slow"}"""))
         assertEquals(5_000L, ((apiCall(json) { api.get() } as ApiResult.Failure).error as ApiError.Http).retryAfterMs)
+        // Backend #152: details.retryAfterSeconds when the header is missing; header still wins.
+        server.enqueue(MockResponse(code = 429, body = """{"code":"RATE_LIMITED","message":"slow","details":{"retryAfterSeconds":11}}"""))
+        assertEquals(11_000L, ((apiCall(json) { api.get() } as ApiResult.Failure).error as ApiError.Http).retryAfterMs)
+        server.enqueue(MockResponse(code = 429, headers = Headers.headersOf("Retry-After", "2"), body = """{"code":"RATE_LIMITED","message":"slow","details":{"retryAfterSeconds":11}}"""))
+        assertEquals(2_000L, ((apiCall(json) { api.get() } as ApiResult.Failure).error as ApiError.Http).retryAfterMs)
     }
 
 }

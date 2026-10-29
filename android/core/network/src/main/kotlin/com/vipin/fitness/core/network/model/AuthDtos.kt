@@ -38,4 +38,15 @@ data class AuthResponseDto(
 
 /** Every non-2xx body (contract `Error`). Clients branch on [code], never on [message]. */
 @Serializable
-data class ErrorDto(val code: String, val message: String, val requestId: String? = null)
+data class ErrorDto(
+    val code: String,
+    val message: String,
+    val requestId: String? = null,
+    /** Code-specific extras; tolerant (any shape). For RATE_LIMITED: `retryAfterSeconds`. */
+    val details: kotlinx.serialization.json.JsonObject? = null,
+)
+
+/** `details.retryAfterSeconds` (contract: every 429, equal to Retry-After), if a positive integer. */
+fun kotlinx.serialization.json.JsonObject?.retryAfterSeconds(): Long? =
+    (this?.get("retryAfterSeconds") as? kotlinx.serialization.json.JsonPrimitive)
+        ?.takeIf { !it.isString }?.content?.toLongOrNull()?.takeIf { it >= 0 }
