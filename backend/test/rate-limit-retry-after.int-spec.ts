@@ -29,6 +29,7 @@ const ROUTES: Record<ThrottleName, { method: 'get' | 'post' | 'put' | 'patch'; p
   nutrition: { method: 'post', path: '/api/v1/foods', body: {} },
   bodyMeasurements: { method: 'post', path: '/api/v1/body-measurements', body: {} },
   challenges: { method: 'post', path: '/api/v1/challenges', body: {} },
+  healthDeep: { method: 'get', path: '/health/deep' },
 };
 
 function expectRateLimited(res: request.Response) {

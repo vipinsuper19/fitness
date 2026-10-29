@@ -37,6 +37,18 @@ interface PendingWriteDao {
     @Query("DELETE FROM pending_writes WHERE owner_user_id IS NULL OR owner_user_id != :userId")
     suspend fun deleteNotOwnedBy(userId: String)
 
+    @Query("SELECT not_before_ms FROM outbox_rate_limit WHERE owner_user_id = :owner")
+    suspend fun notBefore(owner: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun setNotBefore(limit: OutboxRateLimitEntity)
+
+    @Query("DELETE FROM outbox_rate_limit WHERE owner_user_id = :owner")
+    suspend fun clearNotBefore(owner: String)
+
+    @Query("DELETE FROM outbox_rate_limit WHERE owner_user_id != :userId")
+    suspend fun clearNotBeforeNotOwnedBy(userId: String)
+
     /** Sign-out: queued writes belong to the user who made them, never to the next one. */
     @Query("DELETE FROM pending_writes")
     suspend fun clear()

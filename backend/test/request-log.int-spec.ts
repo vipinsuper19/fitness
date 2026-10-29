@@ -64,6 +64,16 @@ describeDb('request id and request log', () => {
     expect(lines.join('')).not.toContain(bad);
   });
 
+  it('does not log /health, /health?db=true or /health/deep (Render health checks)', async () => {
+    await http().get('/health').expect(200);
+    await http().get('/health?db=true').expect(200);
+    await http().get('/health/deep');
+    await http().get('/health/').expect(200);
+    expect(logged()).toEqual([]);
+    await http().get('/api/v1/goals').expect(401); // other routes still log
+    expect(logged()).toHaveLength(1);
+  });
+
   it('every error body carries the same requestId as the header, and the log line matches', async () => {
     const res = await http().get('/api/v1/goals').expect(401);
     expect(res.body.requestId).toBe(res.headers['x-request-id']);

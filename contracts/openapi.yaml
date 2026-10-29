@@ -65,6 +65,8 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: health
+    description: Service and database checks (unprefixed, outside /api/v1)
   - name: auth
     description: Email and password sign-in with self-issued JWTs
   - name: me
@@ -89,6 +91,39 @@ tags:
     description: Personal and weekly challenges from built-in templates (join, leave, progress). No leaderboards or social
 
 paths:
+  /health/deep:
+    # Served at the origin root, not under /api/v1 (GET /health itself stays outside the contract).
+    servers:
+      - url: https://fitness-api-6pcc.onrender.com
+        description: Render (production)
+      - url: http://localhost:3000
+        description: Local
+    get:
+      tags: [health]
+      operationId: healthDeep
+      summary: Deep health check (database and latest migration)
+      description: |
+        One `SELECT 1` and a read of the latest applied migration name from
+        `_prisma_migrations`, within about 2 s each. The body only ever holds
+        `status`, `db` and `migration`: no versions, hosts, error messages or
+        stack traces. `200 ok`: both read. `200 degraded`: database up but the
+        migration name could not be read. `503`: database down or timed out
+        (body is `HealthDeep`, not `Error`, so monitors can read it).
+        Plain `GET /health` is unchanged and never touches the database.
+        Rate-limited per IP (`HEALTH_DEEP_RATE_LIMIT_PER_MINUTE`, default 12).
+      security: []
+      responses:
+        '200':
+          description: Database reachable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthDeep' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: Database down or timed out
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthDeep' }
   /auth/register:
     post:
       tags: [auth]
@@ -704,7 +739,7 @@ paths:
                       exercises:
                         - { exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13, order: 0, sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 41, durationSeconds: null, restSeconds: 90, notes: null }
                         - { exerciseId: 8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81, order: 1, sets: 3, repsMin: null, repsMax: null, targetWeightKg: null, durationSeconds: 65, restSeconds: 60, notes: null }
-                        - { exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13, order: 2, sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 27, durationSeconds: null, restSeconds: 90, notes: null }
+                        - { exerciseId: e4b6d8f0-2a4c-4e6a-9b1d-3f5a7c9e0b42, order: 2, sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 27, durationSeconds: null, restSeconds: 90, notes: null }
       responses:
         '200':
           description: |
@@ -917,7 +952,7 @@ paths:
         archived → `409 PLAN_ARCHIVED` (unarchive first). A plan always has at least one exercise, so
         `suggestions` is never empty; with no completed sessions every item is `hold` / `NOT_ENOUGH_HISTORY`
         with `suggested: null` and `basedOn: []`. A malformed `planId` is `404` like an unknown one.
-        Not rate-limited today (no 429 on this GET); the apply PATCH is (`429` + `Retry-After`).
+        Rate-limited per user under the `plans` throttle (`PLANS_RATE_LIMIT_PER_MINUTE`; its own counter, like each plan route): `429` + `Retry-After`.
       responses:
         '200':
           description: Suggestions in plan order
@@ -947,6 +982,13 @@ paths:
                         - { sessionId: c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51, completedAt: '2026-10-28T07:40:00+05:30', perceivedDifficulty: 3, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: 10, bestWeightKg: 40, bestDurationSeconds: null, bestDistanceM: null }
                         - { sessionId: c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52, completedAt: '2026-10-26T07:40:00+05:30', perceivedDifficulty: 3, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: 10, bestWeightKg: 40, bestDurationSeconds: null, bestDistanceM: null }
                         - { sessionId: c1a2b3d4-0003-4e5f-8a9b-0c1d2e3f4a53, completedAt: '2026-10-24T07:40:00+05:30', perceivedDifficulty: 2, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: 10, bestWeightKg: 40, bestDurationSeconds: null, bestDistanceM: null }
+                        inputs:
+                          sessionsRequired: 3
+                          sessionsConsidered: 3
+                          sessionsMetTarget: 3
+                          maxPerceivedDifficulty: 3
+                          cooldown: { active: false, lastRaisedAt: '2026-10-12T10:00:00+05:30', until: null, days: 7 }
+                          step: { field: targetWeightKg, rule: percent_increase, percent: 2.5, capPercent: 10, capApplied: false, minStepApplied: false, rounding: down_0_5_kg, limitApplied: false }
                       - plannedWorkoutId: 0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01
                         exerciseId: 8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81
                         order: 1
@@ -957,9 +999,19 @@ paths:
                         current: { sets: 3, repsMin: null, repsMax: null, targetWeightKg: null, durationSeconds: 65 }
                         suggested: null
                         cooldownUntil: '2026-11-01T18:30:00+05:30'
-                        basedOn: []
+                        basedOn:
+                          - { sessionId: c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51, completedAt: '2026-10-28T07:40:00+05:30', perceivedDifficulty: 3, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: null, bestWeightKg: null, bestDurationSeconds: 65, bestDistanceM: null }
+                          - { sessionId: c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52, completedAt: '2026-10-26T07:40:00+05:30', perceivedDifficulty: 3, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: null, bestWeightKg: null, bestDurationSeconds: 65, bestDistanceM: null }
+                          - { sessionId: c1a2b3d4-0003-4e5f-8a9b-0c1d2e3f4a53, completedAt: '2026-10-24T07:40:00+05:30', perceivedDifficulty: 3, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: null, bestWeightKg: null, bestDurationSeconds: 65, bestDistanceM: null }
+                        inputs:
+                          sessionsRequired: 3
+                          sessionsConsidered: 3
+                          sessionsMetTarget: 3
+                          maxPerceivedDifficulty: 3
+                          cooldown: { active: true, lastRaisedAt: '2026-10-25T18:30:00+05:30', until: '2026-11-01T18:30:00+05:30', days: 7 }
+                          step: null
                       - plannedWorkoutId: 0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01
-                        exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13
+                        exerciseId: e4b6d8f0-2a4c-4e6a-9b1d-3f5a7c9e0b42
                         order: 2
                         trackingType: reps_weight
                         action: deload
@@ -971,6 +1023,13 @@ paths:
                         basedOn:
                           - { sessionId: c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51, completedAt: '2026-10-28T07:40:00+05:30', perceivedDifficulty: 4, completedSets: 2, plannedSets: 3, metTarget: false, bestReps: 8, bestWeightKg: 30, bestDurationSeconds: null, bestDistanceM: null }
                           - { sessionId: c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52, completedAt: '2026-10-26T07:40:00+05:30', perceivedDifficulty: 4, completedSets: 3, plannedSets: 3, metTarget: false, bestReps: 7, bestWeightKg: 30, bestDurationSeconds: null, bestDistanceM: null }
+                        inputs:
+                          sessionsRequired: 3
+                          sessionsConsidered: 2
+                          sessionsMetTarget: 0
+                          maxPerceivedDifficulty: 4
+                          cooldown: { active: false, lastRaisedAt: null, until: null, days: 7 }
+                          step: { field: targetWeightKg, rule: deload, percent: -10, capPercent: null, capApplied: false, minStepApplied: false, rounding: down_0_5_kg, limitApplied: false }
                 noHistory:
                   summary: New plan, no completed sessions yet
                   value:
@@ -990,6 +1049,13 @@ paths:
                         suggested: null
                         cooldownUntil: null
                         basedOn: []
+                        inputs:
+                          sessionsRequired: 3
+                          sessionsConsidered: 0
+                          sessionsMetTarget: 0
+                          maxPerceivedDifficulty: null
+                          cooldown: { active: false, lastRaisedAt: null, until: null, days: 7 }
+                          step: null
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -998,6 +1064,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { code: PLAN_ARCHIVED, message: 'This plan is archived. Save a new plan instead.', requestId: 7f3a9c1e-2b4d-4e6f-8a0c-1d3e5f7a9b20 }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions:
     post:
       tags: [workout-sessions]
@@ -2138,6 +2205,18 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    HealthDeep:
+      type: object
+      additionalProperties: false
+      required: [status, db, migration]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        db: { type: string, enum: [up, down] }
+        migration:
+          type: [string, 'null']
+          pattern: '^[A-Za-z0-9_.-]{1,255}$'
+          description: Latest applied Prisma migration name; null when unreadable or the database is down
+          example: 20261020000000_request_log
     Id:
       type: string
       format: uuid
@@ -2645,7 +2724,7 @@ components:
         bestDistanceM: { type: [number, 'null'] }
     ProgressionSuggestion:
       type: object
-      required: [plannedWorkoutId, exerciseId, order, trackingType, action, reason, reasonText, current, suggested, cooldownUntil, basedOn]
+      required: [plannedWorkoutId, exerciseId, order, trackingType, action, reason, reasonText, current, suggested, cooldownUntil, basedOn, inputs]
       properties:
         plannedWorkoutId: { $ref: '#/components/schemas/Id' }
         exerciseId: { $ref: '#/components/schemas/Id' }
@@ -2676,8 +2755,8 @@ components:
     ProgressionInputs:
       type: object
       description: |
-        **Planned, not returned yet** (additive; docs/specs/adaptive-progression.md "Reason inputs"). Optional:
-        clients must work without it. The machine-readable inputs behind `reason`.
+        The machine-readable inputs behind `reason` (docs/specs/adaptive-progression.md "Reason inputs").
+        Always returned since backend/progression-inputs; older servers omitted it.
       required: [sessionsRequired, sessionsConsidered, sessionsMetTarget, maxPerceivedDifficulty, cooldown, step]
       properties:
         sessionsRequired: { type: integer, const: 3, description: "Sessions needed for an increase (`windowSessions`)" }
@@ -2690,7 +2769,7 @@ components:
           properties:
             active: { type: boolean }
             lastRaisedAt: { type: [string, 'null'], format: date-time, description: "createdAt of the newest version that raised this entry's load (any age); null if never" }
-            until: { type: [string, 'null'], format: date-time, description: "Equals `cooldownUntil`" }
+            until: { type: [string, 'null'], format: date-time, description: "End of the active cooldown (null when inactive). Unlike the item's `cooldownUntil`, which is set only when `reason` is `COOLDOWN`, this is set whenever a cooldown is active, even if an earlier rule (e.g. `MISSED_TARGET`) decided the reason." }
             days: { type: integer, const: 7 }
         step:
           type: [object, 'null']
@@ -2703,8 +2782,8 @@ components:
             capPercent: { type: [number, 'null'], description: '10 for load increases; null when exempt (reps, deload, heaviest_used)' }
             capApplied: { type: boolean, description: "The 10% load cap reduced the step" }
             minStepApplied: { type: boolean, description: "The minimum step (+0.5/+1.0 kg, +5 s) overrode the percentage or the cap" }
-            rounding: { type: string, enum: [down_0_5_kg, up_0_5_kg, down_5_s, none] }
-            limitApplied: { type: boolean, description: "A schema limit (1000 kg, 100 reps, 20-rep ceiling, 7200 s) bounded the value" }
+            rounding: { type: string, enum: [down_0_5_kg, up_0_5_kg, down_5_s, none], description: The rounding rule used; reported even when the value was already on the grid }
+            limitApplied: { type: boolean, description: "A bound clamped the value: a schema limit (1000 kg, 7200 s) on an increase. Always false for deloads. At the limit itself the item is `hold` / `CAP_REACHED` or `REP_CEILING` with `step: null`." }
     ProgressionSuggestions:
       type: object
       required: [planId, planVersion, generatedAt, windowSessions, suggestions]

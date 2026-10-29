@@ -22,6 +22,13 @@ export const openapi = parse(readFileSync(OPENAPI_FILE, 'utf8')) as Spec;
 export const INTERNAL_ROUTES = ['post /internal/notifications/tick'] as const;
 
 export const API_PREFIX = '/api/v1';
+
+/**
+ * Unprefixed routes that ARE in the contract: documented at the origin root with a path-level `servers` override
+ * (docs/specs/health-deep.md). Checked like any other operation.
+ */
+export const ROOT_PATHS = ['/health/deep'] as const;
+const isRootPath = (p: string): boolean => (ROOT_PATHS as readonly string[]).includes(p);
 export const HTTP_METHODS = ['get', 'put', 'post', 'patch', 'delete'] as const;
 
 /** Express `/a/:id/b` → OpenAPI `/a/{id}/b`. */
@@ -104,8 +111,8 @@ type Res = { statusCode: number; json: (body: unknown) => unknown };
 function checkResponse(req: Req, status: number, body: unknown): void {
   if (!req.route) return; // no matched route: 404s from express itself, not an operation
   const full = toOpenApiPath(`${req.baseUrl ?? ''}${req.route.path}`);
-  if (!full.startsWith(`${API_PREFIX}/`)) return; // /health, /docs: not part of the API contract
-  const path = full.slice(API_PREFIX.length);
+  if (!full.startsWith(`${API_PREFIX}/`) && !isRootPath(full)) return; // /health, /docs: not part of the API contract
+  const path = isRootPath(full) ? full : full.slice(API_PREFIX.length);
   const method = req.method.toLowerCase();
   const validate = responseValidator(method, path, status);
   const where = `${req.method} ${req.originalUrl} → ${status} (${method} ${path})`;

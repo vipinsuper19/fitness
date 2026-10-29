@@ -22,6 +22,7 @@ export const THROTTLES = {
   nutrition: { env: 'NUTRITION_RATE_LIMIT_PER_MINUTE', ttl: 60_000, perIp: false },
   bodyMeasurements: { env: 'BODY_MEASUREMENTS_RATE_LIMIT_PER_MINUTE', ttl: 60_000, perIp: false },
   challenges: { env: 'CHALLENGES_RATE_LIMIT_PER_MINUTE', ttl: 60_000, perIp: false },
+  healthDeep: { env: 'HEALTH_DEEP_RATE_LIMIT_PER_MINUTE', ttl: 60_000, perIp: true },
 } as const satisfies Record<string, { env: keyof Env; ttl: number; perIp: boolean }>;
 
 export type ThrottleName = keyof typeof THROTTLES;

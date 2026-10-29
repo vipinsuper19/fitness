@@ -1,4 +1,4 @@
-import { deload, floor5, floorHalf, harderVariations, increase, metPrescription, raisedLoad, REASON_TEXT, type Prescription } from '../src/workout-plans/progression.rules';
+import { deload, deloadStep, floor5, floorHalf, harderVariations, increase, metPrescription, raisedLoad, REASON_TEXT, type Prescription } from '../src/workout-plans/progression.rules';
 
 const p = (o: Partial<Prescription>): Prescription => ({ sets: 3, repsMin: null, repsMax: null, targetWeightKg: null, durationSeconds: null, ...o });
 
@@ -71,5 +71,53 @@ describe('progression rules (pure)', () => {
     expect(raisedLoad(p({ targetWeightKg: 40 }), p({ targetWeightKg: 36 }))).toBe(false);
     expect(raisedLoad(undefined, p({ targetWeightKg: 41 }))).toBe(false);
     expect(Object.keys(REASON_TEXT).sort()).toEqual(['ALL_SETS_COMPLETED', 'CAP_REACHED', 'COOLDOWN', 'HIGH_EFFORT', 'MISSED_TARGET', 'NOT_ENOUGH_HISTORY', 'NO_TARGET_SET', 'REPEATED_MISSES', 'REP_CEILING', 'VERY_HARD']);
+  });
+
+  describe('step working (ProgressionInputs.step)', () => {
+    const W = { capApplied: false, minStepApplied: false, limitApplied: false };
+    it('weight percent increase: upper 2.5%, lower 5%, rounding down, nothing applied', () => {
+      expect(increase('reps_weight', p({ targetWeightKg: 40 }), 'chest', null).working).toEqual({ ...W, field: 'targetWeightKg', rule: 'percent_increase', percent: 2.5, capPercent: 10, rounding: 'down_0_5_kg' });
+      expect(increase('reps_weight', p({ targetWeightKg: 100 }), 'quads', null).working).toMatchObject({ percent: 5, minStepApplied: false, rounding: 'down_0_5_kg' });
+    });
+    it('weight minimum step overrides the percentage (and the cap under 10 kg)', () => {
+      expect(increase('reps_weight', p({ targetWeightKg: 20 }), 'chest', null).working).toMatchObject({ percent: 2.5, minStepApplied: true, capApplied: false, rounding: 'down_0_5_kg' }); // 0.5 < 1.0
+      expect(increase('reps_weight', p({ targetWeightKg: 4 }), 'chest', null)).toMatchObject({ suggested: { targetWeightKg: 4.5 }, working: { minStepApplied: true, capApplied: false } });
+    });
+    it('off-grid target rounds up to keep the minimum step', () => {
+      expect(increase('reps_weight', p({ targetWeightKg: 40.3 }), 'chest', null).working).toMatchObject({ rounding: 'up_0_5_kg', minStepApplied: true });
+    });
+    it('weight schema limit clamps at 1000 kg; at the limit it is CAP_REACHED with no working', () => {
+      expect(increase('reps_weight', p({ targetWeightKg: 999.5 }), 'quads', null)).toMatchObject({ suggested: { targetWeightKg: 1000 }, working: { limitApplied: true } });
+      expect(increase('reps_weight', p({ targetWeightKg: 1000 }), 'quads', null)).toMatchObject({ reason: 'CAP_REACHED', working: null });
+    });
+    it('NO_TARGET_SET: heaviest_used, rounded down, no percent or cap', () => {
+      expect(increase('reps_weight', p({}), 'chest', 42.7)).toMatchObject({
+        reason: 'NO_TARGET_SET', suggested: { targetWeightKg: 42.5 },
+        working: { ...W, field: 'targetWeightKg', rule: 'heaviest_used', percent: null, capPercent: null, rounding: 'down_0_5_kg' },
+      });
+      expect(increase('reps_weight', p({}), 'chest', null).working).toBeNull();
+    });
+    it('reps: rep_step, exempt from the cap; ceiling is a hold with no working', () => {
+      expect(increase('reps', p({ repsMin: 8, repsMax: 12 }), 'core', null).working).toEqual({ ...W, field: 'reps', rule: 'rep_step', percent: null, capPercent: null, rounding: 'none' });
+      expect(increase('reps', p({ repsMin: 15, repsMax: 18 }), 'core', null).working).toMatchObject({ rule: 'rep_step' });
+      expect(increase('reps', p({ repsMin: 19, repsMax: 20 }), 'core', null)).toMatchObject({ reason: 'REP_CEILING', working: null });
+    });
+    it('duration: +10% rounded down to 5 s, min step, limit', () => {
+      expect(increase('duration', p({ durationSeconds: 300 }), 'core', null).working).toEqual({ ...W, field: 'durationSeconds', rule: 'percent_increase', percent: 10, capPercent: 10, rounding: 'down_5_s' });
+      expect(increase('duration', p({ durationSeconds: 30 }), 'core', null).working).toMatchObject({ minStepApplied: true });
+      expect(increase('distance_duration', p({ durationSeconds: 7000 }), 'cardio', null)).toMatchObject({ suggested: { durationSeconds: 7200 }, working: { limitApplied: true } });
+      expect(increase('duration', p({ durationSeconds: 7200 }), 'core', null)).toMatchObject({ reason: 'CAP_REACHED', working: null });
+    });
+    it('deload: -10%, no cap, rounding; never a limit; nothing to lower is null', () => {
+      expect(deloadStep('reps_weight', p({ targetWeightKg: 30 }))).toEqual({
+        suggested: p({ targetWeightKg: 27 }), working: { ...W, field: 'targetWeightKg', rule: 'deload', percent: -10, capPercent: null, rounding: 'down_0_5_kg' },
+      });
+      expect(deloadStep('duration', p({ durationSeconds: 65 }))!.working).toMatchObject({ field: 'durationSeconds', rounding: 'down_5_s', limitApplied: false });
+      expect(deloadStep('duration', p({ durationSeconds: 6 }))).toMatchObject({ suggested: { durationSeconds: 5 }, working: { limitApplied: false } });
+      expect(deloadStep('duration', p({ durationSeconds: 5 }))).toBeNull();
+      expect(deloadStep('reps', p({ repsMin: 8, repsMax: 10 }))).toBeNull();
+      expect(deloadStep('reps_weight', p({}))).toBeNull();
+      expect(deload('reps_weight', p({ targetWeightKg: 30 }))).toEqual(p({ targetWeightKg: 27 }));
+    });
   });
 });

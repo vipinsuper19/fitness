@@ -29,7 +29,14 @@ export function routeTemplate(req: { baseUrl?: string; route?: { path?: unknown 
   return `${req.baseUrl ?? ''}${path}`.replace(/:([A-Za-z0-9_]+)/g, '{$1}') || '/';
 }
 
+/** `/health` and anything under it (query strings excluded by req.path). */
+export function isHealthPath(path: string): boolean {
+  return path === '/health' || path.startsWith('/health/');
+}
+
 export function requestLogMiddleware(req: RequestWithId & AuthedRequest, res: Response, next: NextFunction): void {
+  // Render's health checks (/health, /health?db=true, /health/deep) would flood the log; they're never logged.
+  if (isHealthPath(req.path)) return next();
   const start = process.hrtime.bigint();
   res.on('finish', () => {
     const line: RequestLogLine = {

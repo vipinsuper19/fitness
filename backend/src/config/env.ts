@@ -40,6 +40,8 @@ export const envSchema = z.object({
   NUTRITION_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
   BODY_MEASUREMENTS_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   CHALLENGES_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+  /** GET /health/deep requests per client IP per minute (it queries the database). */
+  HEALTH_DEEP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(12),
   /** GET /me/export caps (newest rows kept; cut collections are listed in `truncated`). */
   EXPORT_MAX_ROWS: z.coerce.number().int().positive().max(50_000).default(5000),
   EXPORT_MAX_SESSIONS: z.coerce.number().int().positive().max(50_000).default(2000),

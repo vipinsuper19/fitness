@@ -63,7 +63,8 @@ export class PlansController {
     return this.plans.get(userId, id, q.version);
   }
 
-  /** Read-only, rule-based progression suggestions (docs/specs/adaptive-progression.md). */
+  /** Read-only, rule-based progression suggestions (docs/specs/adaptive-progression.md). Per-user `plans` throttle. */
+  @RateLimit('plans')
   @Get(':planId/progression-suggestions')
   progressionSuggestions(@CurrentUserId() userId: string, @Param('planId', IdParamPipe) id: string): Promise<ProgressionSuggestions> {
     return this.progression.suggestions(userId, id);
