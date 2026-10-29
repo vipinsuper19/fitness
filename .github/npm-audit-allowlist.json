@@ -1,0 +1,17 @@
+{
+  "_comment": "High/critical advisories in backend production dependencies accepted for now. Each entry needs a reason and a review-by date; the CI audit step fails once the date passes or when the advisory is no longer reported (so the entry is removed). See docs/security.md.",
+  "advisories": {
+    "GHSA-27r3-jxmh-p828": {
+      "package": "body-parser",
+      "severity": "high",
+      "reason": "DoS via trailing bytes after a compressed request body. Reachable: the API parses JSON with body-parser 2.x (through @nestjs/platform-express). Fix is a lockfile bump (npm audit fix, no breaking change); tracked as a follow-up dependency PR, not done here to keep this change free of app/runtime changes.",
+      "reviewBy": "2026-11-12"
+    },
+    "GHSA-q7qp-rjg7-q26m": {
+      "package": "multer",
+      "severity": "high",
+      "reason": "DoS via a pending async fileFilter. Not reachable: no route uses file uploads (no FileInterceptor/multer usage in backend/src); pulled in by @nestjs/platform-express. Cleared by the same lockfile bump.",
+      "reviewBy": "2026-11-12"
+    }
+  }
+}
