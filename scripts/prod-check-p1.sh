@@ -3,7 +3,10 @@
 # the nutrition summary (#70), strength progress (#72), macro targets (#85) and progression suggestions (#90), using TWO throwaway
 # accounts (A = owner, B = other user).
 #   scripts/prod-check-p1.sh              # the Fitness API server (only allowed host, see ALLOWED_API)
-#   scripts/prod-check-p1.sh --self-test  # register-timeout and signal cleanup against a local stub
+#   scripts/prod-check-p1.sh --self-test  # register-timeout, signal and stale-state cleanup against a local stub
+#   scripts/prod-check-p1.sh --cleanup-stale  # only delete accounts left in $P1_STATE_DIR by killed runs, then exit
+# - Every run first sweeps $P1_STATE_DIR: each leftover account is logged into, deleted, login
+#   confirmed 401, and its file removed (already-gone accounts: file just removed).
 # Safety:
 # - Host allowlist: refuses to run unless API is exactly https://fitness-api-6pcc.onrender.com/api/v1
 #   (loopback is allowed only inside --self-test).
@@ -45,6 +48,8 @@ class H(http.server.BaseHTTPRequestHandler):
 http.server.ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),H).serve_forever()
 PY
   LOCAL="http://127.0.0.1:$PORT/api/v1"; rc=0
+  # Never touch the real state dir: every self-test run uses its own.
+  export P1_STATE_DIR="$(mktemp -d)"; trap 'rm -rf "$STUB" "$P1_STATE_DIR"' EXIT
   left() { curl -s "http://127.0.0.1:$PORT/__accounts" | jq -r .n; }
   # 1) A's register times out (account created server-side): login + delete, run stops, 0 left.
   python3 "$STUB" "$PORT" 1 & SP=$!; sleep 1
@@ -62,10 +67,28 @@ PY
     n="$(left)"; [ "$(grep -c 'deleted (login 401)' "/tmp/p1-selftest-$sig.log")" = 2 ] && [ "$n" = 0 ] && echo "SELFTEST $sig cleanup: PASS (0 accounts left)" || { echo "SELFTEST $sig cleanup: FAIL ($n left)"; rc=1; }
     kill "$SP"; wait "$SP" 2>/dev/null
   done
-  # 3) Allowlist: any other host is refused before any request.
+  # 3) Stale state: one leftover account that still exists, one already gone. --cleanup-stale
+  #    deletes the first (login then 401), removes both files; a normal run sweeps at start too.
+  python3 "$STUB" "$PORT" 0 & SP=$!; sleep 1
+  mk() { local f; f="$(mktemp -p "$P1_STATE_DIR" p1.state.XXXXXXXX)"; printf '%s\n%s\n' "$1" "$2" > "$f"; }
+  curl -s -o /dev/null -X POST "$LOCAL/auth/register" -d '{"email":"stale1@example.invalid","password":"pw-stale-1"}'
+  mk stale1@example.invalid pw-stale-1; mk gone@example.invalid pw-gone
+  API="$LOCAL" P1_SELFTEST=1 bash "$0" --cleanup-stale > /tmp/p1-selftest-stale.log 2>&1; s1=$?
+  n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
+  [ "$s1" = 0 ] && [ "$n" = 0 ] && [ "$f" = 0 ] && grep -q "account deleted (login 401)" /tmp/p1-selftest-stale.log && grep -q "already gone (login 401)" /tmp/p1-selftest-stale.log \
+    && echo "SELFTEST stale-state --cleanup-stale: PASS (1 deleted, 1 already gone, 0 files left)" || { echo "SELFTEST stale-state --cleanup-stale: FAIL (rc=$s1, $n accounts, $f files left)"; rc=1; }
+  curl -s -o /dev/null -X POST "$LOCAL/auth/register" -d '{"email":"stale2@example.invalid","password":"pw-stale-2"}'; mk stale2@example.invalid pw-stale-2
+  API="$LOCAL" P1_SELFTEST=1 P1_SELFTEST_HOLD=1 bash "$0" > /tmp/p1-selftest-stale2.log 2>&1 & RP=$!
+  for _ in $(seq 50); do grep -q HOLDING /tmp/p1-selftest-stale2.log && break; sleep 0.2; done
+  kill -s TERM "$RP"; wait "$RP" 2>/dev/null
+  n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
+  [ "$n" = 0 ] && [ "$f" = 0 ] && grep -q "STALE .*account deleted (login 401)" /tmp/p1-selftest-stale2.log \
+    && echo "SELFTEST stale-state at run start: PASS (swept before signup, 0 left)" || { echo "SELFTEST stale-state at run start: FAIL ($n accounts, $f files left)"; rc=1; }
+  kill "$SP"; wait "$SP" 2>/dev/null
+  # 4) Allowlist: any other host is refused before any request.
   API="https://example.com/api/v1" bash "$0" > /tmp/p1-selftest-host.log 2>&1; h=$?
   [ "$h" = 2 ] && grep -q "refusing" /tmp/p1-selftest-host.log && echo "SELFTEST allowlist: PASS" || { echo "SELFTEST allowlist: FAIL"; rc=1; }
-  rm -f "$STUB"; exit $rc
+  rm -rf "$STUB" "$P1_STATE_DIR"; exit $rc
 fi
 API="${API:-$ALLOWED_API}"; API="${API%/}"
 if [ "$API" != "$ALLOWED_API" ] && ! { [ "${P1_SELFTEST:-}" = 1 ] && [[ "$API" =~ ^http://127\.0\.0\.1:[0-9]+/api/v1$ ]]; }; then
@@ -110,6 +133,25 @@ delete_account() {
   r DELETE /me "$(cred "$a" '{password:$p}')" "$(uid)"; [ "$C" = 204 ] && DELETED[$a]=1
   AS=""
 }
+# Leftover state files (a run killed before its cleanup, e.g. by a reboot): log in, DELETE /me,
+# confirm login 401, then remove the file. Already gone (login 401): just remove the file.
+# Anything else (network error, 5xx) keeps the file for the next sweep. Returns 1 if any is kept.
+sweep_stale() {
+  local f n=0 kept=0
+  for f in "$STATE_DIR"/p1.state.*; do
+    [ -e "$f" ] || continue
+    n=$((n+1)); ST[stale]="$f"; DELETED[stale]=0
+    delete_account stale
+    TOK[stale]=""; AS=""; r POST /auth/login "$(cred stale '{email:$e,password:$p}')"
+    if [ "$C" = 401 ]; then
+      [ "${DELETED[stale]}" = 1 ] && echo "STALE $(basename "$f"): account deleted (login 401), file removed" || echo "STALE $(basename "$f"): account already gone (login 401), file removed"
+      rm -f "$f"
+    else echo "STALE $(basename "$f"): NOT confirmed deleted (login $C); file kept"; kept=1; fi
+  done
+  unset 'ST[stale]'
+  echo "STALE sweep: $n state file(s) in $STATE_DIR, $([ $kept = 0 ] && echo 'all cleared' || echo 'some kept')"
+  return $kept
+}
 CLEANED=0
 cleanup() {
   [ "$CLEANED" = 1 ] && return; CLEANED=1
@@ -146,6 +188,8 @@ signup() {
   echo "FAIL could not register throwaway account $a"; exit 1
 }
 echo "API $API (first call may take ~60-90 s: cold start)"
+if [ "${1:-}" = --cleanup-stale ]; then trap - EXIT; sweep_stale; rc=$?; rm -f "$B" "$BF" "$HF"; exit $rc; fi
+sweep_stale || echo "  (continuing: kept state files are retried on the next run)"
 signup A; signup B
 [ -n "${TOK[A]}" ] && [ -n "${TOK[B]}" ] || { echo "FAIL could not get tokens for throwaway accounts"; exit 1; }
 if [ "${P1_SELFTEST:-}" = 1 ]; then

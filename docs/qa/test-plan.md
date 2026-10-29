@@ -67,6 +67,12 @@ Follow-up for Backend/contract: document the 401-after-delete retry in `openapi.
 
 Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Only runs against `https://fitness-api-6pcc.onrender.com/api/v1` (host allowlist; the only Fitness API server, used as prod). `--self-test` checks the register-timeout recovery, INT/TERM cleanup and the allowlist against a local stub. Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 state files under `~/.cache/p1-state` (outside /tmp, so a reboot mid-run cannot lose them; override with `P1_STATE_DIR`), never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
 
+**Stale state (killed runs):** every run starts by sweeping `$P1_STATE_DIR` (default `~/.cache/p1-state`); `scripts/prod-check-p1.sh --cleanup-stale` does only the sweep and exits (non-zero if any file is kept).
+
+| # | Check | Self-test 2026-10-29 |
+|---|---|---|
+| CL-STALE | leftover state file whose account exists: login → DELETE /me → login 401 → file removed; account already gone (login 401): file removed; any other login result keeps the file. Self-test (stub): `--cleanup-stale` with one live + one gone account leaves 0 accounts / 0 files; a normal run sweeps a seeded stale account before signup. Self-test runs use their own temp state dir. | PASS |
+
 **Last prod run: 2026-10-29 12:39:12 IST — 144/144 PASS (SC 20, PM 27, NS 12, ST 27, MT 21, PG 37), both accounts deleted (login 401).**
 
 ### Session corrections (#63)
