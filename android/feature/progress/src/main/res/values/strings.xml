@@ -33,7 +33,8 @@
     <string name="kind_hip">Hip</string>
     <string name="kind_arm">Arm</string>
     <string name="kind_thigh">Thigh</string>
-    <string name="progress_xp">XP</string>
+    <string name="xp_ledger_title">XP history</string>
+    <string name="xp_ledger_balance">Level %1$d · %2$s XP</string>
     <string name="xp_amount">%1$s XP</string>
     <string name="xp_source_workout">Workout</string>
     <string name="xp_source_adjustment">Adjustment</string>

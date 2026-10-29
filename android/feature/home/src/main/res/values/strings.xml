@@ -23,4 +23,5 @@
     <string name="home_xp_empty">No XP yet. Complete a workout to earn some.</string>
     <string name="home_xp_level">Level %1$d · %2$s XP</string>
     <string name="home_xp_next">%1$d / %2$d XP to the next level</string>
+    <string name="home_xp_history">XP history</string>
 </resources>

@@ -37,11 +37,12 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     planDayContent: @Composable (PlanDay) -> Unit = { DefaultPlanDayContent(it) },
     extraSlots: LazyListScope.(HomeState) -> Unit = {},
+    onOpenXpLedger: (() -> Unit)? = null,
 ) {
     val vm: HomeViewModel = hiltViewModel()
     val s by vm.state.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
-    HomeContent(s, onRetry = vm::refresh, modifier = modifier, planDayContent = planDayContent, extraSlots = extraSlots)
+    HomeContent(s, onRetry = vm::refresh, modifier = modifier, planDayContent = planDayContent, extraSlots = extraSlots, onOpenXpLedger = onOpenXpLedger)
 }
 
 @Composable
@@ -51,6 +52,7 @@ fun HomeContent(
     modifier: Modifier = Modifier,
     planDayContent: @Composable (PlanDay) -> Unit = { DefaultPlanDayContent(it) },
     extraSlots: LazyListScope.(HomeState) -> Unit = {},
+    onOpenXpLedger: (() -> Unit)? = null,
 ) {
     LazyColumn(
         modifier.fillMaxSize().testTag("home_list"),
@@ -60,7 +62,7 @@ fun HomeContent(
         item(key = "plan") { PlanDaySlot(s.plan, onRetry, planDayContent) }
         item(key = "nutrition") { NutritionSlot(s.nutrition, s.units, onRetry) }
         item(key = "streak") { StreakSlot(s.streak, onRetry) }
-        item(key = "xp") { XpSlot(s.xp, onRetry) }
+        item(key = "xp") { XpSlot(s.xp, onRetry, onOpenXpLedger) }
         extraSlots(s)
     }
 }
@@ -148,8 +150,19 @@ fun StreakSlot(slot: Slot<Streak>, onRetry: () -> Unit) =
     }
 
 @Composable
-fun XpSlot(slot: Slot<XpBalance>, onRetry: () -> Unit) =
+fun XpSlot(slot: Slot<XpBalance>, onRetry: () -> Unit, onOpenLedger: (() -> Unit)? = null) =
     SlotCard(stringResource(R.string.home_xp_title), slot, onRetry, "slot_xp") { xp ->
+        XpSlotBody(xp)
+        // Tag value matches QA's contract (XpLedgerTags.OPEN in feature:progress).
+        if (onOpenLedger != null) {
+            androidx.compose.material3.TextButton(onClick = onOpenLedger, modifier = Modifier.testTag("xp_open_ledger")) {
+                Text(stringResource(R.string.home_xp_history))
+            }
+        }
+    }
+
+@Composable
+private fun XpSlotBody(xp: XpBalance) {
         if (xp.total == 0) {
             Text(stringResource(R.string.home_xp_empty))
         } else {
@@ -160,7 +173,7 @@ fun XpSlot(slot: Slot<XpBalance>, onRetry: () -> Unit) =
             )
             Text(stringResource(R.string.home_xp_next, xp.xpIntoLevel, xp.xpForNextLevel), style = MaterialTheme.typography.bodySmall)
         }
-    }
+}
 
 /** en-IN, half-up (same rules as nutrition). Water is ml, or US fl oz for imperial. */
 internal object HomeFormat {

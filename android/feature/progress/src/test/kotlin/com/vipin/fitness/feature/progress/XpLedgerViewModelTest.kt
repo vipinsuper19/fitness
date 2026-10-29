@@ -1,9 +1,9 @@
 package com.vipin.fitness.feature.progress
 
-import com.vipin.fitness.core.data.xp.XpLedgerPage
+import com.vipin.fitness.core.data.XpBalance
 import com.vipin.fitness.core.data.xp.XpSourceType
-import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.testing.FAKE_NETWORK_FAILURE
+import com.vipin.fitness.core.testing.FakeHomeRepository
 import com.vipin.fitness.core.testing.FakeXpLedgerRepository
 import com.vipin.fitness.core.testing.MainDispatcherRule
 import com.vipin.fitness.core.testing.testXpEntry
@@ -17,12 +17,14 @@ class XpLedgerViewModelTest {
     @get:Rule val main = MainDispatcherRule()
     private val repo = FakeXpLedgerRepository()
 
-    private fun page(vararg ids: String, next: String? = null) =
-        ApiResult.Success(XpLedgerPage(ids.map { testXpEntry(it) }, next))
+    private val home = FakeHomeRepository()
+    private fun vm() = XpLedgerViewModel(repo, home)
+    private fun page(vararg ids: String, next: String? = null) = ids.map { testXpEntry(it) } to next
 
     @Test fun pagesThroughAndDropsDuplicates() {
-        repo.pages = { c -> if (c == null) page("a", "b", next = "c2") else page("b", "c") }
-        val vm = XpLedgerViewModel(repo)
+        repo.pages[null] = page("a", "b", next = "c2")
+        repo.pages["c2"] = page("b", "c")
+        val vm = vm()
         vm.loadMore()
         assertEquals(listOf("a", "b", "c"), vm.state.value.items.map { it.id })
         assertNull(vm.state.value.nextCursor)
@@ -31,20 +33,31 @@ class XpLedgerViewModelTest {
     }
 
     @Test fun emptyAndOfflineAndRetry() {
-        assertTrue(XpLedgerViewModel(repo).state.value.empty)
-        repo.pages = { FAKE_NETWORK_FAILURE }
-        val vm = XpLedgerViewModel(repo)
+        repo.pages[null] = page()
+        assertTrue(vm().state.value.empty)
+        repo.pages.clear() // no page = offline
+        val vm = vm()
         assertEquals(XpLedgerError.OFFLINE, vm.state.value.error)
-        repo.pages = { page("a") }
+        repo.pages[null] = page("a")
         vm.refresh()
         assertEquals(listOf("a"), vm.state.value.items.map { it.id })
     }
 
     @Test fun laterPageFailureKeepsTheList() {
-        repo.pages = { c -> if (c == null) page("a", next = "c2") else FAKE_NETWORK_FAILURE }
-        val vm = XpLedgerViewModel(repo)
+        repo.pages[null] = page("a", next = "c2")
+        val vm = vm()
         vm.loadMore()
         assertEquals(XpLedgerError.OFFLINE, vm.state.value.moreError)
+        assertEquals(listOf("a"), vm.state.value.items.map { it.id })
+    }
+
+    @Test fun balanceShowsAndItsFailureDoesNotBlockTheList() {
+        repo.pages[null] = page("a")
+        home.xp = XpBalance(1250, 4, 50, 300)
+        assertEquals(1250, vm().state.value.balance?.total)
+        home.xpFailure = FAKE_NETWORK_FAILURE
+        val vm = vm()
+        assertEquals(null, vm.state.value.balance)
         assertEquals(listOf("a"), vm.state.value.items.map { it.id })
     }
 

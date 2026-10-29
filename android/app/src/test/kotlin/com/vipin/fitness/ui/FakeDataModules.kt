@@ -86,13 +86,3 @@ abstract class FakeProgressDataModule {
         @Provides @Singleton fun fakeUnits() = FakeUnitPreference()
     }
 }
-
-@Module
-@TestInstallIn(components = [SingletonComponent::class], replaces = [com.vipin.fitness.core.data.di.XpDataModule::class])
-abstract class FakeXpDataModule {
-    @Binds abstract fun xpLedger(f: com.vipin.fitness.core.testing.FakeXpLedgerRepository): com.vipin.fitness.core.data.xp.XpLedgerRepository
-
-    companion object {
-        @Provides @Singleton fun fakeXpLedger() = com.vipin.fitness.core.testing.FakeXpLedgerRepository()
-    }
-}

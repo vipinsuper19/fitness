@@ -2,6 +2,8 @@ package com.vipin.fitness.feature.progress
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vipin.fitness.core.data.HomeRepository
+import com.vipin.fitness.core.data.XpBalance
 import com.vipin.fitness.core.data.xp.XpEntry
 import com.vipin.fitness.core.data.xp.XpLedgerRepository
 import com.vipin.fitness.core.network.ApiError
@@ -25,13 +27,18 @@ data class XpLedgerState(
     val loadingMore: Boolean = false,
     val error: XpLedgerError? = null,
     val moreError: XpLedgerError? = null,
+    /** Header total; null until loaded or when it fails (the list still shows). */
+    val balance: XpBalance? = null,
 ) {
     val empty get() = !loading && error == null && items.isEmpty()
 }
 
 /** The read-only XP ledger, newest first, paged by cursor. */
 @HiltViewModel
-class XpLedgerViewModel @Inject constructor(private val repo: XpLedgerRepository) : ViewModel() {
+class XpLedgerViewModel @Inject constructor(
+    private val repo: XpLedgerRepository,
+    private val home: HomeRepository,
+) : ViewModel() {
     private val _state = MutableStateFlow(XpLedgerState())
     val state: StateFlow<XpLedgerState> = _state.asStateFlow()
 
@@ -40,12 +47,18 @@ class XpLedgerViewModel @Inject constructor(private val repo: XpLedgerRepository
     }
 
     fun refresh() {
-        _state.value = XpLedgerState(loading = true)
+        _state.update { XpLedgerState(loading = true, balance = it.balance) }
         viewModelScope.launch {
-            _state.value = when (val r = repo.ledger(null)) {
-                is ApiResult.Success -> XpLedgerState(loading = false, items = r.value.items, nextCursor = r.value.nextCursor)
-                is ApiResult.Failure -> XpLedgerState(loading = false, error = r.error.toLedgerError())
+            val r = repo.ledger(null)
+            _state.update {
+                when (r) {
+                    is ApiResult.Success -> it.copy(loading = false, items = r.value.items, nextCursor = r.value.nextCursor)
+                    is ApiResult.Failure -> it.copy(loading = false, error = r.error.toLedgerError())
+                }
             }
+        }
+        viewModelScope.launch {
+            (home.xpBalance() as? ApiResult.Success)?.value?.let { b -> _state.update { it.copy(balance = b) } }
         }
     }
 

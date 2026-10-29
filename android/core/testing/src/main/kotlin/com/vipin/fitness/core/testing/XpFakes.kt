@@ -7,18 +7,30 @@ import com.vipin.fitness.core.data.xp.XpSourceType
 import com.vipin.fitness.core.network.ApiResult
 import java.time.Instant
 
-fun testXpEntry(id: String, amount: Int = 50, type: String = "workout_session", reason: String = "Workout completed") = XpEntry(
+/** A ledger row from wire values, as GET /xp/ledger would return it (unknown types allowed). */
+fun testXpEntry(
+    id: String,
+    amount: Int = 50,
+    type: String = "workout_session",
+    reason: String = "Workout completed",
+    createdAt: String = "2026-10-20T06:30:00Z",
+) = XpEntry(
     id = id, sourceType = XpSourceType.from(type), rawSourceType = type, sourceId = "src-$id",
-    amount = amount, reason = reason, createdAt = Instant.parse("2026-10-20T06:30:00Z"),
+    amount = amount, reason = reason, createdAt = Instant.parse(createdAt),
 )
 
-/** Pages come from [pages] keyed by cursor (null = first page). */
+/**
+ * In-memory ledger in the shape of QA's PendingXpLedgerSeed (#92): [pages] maps a cursor
+ * (null = first page) to (items, nextCursor); a cursor with no page is a network failure.
+ * Every call's cursor is recorded in [calls].
+ */
 class FakeXpLedgerRepository : XpLedgerRepository {
-    var pages: (String?) -> ApiResult<XpLedgerPage> = { ApiResult.Success(XpLedgerPage(emptyList(), null)) }
+    val pages = mutableMapOf<String?, Pair<List<XpEntry>, String?>>()
     val calls = mutableListOf<String?>()
 
     override suspend fun ledger(cursor: String?): ApiResult<XpLedgerPage> {
         calls += cursor
-        return pages(cursor)
+        val page = pages[cursor] ?: return FAKE_NETWORK_FAILURE
+        return ApiResult.Success(XpLedgerPage(page.first, page.second))
     }
 }

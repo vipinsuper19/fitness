@@ -60,13 +60,8 @@ fun ProgressScreen(modifier: Modifier = Modifier) {
         PrimaryTabRow(selectedTabIndex = tab) {
             Tab(tab == 0, { tab = 0 }, Modifier.testTag("progress_tab_charts"), text = { Text(stringResource(R.string.progress_charts)) })
             Tab(tab == 1, { tab = 1 }, Modifier.testTag("progress_tab_measurements"), text = { Text(stringResource(R.string.progress_measurements)) })
-            Tab(tab == 2, { tab = 2 }, Modifier.testTag("progress_tab_xp"), text = { Text(stringResource(R.string.progress_xp)) })
         }
-        when (tab) {
-            0 -> ChartsScreen(hiltViewModel())
-            1 -> MeasurementsScreen(hiltViewModel())
-            else -> XpLedgerScreen(hiltViewModel())
-        }
+        if (tab == 0) ChartsScreen(hiltViewModel()) else MeasurementsScreen(hiltViewModel())
     }
 }
 

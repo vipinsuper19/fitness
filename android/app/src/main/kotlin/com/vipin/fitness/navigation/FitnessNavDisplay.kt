@@ -11,6 +11,7 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.vipin.fitness.feature.progress.XpLedgerRoute
 import com.vipin.fitness.feature.auth.RegisterRoute
 import com.vipin.fitness.feature.auth.SignInRoute
 import com.vipin.fitness.feature.onboarding.OnboardingRoute
@@ -79,6 +80,7 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                         FitnessApp(
                             onOpenProfile = { backStack.add(Route.Profile) },
                             onOpenAchievements = { backStack.add(Route.Achievements) },
+                            onOpenXpLedger = { backStack.add(Route.XpLedger) },
                             onWorkoutNavigate = { dest ->
                                 backStack.add(
                                     when (dest) {
@@ -147,6 +149,9 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                 Route.ExportData -> NavEntry(key) { ExportRoute() }
                 Route.Achievements -> NavEntry(key) {
                     AchievementsRoute()
+                }
+                Route.XpLedger -> NavEntry(key) {
+                    XpLedgerRoute()
                 }
             }
         },

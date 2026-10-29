@@ -25,19 +25,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.data.xp.XpEntry
 import com.vipin.fitness.core.data.xp.XpSourceType
 import java.text.NumberFormat
 import java.time.format.DateTimeFormatter
 
+/** Test tags; values agreed with QA's contract (#92). */
 object XpLedgerTags {
+    /** On the Home XP card (slot_xp): opens the ledger. */
+    const val OPEN = "xp_open_ledger"
+    const val SCREEN = "xp_ledger_screen"
     const val LIST = "xp_ledger_list"
     const val EMPTY = "xp_ledger_empty"
     const val ERROR = "xp_ledger_error"
     const val RETRY = "xp_ledger_retry"
+    const val BALANCE = "xp_ledger_balance"
     const val MORE_RETRY = "xp_ledger_more_retry"
-    fun row(id: String) = "xp_ledger_row_$id"
+    fun row(id: String) = "xp_row_$id"
+    fun amount(id: String) = "xp_amount_$id"
 }
 
 /** en-IN, always signed: "+1,250" or "−20" (true minus sign). */
@@ -62,14 +69,30 @@ internal fun XpSourceType.label(): Int = when (this) {
     XpSourceType.UNKNOWN -> R.string.xp_source_other
 }
 
+/** Read-only XP history, opened from the Home XP card. */
 @Composable
-fun XpLedgerScreen(viewModel: XpLedgerViewModel) {
+fun XpLedgerRoute(viewModel: XpLedgerViewModel = hiltViewModel()) {
     val s by viewModel.state.collectAsStateWithLifecycle()
     XpLedgerContent(s, onRetry = viewModel::refresh, onLoadMore = viewModel::loadMore)
 }
 
 @Composable
 fun XpLedgerContent(s: XpLedgerState, onRetry: () -> Unit, onLoadMore: () -> Unit) {
+    Column(Modifier.fillMaxSize().testTag(XpLedgerTags.SCREEN)) {
+        Text(stringResource(R.string.xp_ledger_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
+        s.balance?.let { b ->
+            Text(
+                stringResource(R.string.xp_ledger_balance, b.level, NumberFormat.getIntegerInstance(ProgressFormat.LOCALE).format(b.total.toLong())),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp).testTag(XpLedgerTags.BALANCE),
+            )
+        }
+        Box(Modifier.weight(1f)) { LedgerBody(s, onRetry, onLoadMore) }
+    }
+}
+
+@Composable
+private fun LedgerBody(s: XpLedgerState, onRetry: () -> Unit, onLoadMore: () -> Unit) {
     when {
         s.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         s.error != null -> Column(
@@ -98,6 +121,7 @@ fun XpLedgerContent(s: XpLedgerState, onRetry: () -> Unit, onLoadMore: () -> Uni
                         }
                         Text(
                             stringResource(R.string.xp_amount, XpFormat.amount(e.amount)),
+                            modifier = Modifier.testTag(XpLedgerTags.amount(e.id)),
                             style = MaterialTheme.typography.titleMedium,
                             color = if (e.amount < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                         )
