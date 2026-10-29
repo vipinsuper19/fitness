@@ -1511,7 +1511,7 @@ paths:
       tags: [workout-plans]
       operationId: updateWorkoutPlan
       summary: Edit a plan by creating a new version
-      description: The new version keeps the latest version's name (`name` in the body is ignored; rename with `PUT .../name`). Each exercise's `restSeconds` is not carried over from the previous version: a missing or `null` value resets it to 90, so clients should always send it. Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
+      description: The new version keeps the latest version's name (`name` in the body is ignored; rename with `PUT .../name`). Each exercise's `restSeconds` is not carried over from the previous version; a missing or `null` value resets it to 90, so clients should always send it. Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
