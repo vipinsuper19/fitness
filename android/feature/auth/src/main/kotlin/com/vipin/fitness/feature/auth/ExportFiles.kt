@@ -3,11 +3,13 @@ package com.vipin.fitness.feature.auth
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.vipin.fitness.core.data.UserScopedState
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import dagger.multibindings.IntoSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -27,13 +29,15 @@ interface ExportFiles {
 
 /**
  * Keeps at most one export, in cache/exports (the only folder the FileProvider exposes). The
- * export is personal data, so older ones are deleted on each export rather than piling up.
+ * export is personal data, so older ones are deleted on each export rather than piling up, and
+ * the folder is wiped on sign-out and account deletion (both run SessionRepository.signOut,
+ * which clears every [UserScopedState]) and when another account signs in.
  */
 @Singleton
 class CacheExportFiles @Inject constructor(
     @ApplicationContext private val context: Context,
     private val clock: Clock,
-) : ExportFiles {
+) : ExportFiles, UserScopedState {
     private val dir get() = File(context.cacheDir, "exports")
 
     override fun suggestedName() = "fitness-export-${LocalDate.now(clock)}.json"
@@ -43,6 +47,10 @@ class CacheExportFiles @Inject constructor(
         dir.mkdirs()
         val file = File(dir, suggestedName()).apply { writeText(json) }
         FileProvider.getUriForFile(context, "${context.packageName}.exports", file)
+    }
+
+    override suspend fun clearUserState() {
+        withContext(Dispatchers.IO) { dir.deleteRecursively() }
     }
 
     override suspend fun copy(from: Uri, to: Uri) = withContext(Dispatchers.IO) {
@@ -56,4 +64,5 @@ class CacheExportFiles @Inject constructor(
 @InstallIn(SingletonComponent::class)
 abstract class ExportFilesModule {
     @Binds abstract fun exportFiles(impl: CacheExportFiles): ExportFiles
+    @Binds @IntoSet abstract fun exportFilesUserState(impl: CacheExportFiles): UserScopedState
 }
