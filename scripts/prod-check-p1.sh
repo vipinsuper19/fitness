@@ -309,6 +309,41 @@ AS=""
 r GET "/progress/exercises?from=$YDAY&to=$TODAY"; check "ST25 list unauthenticated -> 401" "$(is 401)" "C=$C"
 r GET "/progress/exercises/$EX2?from=$YDAY&to=$TODAY"; check "ST26 detail unauthenticated -> 401" "$(is 401)" "C=$C"
 
+echo "== Macro targets (#85) =="
+AS=B
+r GET /me/profile; check "MT01 new profile: macro targets null" "$([ "$C" = 200 ] && [ "$(j '[.dailyProteinTargetG,.dailyCarbsTargetG,.dailyFatTargetG]|map(select(.!=null))|length')" = 0 ] && echo 0 || echo 1)" "C=$C $(j -c '{dailyProteinTargetG,dailyCarbsTargetG,dailyFatTargetG}')"
+AS=A
+pf() { j "[.dailyProteinTargetG,.dailyCarbsTargetG,.dailyFatTargetG]|map(tostring)|join(\",\")"; }
+r PUT /me/profile '{"dailyProteinTargetG":120,"dailyCarbsTargetG":250,"dailyFatTargetG":70}' "$(uid)"; check "MT02 PUT sets all three (200, echoed)" "$([ "$C" = 200 ] && [ "$(pf)" = 120,250,70 ] && echo 0 || echo 1)" "C=$C $(pf)"
+r GET /me/profile; check "MT03 GET returns them" "$([ "$(pf)" = 120,250,70 ] && echo 0 || echo 1)" "$(pf)"
+r PUT /me/profile '{"dailyCarbsTargetG":null}' "$(uid)"; r GET /me/profile; check "MT04 explicit null clears carbs, others kept" "$([ "$(pf)" = 120,null,70 ] && echo 0 || echo 1)" "$(pf)"
+r PUT /me/profile '{"dailyFatTargetG":0}' "$(uid)"; check "MT05 PUT 0 -> 200, returned as null" "$([ "$C" = 200 ] && [ "$(j .dailyFatTargetG)" = null ] && echo 0 || echo 1)" "C=$C fat=$(j .dailyFatTargetG)"
+r GET /me/profile; check "MT06 GET after 0: null, protein kept" "$([ "$(pf)" = 120,null,null ] && echo 0 || echo 1)" "$(pf)"
+for v in -1 1001 12.5 '"50"'; do r PUT /me/profile "{\"dailyProteinTargetG\":$v}" "$(uid)"; check "MT07 protein $v -> 400" "$(is 400)" "C=$C"; done
+r PUT /me/profile '{"dailyCarbsTargetG":1000}' "$(uid)"; check "MT08 1000 accepted" "$([ "$C" = 200 ] && [ "$(j .dailyCarbsTargetG)" = 1000 ] && echo 0 || echo 1)" "C=$C"
+r PUT /me/profile '{"dailyCarbsTargetG":null}' "$(uid)"
+r GET /me/profile; check "MT09 invalid PUTs changed nothing (protein 120)" "$([ "$(pf)" = 120,null,null ] && echo 0 || echo 1)" "$(pf)"
+r PUT /me/profile '{"dailyCalorieTargetKcal":2200}' "$(uid)"; check "MT10 setting kcal target doesn't derive macros" "$([ "$(pf)" = 120,null,null ] && echo 0 || echo 1)" "$(pf)"
+r PUT /me/profile '{"dailyCalorieTargetKcal":null}' "$(uid)"
+r GET "/nutrition/summary?from=$YDAY&to=$TODAY"
+check "MT11 summary targets: protein 120, carbs/fat null, non-null with only a macro set" "$([ "$(j '.targets.proteinG')" = 120 ] && [ "$(j '.targets.carbsG')" = null ] && [ "$(j '.targets.fatG')" = null ] && echo 0 || echo 1)" "$(j -c .targets)"
+PT=".points[]|select(.period==\"$TODAY\")"
+check "MT12 today: proteinPct = protein/120*100 (1 dp), carbs/fat pct null" "$(python3 -c "
+import json,sys,decimal as D
+d=json.load(open(sys.argv[1])); p=[x for x in d['points'] if x['period']==sys.argv[2]][0]; a=p['adherence']
+prot=p['totals']['proteinG']; exp=(D.Decimal(str(prot))/120*100).quantize(D.Decimal('0.1'),D.ROUND_HALF_UP)
+ok=a and a['carbsPct'] is None and a['fatPct'] is None and a['proteinPct'] is not None and abs(D.Decimal(str(a['proteinPct']))-exp)<=D.Decimal('0.1')
+sys.exit(0 if ok else 1)" "$B" "$TODAY" && echo 0 || echo 1)" "$(j -c "$PT|{totals:{proteinG:.totals.proteinG},adherence}")"
+check "MT13 yesterday (no food): adherence null" "$([ "$(j ".points[]|select(.period==\"$YDAY\")|.adherence")" = null ] && echo 0 || echo 1)" "$(j -c ".points[]|select(.period==\"$YDAY\")|.adherence")"
+r GET "/nutrition/summary?from=$WFROM&to=$TODAY&bucket=month"
+check "MT14 current targets apply to the whole range (month bucket echoes protein 120)" "$([ "$C" = 200 ] && [ "$(j .targets.proteinG)" = 120 ] && echo 0 || echo 1)" "C=$C"
+r GET /me/export; check "MT15 export includes macro targets" "$([ "$C" = 200 ] && [ "$(j '[.. | objects | select(has("dailyProteinTargetG"))][0].dailyProteinTargetG')" = 120 ] && echo 0 || echo 1)" "C=$C"
+AS=B
+r GET /me/profile; check "MT16 other user unaffected (null targets)" "$([ "$(pf)" = null,null,null ] && echo 0 || echo 1)" "$(pf)"
+r GET "/nutrition/summary?from=$YDAY&to=$TODAY"; check "MT17 other user summary targets null" "$([ "$(j .targets)" = null ] && echo 0 || echo 1)" "$(j -c .targets)"
+AS=""
+r PUT /me/profile '{"dailyProteinTargetG":10}' "$(uid)"; check "MT18 unauthenticated PUT -> 401" "$(is 401)" "C=$C"
+
 # Delete both accounts now (trap also covers failures).
 for a in A B; do AS=$a; r DELETE /me "$(cred $a '{password:$p}')" "$(uid)"; [ "$C" = 204 ] && DELETED[$a]=1; done
 AS=""
