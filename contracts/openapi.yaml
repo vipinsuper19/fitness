@@ -262,8 +262,9 @@ paths:
       summary: Dated history of the daily targets (read-only)
       description: |
         One entry per local date on which any of the five daily targets changed, newest first; each is a full snapshot.
-        Written only by `PUT /me/profile` (a target change upserts today's row in the profile timezone). Past entries cannot
-        be edited in v1. See docs/specs/target-history.md.
+        Written only by `PUT /me/profile`: a target change upserts today's row in the profile timezone, using the new timezone
+        if the same PUT changes it, in the same transaction. Past entries cannot be edited in v1 (back-dated edits are future
+        work and would not recompute derived data). Days before the first entry have no targets. See docs/specs/target-history.md.
       responses:
         '200':
           description: Target history, newest first
@@ -2632,7 +2633,7 @@ components:
         `kcalPct` = `avgPerLoggedDay.energyKcal` / `targets.kcal` × 100; `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro>` / `targets.<macro>` × 100
         (each macro pct is null when its own target is null, independently of the others; each day uses its own target in effect); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
         With dated targets (docs/specs/target-history.md) each pct is a ratio of sums over the counted days (logged days whose own
-        target is non-null): Σ intake ÷ Σ that day's target × 100. This equals the formulas above when the target is constant over the
+        target is non-null; days before the user's first target never count): Σ intake ÷ Σ that day's target × 100. This equals the formulas above when the target is constant over the
         period. A pct is null when no counted day exists.
       required: [kcalPct, proteinPct, carbsPct, fatPct, waterPct]
       properties:

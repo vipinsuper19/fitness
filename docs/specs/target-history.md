@@ -18,7 +18,7 @@ Primary key `(user_id, effective_from)`: at most one row per user per local date
 - The `user_profiles` columns stay as they are and remain the source for `GET /me/profile`. History is written alongside them.
 
 ## Writes (`PUT /me/profile`)
-- When a `PUT /me/profile` **changes the value** of any of the five targets (after 0 → null), the same transaction **upserts today's row** with the full new snapshot. "Today" is the local date in the profile timezone, using the timezone **after** this PUT is applied (if the same PUT changes `timezone`).
+- When a `PUT /me/profile` **changes the value** of any of the five targets (after 0 → null), the same transaction **upserts today's row** with the full new snapshot. "Today" is the local date in the profile timezone, using the timezone **after** this PUT is applied: if the same PUT changes `timezone`, the new zone is used, in the same transaction (decision 1).
 - Several changes on the same local day **replace** that day's row, so the last write of the day wins. The day's numbers use the final targets of that day.
 - A PUT that leaves the five target values unchanged (fields omitted, or the same value re-sent) writes nothing. An idempotent replay writes nothing either.
 - No other endpoint writes history. `GET /me/macro-suggestion` never writes.
@@ -27,7 +27,7 @@ Primary key `(user_id, effective_from)`: at most one row per user per local date
 ## Backfill
 - Every existing profile with **at least one** non-null target gets one row with `effective_from = 1900-01-01` (the earliest date the summary accepts) holding its current five values. Past periods are therefore **unchanged at migration time**.
 - Profiles with no targets get no row, which reads as all-null, the same as today.
-- New users get no backfill row. Their first target-setting PUT writes a row for that day, and days before it have no targets.
+- New users get no backfill row. Their first target-setting PUT writes a row for that day, and days before it have no targets. The first target does not apply back to sign-up (decision 3).
 
 ## Reads
 ### `GET /nutrition/summary`
@@ -52,7 +52,7 @@ Food and water logs already carry a local `date`. Each logged day uses its own t
 ### `GET /me/target-history` (new, read-only)
 - Returns `{ items: TargetHistoryEntry[] }`, newest `effectiveFrom` first, with no paging. There is at most one row per day the targets changed, so the list stays small. The server caps it at 1000 rows with a note.
 - A backfilled row shows `effectiveFrom: "1900-01-01"`, which clients display as "since you joined".
-- **No editing in v1.** There is no POST, PATCH or DELETE, and past entries can't be changed. To change targets, use `PUT /me/profile`, which affects today onwards. Back-dated edits would silently rewrite past adherence and badges, so they are a possible v2 feature.
+- **No editing in v1.** There is no POST, PATCH or DELETE, and past entries can't be changed. To change targets, use `PUT /me/profile`, which affects today onwards. Back-dated edits are future work and would not recompute anything derived (decision 4).
 
 ## Export
 `GET /me/export` gains `targetHistory: TargetHistoryEntry[]` (newest first, the same shape as the endpoint). Account deletion removes it through the cascade.
@@ -80,7 +80,11 @@ Rollback: the old app ignores the table, so rolling back the app is safe. The ta
   - A PUT with no target change, the same value, or only a non-target field writes nothing.
   - 0 is stored as null.
   - An Idempotency-Key replay writes nothing.
-- **Timezone:** at 23:30 UTC on Oct 9, an `Asia/Kolkata` user's row is dated Oct 10. A PUT that changes `timezone` and kcal together uses the new zone. Use a faked clock (Date only).
+- **Timezone (decision 1):**
+  - At 23:30 UTC on Oct 9, an `Asia/Kolkata` user's row is dated Oct 10.
+  - At 20:00 UTC on Oct 9, a PUT that changes `timezone` from `America/New_York` to `Asia/Kolkata` and kcal together writes a row dated Oct 10 (the new zone), not Oct 9.
+  - If the history write fails (forced), the profile change rolls back as well (same transaction).
+  - Use a faked clock (Date only).
 - **Backfill:**
   - A user with targets gets exactly one `1900-01-01` row equal to the profile.
   - A user with no targets gets no row.
@@ -91,10 +95,10 @@ Rollback: the old app ignores the table, so rolling back the app is safe. The ta
   - 2000 kcal until the 10th, then 1800: a `day` bucket uses each day's own target.
   - A `week` straddling the change gives `kcalPct` = Σ intake ÷ Σ targets of the logged days, `targetsChanged: true`, and `targets` equal to the last day's.
   - A constant target matches the old formula exactly (regression).
-  - A logged day before the user's first target is excluded from the pct but still counted in `avgPerLoggedDay`.
+  - Decision 3: a new user logs on Oct 1–3 and sets 2000 kcal on Oct 3. The week's `kcalPct` uses only Oct 3, while `avgPerLoggedDay` and `daysLogged` (3) cover all three days. A range of Oct 1–2 alone gives a null `kcalPct` and null `targets`.
   - A period with no day that has the target gives a null pct.
   - Water uses `waterDaysLogged` days only.
-  - Top-level `targets` uses `to`.
+  - Top-level `targets` uses `to` (decision 2): with a range ending before a change, it equals the old targets, while `GET /me/profile` shows the new ones. With `to` before the first target, it is null.
   - HALF_UP is computed from unrounded sums.
 - **Daily view:** `/nutrition/daily` for a past date shows that day's targets.
 - **History endpoint:** newest first; 401 without a token; another user's rows are never visible; POST, PATCH and DELETE give 404/405.
@@ -106,9 +110,9 @@ Rollback: the old app ignores the table, so rolling back the app is safe. The ta
 - Summary: load the user's history rows with `effective_from ≤ to` once, newest first. Resolve each day's targets in code with one forward walk over the range (at most 366 days). No per-day queries.
 - Decimal maths and HALF_UP as before.
 
-## Open questions
-1. **"Today" when a PUT also changes `timezone`:** this spec uses the new zone. Is that right, or should it use the old one?
-2. **Top-level `summary.targets`:** this spec uses the targets in effect on `to`. Should it stay "current" for UI compatibility, with clients reading per-point `targets` instead?
-3. **Badges and challenges:** are there any that use target adherence? None today; if added later, they should use the day's own target.
-4. **Back-dated editing of history in v2:** if it's added, should it re-evaluate anything derived?
-5. **Pre-history days for new users** (logged before the first target): this spec excludes them from pcts. The alternative is to apply the first target back to account creation.
+## Decisions (Tech Lead, #104)
+1. **Timezone and target in one PUT:** "today" is computed in the **new** timezone, and the history row is written in the **same transaction** as the profile update.
+2. **Top-level `summary.targets`** is the targets in effect on `to`. Per-period targets are on each point.
+3. **Days before the first target:** days logged before the user's first history row are **excluded** from the pcts. They still count in `avgPerLoggedDay` and `daysLogged`. The first target does **not** apply back to sign-up.
+4. **No back-dated edits in v1.** History is written only by `PUT /me/profile` for today. Back-dated editing is future work. If it is added, it will **not recompute** anything derived (XP, badges, challenges); reads simply use the edited rows.
+- **Badges and challenges:** none use target adherence today. Any future ones must use **each day's own target** in effect, never the current one.
