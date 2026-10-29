@@ -52,6 +52,12 @@ class NotificationSettingsScreenTest {
         compose.onNodeWithTag(Tags.SAVED).performScrollTo()
     }
 
+    @Test fun quietTimesUseFormatResources() {
+        show()
+        compose.onNodeWithTag(Tags.QUIET_START).performScrollTo().assertTextContains("Start 22:00", substring = true)
+        compose.onNodeWithTag(Tags.QUIET_END).performScrollTo().assertTextContains("End 07:00", substring = true)
+    }
+
     @Test fun offlineShowsRetry() {
         repo.getResult = { FAKE_NETWORK_FAILURE }
         show()

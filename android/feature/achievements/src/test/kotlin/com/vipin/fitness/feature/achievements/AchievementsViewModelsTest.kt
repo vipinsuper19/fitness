@@ -46,6 +46,20 @@ class BadgesViewModelTest {
         assertEquals(500, (vm.state.value.error as ApiError.Http).status)
     }
 
+    @Test fun hydrated7IsListedThenCelebratedOnceWhenEarned() {
+        repo.badgeList = BadgeList(listOf(com.vipin.fitness.core.testing.testHydratedBadge(current = 6)), 0)
+        val vm = BadgesViewModel(repo, tracker)
+        val b = vm.state.value.badges.single()
+        assertEquals("HYDRATED_7", b.code)
+        assertEquals(6, b.progress!!.current)
+        repo.badgeList = BadgeList(listOf(com.vipin.fitness.core.testing.testHydratedBadge(earnedAt = Instant.EPOCH)), 1)
+        vm.refresh()
+        assertEquals(listOf("HYDRATED_7"), vm.state.value.celebrate.map { it.code })
+        vm.dismissCelebration()
+        vm.refresh()
+        assertTrue(vm.state.value.celebrate.isEmpty())
+    }
+
     @Test fun failureKeepsLoadedBadges() {
         repo.badgeList = BadgeList(listOf(testBadge("A")), 0)
         val vm = BadgesViewModel(repo, tracker)
@@ -73,6 +87,13 @@ class ChallengesViewModelTest {
         assertEquals(listOf("a1"), s.active.map { it.id })
         assertEquals(listOf("old", "odd"), s.history.map { it.id })
         assertNull(s.loadError)
+    }
+
+    @Test fun activeWaterChallengeKeepsItsGoalAtJoin() {
+        repo.challengeList += com.vipin.fitness.core.testing.testWaterChallenge("w1", waterGoalMl = 2500)
+        val w = vm().state.value.active.single { it.id == "w1" }
+        assertEquals(2500, w.waterGoalMl)
+        assertTrue(w.isWater)
     }
 
     @Test fun joinUsesSelectedTargetAndShowsItAsActive() {

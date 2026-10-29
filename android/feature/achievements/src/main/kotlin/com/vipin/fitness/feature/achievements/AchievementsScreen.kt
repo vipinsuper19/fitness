@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -274,6 +275,18 @@ private fun Section(title: String) = Text(title, style = MaterialTheme.typograph
 private fun ProgressLine(c: Challenge) {
     LinearProgressIndicator(progress = { c.fraction }, modifier = Modifier.fillMaxWidth())
     Text(stringResource(R.string.challenge_progress, c.progress, c.target, c.unit), style = MaterialTheme.typography.bodySmall)
+    WaterGoalLines(c)
+}
+
+/** Water challenges: the goal at join (information only) and how days are judged. */
+@Composable
+private fun WaterGoalLines(c: Challenge) {
+    if (!c.isWater) return
+    val res = LocalContext.current.resources
+    ChallengeFormat.waterGoalAtJoin(res, c)?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag(ChallengeTags.waterGoal(c.id)))
+    }
+    Text(stringResource(R.string.challenge_water_rule), style = MaterialTheme.typography.labelSmall, modifier = Modifier.testTag(ChallengeTags.waterRule(c.id)))
 }
 
 @Composable
