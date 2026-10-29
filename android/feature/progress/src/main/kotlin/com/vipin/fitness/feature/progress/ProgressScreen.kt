@@ -39,6 +39,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -224,14 +225,13 @@ private fun MeasurementDialog(form: MeasurementForm, s: MeasurementsState, vm: M
         title = { Text(stringResource(if (form.isEdit) R.string.measurement_edit else R.string.measurement_add)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = vm::previousDate, enabled = !s.saving) { Text("‹") }
-                    Text(
-                        if (form.date == s.today) stringResource(R.string.progress_today) else ProgressFormat.date(form.date),
-                        Modifier.weight(1f),
-                    )
-                    TextButton(onClick = vm::nextDate, enabled = !s.saving && form.date < s.today) { Text("›") }
-                }
+                MeasurementDateRow(
+                    label = if (form.date == s.today) stringResource(R.string.progress_today) else ProgressFormat.date(form.date),
+                    canPrevious = !s.saving,
+                    canNext = !s.saving && form.date < s.today,
+                    onPrevious = vm::previousDate,
+                    onNext = vm::nextDate,
+                )
                 MeasurementKind.entries.forEach { k ->
                     OutlinedTextField(
                         value = form.texts[k].orEmpty(),
@@ -259,4 +259,25 @@ private fun MeasurementDialog(form: MeasurementForm, s: MeasurementsState, vm: M
         confirmButton = { Button(onClick = vm::save, enabled = !s.saving, modifier = Modifier.testTag("save_measurement")) { Text(stringResource(R.string.progress_save)) } },
         dismissButton = { TextButton(onClick = vm::cancel, enabled = !s.saving) { Text(stringResource(R.string.progress_cancel)) } },
     )
+}
+
+object MeasurementDateTags {
+    const val PREVIOUS = "measurement_previous_day"
+    const val NEXT = "measurement_next_day"
+}
+
+/** ‹ date ›: the arrows are announced as "Previous day" / "Next day", not as punctuation. */
+@Composable
+internal fun MeasurementDateRow(label: String, canPrevious: Boolean, canNext: Boolean, onPrevious: () -> Unit, onNext: () -> Unit) {
+    val prev = stringResource(R.string.measurement_previous_day)
+    val next = stringResource(R.string.measurement_next_day)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onPrevious, enabled = canPrevious, modifier = Modifier.testTag(MeasurementDateTags.PREVIOUS).semantics { contentDescription = prev }) {
+            Text("‹", Modifier.clearAndSetSemantics {})
+        }
+        Text(label, Modifier.weight(1f))
+        TextButton(onClick = onNext, enabled = canNext, modifier = Modifier.testTag(MeasurementDateTags.NEXT).semantics { contentDescription = next }) {
+            Text("›", Modifier.clearAndSetSemantics {})
+        }
+    }
 }

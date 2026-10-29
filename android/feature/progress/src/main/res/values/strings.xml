@@ -21,6 +21,8 @@
     <string name="measurements_empty">No measurements yet. Add your first one to start tracking.</string>
     <string name="measurements_load_more">Load more</string>
     <string name="measurement_add">Add</string>
+    <string name="measurement_previous_day">Previous day</string>
+    <string name="measurement_next_day">Next day</string>
     <string name="measurement_edit">Edit measurement</string>
     <string name="measurement_delete">Delete</string>
     <string name="measurement_invalid">Enter a value from %1$s to %2$s</string>
