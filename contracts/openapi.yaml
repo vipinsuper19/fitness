@@ -213,6 +213,25 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /me/macro-suggestion:
+    get:
+      tags: [me]
+      operationId: getMacroSuggestion
+      summary: Suggested daily macro split (read-only, rule-based)
+      description: |
+        Derives protein, carbs and fat grams from the profile's `dailyCalorieTargetKcal`
+        and `weightKg` and the user's active goal (see docs/specs/macro-split-suggestion.md
+        for the formula). Rule-based, no AI. It **never writes**: the profile's
+        `daily*TargetG` are unchanged. To use it, the client sends the numbers with
+        `PUT /me/profile`. Always 200. When the suggestion can't be computed,
+        `suggestion` is null and `reason` says why.
+      responses:
+        '200':
+          description: Suggestion, or null with a reason
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MacroSuggestion' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /me/export:
     get:
       tags: [me]
@@ -1960,6 +1979,37 @@ components:
         dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PUT /me/profile, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
         onboardingCompleted: { type: boolean }
         updatedAt: { type: string, format: date-time }
+    MacroSuggestion:
+      type: object
+      required: [suggestion, reason, basis, formulaVersion]
+      properties:
+        suggestion:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [proteinG, carbsG, fatG, kcal]
+              properties:
+                proteinG: { type: integer, minimum: 0 }
+                carbsG: { type: integer, minimum: 0 }
+                fatG: { type: integer, minimum: 0 }
+                kcal: { type: integer, description: '4·protein + 4·carbs + 9·fat; can be a few kcal below the target because of rounding' }
+        reason:
+          type: [string, 'null']
+          enum: [NO_CALORIE_TARGET, NO_WEIGHT, null]
+          description: 'Null when `suggestion` is set. `NO_CALORIE_TARGET` wins when both inputs are missing. New values may be added.'
+        basis:
+          type: object
+          required: [calorieTargetKcal, weightKg, goal, goalSource, dietPreference, proteinGPerKg, fatPct]
+          description: The inputs used, so the client can explain the suggestion.
+          properties:
+            calorieTargetKcal: { type: [integer, 'null'] }
+            weightKg: { type: [number, 'null'] }
+            goal: { type: string, enum: [lose_weight, gain_muscle, maintain, improve_endurance] }
+            goalSource: { type: string, enum: [active_goal, default], description: '`default` = no active weight or fitness goal, so `maintain` is used' }
+            dietPreference: { oneOf: [{ $ref: '#/components/schemas/DietPreference' }, { type: 'null' }], description: Echoed for display; it does not change the numbers in v1 }
+            proteinGPerKg: { type: number }
+            fatPct: { type: integer, description: Share of the calorie target for fat before the per-kg floor and cap }
+        formulaVersion: { type: integer, const: 1 }
     ProfileUpdate:
       type: object
       description: Every field is optional so onboarding can be skipped and resumed. A null clears the value.

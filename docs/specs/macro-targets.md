@@ -10,7 +10,7 @@ Adds optional daily macro targets to the profile so `/nutrition/summary` can rep
 - Default for new and existing profiles: `null` (nullable columns, no backfill).
 
 ## No derivation in v1
-Macro targets are **explicit only**. They are not derived from `dailyCalorieTargetKcal`, weight, or diet preference, and setting or changing the calorie target never changes them. There is no consistency check between macro grams (4/4/9 kcal) and the calorie target. A derived "suggested split" can be added later as a separate, read-only field without changing these semantics.
+Macro targets are **explicit only**. They are not derived from `dailyCalorieTargetKcal`, weight, or diet preference, and setting or changing the calorie target never changes them. There is no consistency check between macro grams (4/4/9 kcal) and the calorie target. A derived suggested split is available separately and read-only at `GET /me/macro-suggestion` (see [macro-split-suggestion.md](macro-split-suggestion.md)). It never writes, and these semantics are unchanged: the client applies a suggestion with `PUT /me/profile`.
 
 ## `targets` object
 `targets` in `/nutrition/summary` is non-null when **any** of kcal, water, protein, carbs or fat has a target, so a profile with only macro targets gets a `targets` object with `kcal` and `waterMl` null. It is `null` only when all five are unset.
