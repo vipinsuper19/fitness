@@ -24,6 +24,14 @@ const draftSchema = JSON.parse(
 );
 
 const WRITE_METHODS = ['post', 'put', 'patch', 'delete'];
+
+/**
+ * x-internal allowlist: server routes that are deliberately NOT in openapi (not client APIs).
+ * Anything that checks registered routes against the contract must exempt only these.
+ * See docs/specs/notification-sending.md (internal tick endpoint).
+ */
+export const INTERNAL_ROUTES = ['post /internal/notifications/tick'] as const;
+
 function operations(): Array<{ path: string; method: string; op: Operation; pathItem: PathItem }> {
   return Object.entries(spec.paths).flatMap(([path, pathItem]) =>
     Object.entries(pathItem)
@@ -61,9 +69,20 @@ describe('contracts/openapi.yaml', () => {
       'get /challenges/{challengeId}', 'post /challenges/{challengeId}/leave',
       // P1: notification preferences, storage only (docs/specs/notification-preferences.md)
       'get /me/notification-preferences', 'patch /me/notification-preferences',
+      // P1: notification sending, device tokens (docs/specs/notification-sending.md)
+      'post /me/notification-devices', 'delete /me/notification-devices/{deviceId}',
     ];
     const actual = new Set(operations().map(({ method, path }) => `${method} ${path}`));
     for (const route of expected) expect(actual).toContain(route);
+  });
+
+  it('keeps x-internal routes out of the contract, and only allowlists /internal routes', () => {
+    for (const route of INTERNAL_ROUTES) {
+      const [method = '', path = ''] = route.split(' ');
+      expect(path.startsWith('/internal/')).toBe(true);
+      expect(spec.paths[path]?.[method]).toBeUndefined();
+    }
+    expect(Object.keys(spec.paths).filter((p) => p.startsWith('/internal'))).toEqual([]);
   });
 
   it('accepts Idempotency-Key on every write except token and pure-compute calls', () => {
