@@ -30,7 +30,11 @@ export interface Facts {
   coreXp: number;
   foodDates: string[];
   waterByDate: Map<string, number>;
-  waterGoalMl: number;
+  /**
+   * The water goal in force on a local date: that day's `dailyWaterTargetMl` from
+   * profile_target_history, else 2000 ml (no target yet, or water target unset that day).
+   */
+  waterGoalOn: (date: string) => number;
   measurementDates: string[];
 }
 
@@ -74,7 +78,8 @@ export function weekStart(date: string): string {
 export const workoutDays = (sessions: CompletedSession[], tz: string): Set<string> =>
   new Set(sessions.map((s) => localDate(s.completedAt, tz)));
 
-const goalDays = (byDate: Map<string, number>, goal: number) => [...byDate].filter(([, ml]) => ml >= goal).map(([d]) => d);
+/** Dates whose water total reaches that date's own dated goal. */
+const goalDays = (f: Pick<Facts, 'waterByDate' | 'waterGoalOn'>) => [...f.waterByDate].filter(([d, ml]) => ml >= f.waterGoalOn(d)).map(([d]) => d);
 
 const p = (current: number, target: number): Progress => ({ current: Math.max(0, Math.floor(current)), target });
 
@@ -111,7 +116,7 @@ export const BADGES: readonly BadgeDef[] = [
   { code: 'FOOD_LOG_7_DAYS', title: 'Food diary week', family: 'nutrition', bonusXp: 20, description: 'Log food on 7 consecutive days.', progress: (f) => p(longestRun(f.foodDates), 7) },
   {
     code: 'HYDRATED_7', title: 'Well hydrated', family: 'hydration', bonusXp: 20, description: 'Reach your daily water goal on 7 days.',
-    progress: (f) => p(goalDays(f.waterByDate, f.waterGoalMl).length, 7),
+    progress: (f) => p(goalDays(f).length, 7),
   },
   { code: 'FIRST_MEASUREMENT', title: 'First check-in', family: 'measurement', bonusXp: 5, description: 'Log your first body measurement.', progress: (f) => p(f.measurementDates.length ? 1 : 0, 1) },
   {
@@ -171,7 +176,8 @@ export function challengeCount(c: ChallengeState, f: Facts, today: string): numb
     case 'WEEKLY_ACTIVE_MINUTES':
       return Math.floor(sessionsIn.reduce((t, s) => t + s.activeSeconds, 0) / 60);
     case 'WEEKLY_WATER_DAYS':
-      return goalDays(f.waterByDate, c.waterGoalMl ?? DEFAULT_WATER_GOAL_ML).filter(inWindow).length;
+      // Each day is judged against its own dated target (c.waterGoalMl is the join-time value, display only).
+      return goalDays(f).filter(inWindow).length;
     case 'WEEKLY_FOOD_LOG_DAYS':
       return f.foodDates.filter(inWindow).length;
     case 'PERSONAL_WORKOUTS_N':
