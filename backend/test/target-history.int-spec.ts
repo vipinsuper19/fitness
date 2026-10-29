@@ -19,7 +19,7 @@ import { parse } from 'yaml';
 import { seed } from '../prisma/seed';
 import { PrismaService } from '../src/prisma/prisma.service';
 import * as history from '../src/targets/target-history';
-import { createTestApp } from './helpers';
+import { backdateTargets, createTestApp } from './helpers';
 
 const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
 const describeDb = run ? describe : describe.skip;
@@ -120,10 +120,13 @@ describeDb('target history (HTTP + Postgres)', () => {
       expect(await rows(u.id)).toEqual([{ effectiveFrom: '2026-10-29', ...full({ kcal: 2000, waterMl: 2500, proteinG: 90 }) }]);
       await put(u.token, { dailyCalorieTargetKcal: 1900, dailyFatTargetG: 60 });
       expect(await rows(u.id)).toEqual([{ effectiveFrom: '2026-10-29', ...full({ kcal: 1900, waterMl: 2500, proteinG: 90, fatG: 60 }) }]);
-      // Next local day (the clock moves forward only a day; the token is still valid).
-      jest.setSystemTime(new Date('2026-10-30T06:30:00Z'));
+      // Next local day: move today's row back a day instead of jumping the clock (a jump would expire the JWT).
+      await prisma.profileTargetHistory.update({
+        where: { userId_effectiveFrom: { userId: u.id, effectiveFrom: new Date('2026-10-29T00:00:00Z') } },
+        data: { effectiveFrom: new Date('2026-10-28T00:00:00Z') },
+      });
       await put(u.token, { dailyCarbsTargetG: 250 });
-      expect((await rows(u.id)).map((r) => [r.effectiveFrom, r.kcal, r.carbsG])).toEqual([['2026-10-29', 1900, null], ['2026-10-30', 1900, 250]]);
+      expect((await rows(u.id)).map((r) => [r.effectiveFrom, r.kcal, r.carbsG])).toEqual([['2026-10-28', 1900, null], ['2026-10-29', 1900, 250]]);
     });
 
     it('no target change writes nothing: omitted, same value re-sent, non-target field only', async () => {
@@ -337,7 +340,8 @@ describeDb('target history (HTTP + Postgres)', () => {
   describe('export and deletion', () => {
     it('export includes targetHistory (newest first) and validates; deleting the account removes the rows', async () => {
       const u = await signUp();
-      await row(u.id, '1900-01-01', { waterMl: 2500 });
+      await put(u.token, { dailyWaterTargetMl: 2500 });
+      await backdateTargets(prisma, u.id);
       await put(u.token, { dailyCalorieTargetKcal: 2000 });
       const ex = (await as(u.token).get('/api/v1/me/export').expect(200)).body;
       valid(validExport, ex);
