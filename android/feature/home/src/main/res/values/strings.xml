@@ -24,4 +24,15 @@
     <string name="home_xp_level">Level %1$d · %2$s XP</string>
     <string name="home_xp_next">%1$d / %2$d XP to the next level</string>
     <string name="home_xp_history">XP history</string>
+    <string name="home_goals_title">Goals</string>
+    <string name="home_goals_none">No active goals. Add one in Progress → Goals.</string>
+    <string name="home_goal_pct">%1$d%% there</string>
+    <string name="home_goal_on_track">On track</string>
+    <string name="home_goal_off_track">More than 1 kg off target</string>
+    <string name="home_goal_lose">Lose weight</string>
+    <string name="home_goal_gain">Gain muscle</string>
+    <string name="home_goal_maintain">Maintain weight</string>
+    <string name="home_goal_endurance">Improve endurance</string>
+    <string name="home_goal_workouts">Workouts per week</string>
+    <string name="home_goal_other">Goal</string>
 </resources>

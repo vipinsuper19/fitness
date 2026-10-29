@@ -26,6 +26,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.common.UnitConversion
 import com.vipin.fitness.core.common.UnitSystem
 import com.vipin.fitness.core.data.DailyNutrition
+import com.vipin.fitness.core.data.GoalProgress
+import com.vipin.fitness.core.data.GoalType
 import com.vipin.fitness.core.data.XpBalance
 
 /**
@@ -63,6 +65,7 @@ fun HomeContent(
         item(key = "nutrition") { NutritionSlot(s.nutrition, s.units, onRetry) }
         item(key = "streak") { StreakSlot(s.streak, onRetry) }
         item(key = "xp") { XpSlot(s.xp, onRetry, onOpenXpLedger) }
+        item(key = "goals") { GoalsSlot(s.goals, onRetry) }
         extraSlots(s)
     }
 }
@@ -188,4 +191,31 @@ internal object HomeFormat {
 
     fun water(ml: Int, units: UnitSystem): String =
         if (units == UnitSystem.METRIC) "${number(ml.toDouble(), 0)} ml" else "${number(UnitConversion.mlToFlOz(ml.toDouble()))} fl oz"
+}
+
+/** Active goals: progress bar and milestone for measurable ones. */
+@Composable
+fun GoalsSlot(slot: Slot<List<GoalProgress>>, onRetry: () -> Unit) =
+    SlotCard(stringResource(R.string.home_goals_title), slot, onRetry, "slot_goals") { goals ->
+        if (goals.isEmpty()) Text(stringResource(R.string.home_goals_none))
+        goals.forEach { p ->
+            Text(stringResource(homeGoalTitle(p.goal.type)), style = MaterialTheme.typography.bodyLarge)
+            val f = p.fraction
+            when {
+                f != null -> {
+                    LinearProgressIndicator(progress = { f.toFloat() }, modifier = Modifier.fillMaxWidth().testTag("home_goal_bar_${p.goal.id}"))
+                    Text(stringResource(R.string.home_goal_pct, (f * 100).toInt()), style = MaterialTheme.typography.bodySmall)
+                }
+                p.onTrack != null -> Text(stringResource(if (p.onTrack == true) R.string.home_goal_on_track else R.string.home_goal_off_track), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
+private fun homeGoalTitle(t: GoalType) = when (t) {
+    GoalType.LOSE_WEIGHT -> R.string.home_goal_lose
+    GoalType.GAIN_MUSCLE -> R.string.home_goal_gain
+    GoalType.MAINTAIN -> R.string.home_goal_maintain
+    GoalType.IMPROVE_ENDURANCE -> R.string.home_goal_endurance
+    GoalType.WORKOUTS_PER_WEEK -> R.string.home_goal_workouts
+    GoalType.UNKNOWN -> R.string.home_goal_other
 }

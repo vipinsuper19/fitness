@@ -2,7 +2,7 @@ package com.vipin.fitness.feature.workout
 
 import com.vipin.fitness.core.common.UnitSystem
 import com.vipin.fitness.core.common.time.APP_ZONE
-import com.vipin.fitness.core.data.Profile
+import com.vipin.fitness.core.data.zoneOrDefault
 import com.vipin.fitness.core.data.ProfileRepository
 import com.vipin.fitness.core.data.UnitPreference
 import com.vipin.fitness.core.network.ApiResult
@@ -18,10 +18,6 @@ import javax.inject.Inject
 
 /** How history shows times and weights: the profile's zone and units. */
 data class HistoryDisplay(val zone: ZoneId = APP_ZONE, val units: UnitSystem = UnitSystem.METRIC)
-
-/** The profile's timezone, or [APP_ZONE] when it is missing or not a zone this device knows. */
-internal fun Profile.zoneOrDefault(): ZoneId =
-    timezone?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: APP_ZONE
 
 /** Units from the cached preference (live); zone from one profile fetch, falling back to [APP_ZONE]. */
 class HistoryDisplaySource @Inject constructor(

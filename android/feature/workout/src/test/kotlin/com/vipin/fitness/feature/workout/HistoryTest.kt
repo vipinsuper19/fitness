@@ -20,6 +20,7 @@ import com.vipin.fitness.core.testing.testPastSet
 import com.vipin.fitness.core.common.UnitSystem
 import com.vipin.fitness.core.common.time.APP_ZONE
 import com.vipin.fitness.core.data.Profile
+import com.vipin.fitness.core.data.zoneOrDefault
 import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeUnitPreference
 import java.time.ZoneId

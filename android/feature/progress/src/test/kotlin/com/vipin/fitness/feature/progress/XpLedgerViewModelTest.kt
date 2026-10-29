@@ -1,6 +1,12 @@
 package com.vipin.fitness.feature.progress
 
+import com.vipin.fitness.core.common.time.APP_ZONE
+import com.vipin.fitness.core.data.Profile
+import com.vipin.fitness.core.data.ProfileZone
 import com.vipin.fitness.core.data.XpBalance
+import com.vipin.fitness.core.testing.FakeProfileRepository
+import kotlinx.coroutines.CompletableDeferred
+import java.time.ZoneId
 import com.vipin.fitness.core.data.xp.XpSourceType
 import com.vipin.fitness.core.testing.FAKE_NETWORK_FAILURE
 import com.vipin.fitness.core.testing.FakeHomeRepository
@@ -18,7 +24,8 @@ class XpLedgerViewModelTest {
     private val repo = FakeXpLedgerRepository()
 
     private val home = FakeHomeRepository()
-    private fun vm() = XpLedgerViewModel(repo, home)
+    private var profile = Profile()
+    private fun vm() = XpLedgerViewModel(repo, home, ProfileZone { FakeProfileRepository(profile) })
     private fun page(vararg ids: String, next: String? = null) = ids.map { testXpEntry(it) } to next
 
     @Test fun pagesThroughAndDropsDuplicates() {
@@ -71,6 +78,31 @@ class XpLedgerViewModelTest {
         assertEquals("+5", XpFormat.amount(5))
         assertEquals("+0", XpFormat.amount(0))
         // 06:30Z is 12:00 IST.
-        assertEquals("20 oct 2026, 12:00 pm", XpFormat.time(corr)?.lowercase())
+        assertEquals("20 oct 2026, 12:00 pm", XpFormat.time(corr, APP_ZONE)?.lowercase())
+        assertEquals("20 oct 2026, 7:30 am", XpFormat.time(corr, ZoneId.of("Europe/London"))?.lowercase())
+    }
+
+    @Test fun zoneComesFromTheProfile() {
+        repo.pages[null] = page("a")
+        assertEquals(APP_ZONE, vm().state.value.zone)
+        profile = Profile(timezone = "Europe/London")
+        assertEquals(ZoneId.of("Europe/London"), vm().state.value.zone)
+    }
+
+    @Test fun loadMoreLandingAfterARefreshIsIgnored() {
+        repo.pages[null] = page("a", next = "c2")
+        repo.pages["c2"] = page("b")
+        val gate = CompletableDeferred<Unit>()
+        repo.gates["c2"] = gate
+        val vm = vm()
+        vm.loadMore() // waits on the gate
+        assertTrue(vm.state.value.loadingMore)
+        repo.pages[null] = page("x")
+        vm.refresh()
+        gate.complete(Unit) // the old page arrives now
+        val s = vm.state.value
+        assertEquals(listOf("x"), s.items.map { it.id })
+        assertNull(s.nextCursor)
+        assertEquals(false, s.loadingMore)
     }
 }

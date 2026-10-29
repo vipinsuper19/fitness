@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.data.xp.XpEntry
 import com.vipin.fitness.core.data.xp.XpSourceType
 import java.text.NumberFormat
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Test tags; values agreed with QA's contract (#92). */
@@ -56,7 +57,7 @@ internal object XpFormat {
         return if (v < 0) "\u2212$n" else "+$n"
     }
 
-    fun time(e: XpEntry): String? = e.createdAt?.atZone(ProgressFormat.ZONE)?.let(dateTime::format)
+    fun time(e: XpEntry, zone: ZoneId): String? = e.createdAt?.atZone(zone)?.let(dateTime::format)
 }
 
 @StringRes
@@ -117,7 +118,7 @@ private fun LedgerBody(s: XpLedgerState, onRetry: () -> Unit, onLoadMore: () -> 
                         Column(Modifier.weight(1f)) {
                             Text(stringResource(e.sourceType.label()), style = MaterialTheme.typography.titleSmall)
                             if (e.reason.isNotBlank()) Text(e.reason, style = MaterialTheme.typography.bodyMedium)
-                            XpFormat.time(e)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                            XpFormat.time(e, s.zone)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                         }
                         Text(
                             stringResource(R.string.xp_amount, XpFormat.amount(e.amount)),

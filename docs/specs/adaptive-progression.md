@@ -6,7 +6,8 @@
 
 ## Scope
 - The plan's **latest version**; one suggestion per planned exercise (`PlannedWorkout.exercises[]` entry, identified by `plannedWorkoutId` + `exerciseId`).
-- History = the user's **completed** sessions that followed this plan (any version) and logged that exercise; at most the last **N = 3** such sessions, newest first. Only `completed: true` sets count; corrections are applied (same counting as `/progress/exercises`).
+- An exercise listed in **several workouts** gets **one suggestion per entry** (each with its own `plannedWorkoutId`, `order` and `current`); all entries share the same history for that exercise.
+- History = the user's **completed** sessions that followed this plan (any version) and logged that exercise; at most the last **N = 3** such sessions, newest first. Only `completed: true` sets count; corrections are applied, because they rewrite the set rows (same counting as `/progress/exercises`).
 - Archived plans: `409 PLAN_ARCHIVED` (read-only plans aren't edited). Paused or inactive plans are allowed.
 
 ## Trigger (all must hold)
@@ -20,6 +21,9 @@
 4. **Cooldown:** no progression of this exercise was applied in the last **7 days** (see below).
 
 Otherwise the suggestion is `hold` or `deload` with a reason.
+
+## Decision order
+Per planned exercise: (1) deload check (needs only the latest **2** sessions, so it can fire **before** the 3-session minimum); (2) fewer than 3 sessions → `NOT_ENOUGH_HISTORY`; (3) any miss → `MISSED_TARGET`; (4) any `perceivedDifficulty` ≥ 4 → `HIGH_EFFORT`; (5) cooldown → `COOLDOWN`; (6) the increment rules.
 
 ## Increment rules (one step, never more)
 | trackingType | Suggestion | Step |
@@ -35,15 +39,16 @@ Otherwise the suggestion is `hold` or `deload` with a reason.
 - **Rep steps are exempt from the cap:** +1 rep, or +2 when `repsMax >= 15`, is suggested as is (e.g. 3–5 → 4–6).
 - **The minimum step overrides the cap.** When the minimum load step (+1.0 kg, +0.5 kg under 10 kg, +5 s) is more than 10% of a small current value, the minimum step is suggested anyway.
 - Values stay within the plan schema limits (`targetWeightKg` ≤ 1000, reps ≤ 100, `durationSeconds` ≤ 7200). An exercise already at a limit is `hold` / `CAP_REACHED`.
-- **Every suggested weight is a multiple of 0.5 kg** (increase, deload and `NO_TARGET_SET`; rounded down).
+- **Every suggested weight is a multiple of 0.5 kg** (increase, deload and `NO_TARGET_SET`). Increases round **down** to 0.5 kg, except when that would fall below `current + minimum step` (a current target off the 0.5 kg grid): then they round **up** to the next 0.5 kg at or above `current + minimum step` (40.3 → 41.5, not 41.0; 9.8 → 10.5, not 10.0). Deloads and `NO_TARGET_SET` round down.
 
 ## Cooldown
-The server derives "last progression applied" from plan versions: the newest plan version where this exercise's prescribed load (target weight, reps or duration) increased versus the previous version. If its `createdAt` is less than 7 days ago, `hold` with `COOLDOWN` and `cooldownUntil`. No new table is needed.
+The server derives "last progression applied" from plan versions: the newest plan version where this exercise's prescribed load (target weight, reps or duration) increased versus the previous version, compared **by entry** (same workout position and exercise position, same `exerciseId`), so an exercise in two workouts has its own cooldown per entry. Only a raise from one set value to a higher one counts: **setting a first target** (null → value, e.g. accepting `NO_TARGET_SET`) does **not** start a cooldown. If its `createdAt` is less than 7 days ago, `hold` with `COOLDOWN` and `cooldownUntil`. No new table is needed.
 
 ## Deload
 Suggest a **deload** (−10% of `targetWeightKg` rounded down to 0.5 kg, or −10% of `durationSeconds` rounded **down** to 5 s; reps unchanged for `reps`) when either:
 - **two consecutive** qualifying sessions missed the prescription (rule 2) for this exercise, or
 - the latest two sessions both report `perceivedDifficulty = 5`.
+Deloads are checked first and need only the latest 2 sessions, so one can fire before the 3-session minimum. When there is **no load to lower** (a `reps` exercise, or `reps_weight` without `targetWeightKg`), the item is `hold` with the deload reason (`REPEATED_MISSES` or `VERY_HARD`) and `suggested: null`.
 A deload is a suggestion like any other; it is never applied automatically. Pain or medical symptoms are **not** inferred from data; the client shows its standard "stop and seek professional advice" copy whenever the user reports pain (out of scope here).
 
 ## Response
@@ -55,15 +60,15 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
   |---|---|---|
   | `ALL_SETS_COMPLETED` | increase | Last 3 sessions met the prescription at manageable effort |
   | `NO_TARGET_SET` | increase | No `targetWeightKg` yet; suggests the heaviest weight used |
-  | `NOT_ENOUGH_HISTORY` | hold | Fewer than 3 qualifying sessions |
+  | `NOT_ENOUGH_HISTORY` | hold | Fewer than 3 qualifying sessions; **also** used when there is no value to progress (`reps_weight` with no target and no logged weight, `reps` with no reps range, `duration`/`distance_duration` with no `durationSeconds`) |
   | `MISSED_TARGET` | hold | A session in the window missed sets, reps, weight or duration |
   | `HIGH_EFFORT` | hold | A session in the window had `perceivedDifficulty` ≥ 4 |
   | `COOLDOWN` | hold | Load was raised less than 7 days ago (`cooldownUntil` set) |
   | `CAP_REACHED` | hold | Already at the schema limit |
   | `REP_CEILING` | hold | Bodyweight reps at the 20-rep ceiling; see `harderVariations` |
-  | `REPEATED_MISSES` | deload | Two consecutive sessions missed the prescription |
-  | `VERY_HARD` | deload | Two latest sessions at `perceivedDifficulty` 5 |
-- `reasonText`: optional English sentence for display (e.g. "You completed all sets in your last 3 sessions."); clients may localise from `reason` instead. May be absent or null.
+  | `REPEATED_MISSES` | deload (hold when no load to lower) | Two consecutive sessions missed the prescription |
+  | `VERY_HARD` | deload (hold when no load to lower) | Two latest sessions at `perceivedDifficulty` 5 |
+- `reasonText`: English sentence for display, **always present** (non-null) in v1; clients may localise from `reason` instead.
 - `current`: `PrescriptionValues` `{ sets, repsMin, repsMax, targetWeightKg, durationSeconds }`, the latest plan version's exact values.
 - `suggested`: for `increase`/`deload`, the **complete** `PrescriptionValues` to write into that `PlannedExercise` (unchanged fields copied from `current`), so the client builds the PATCH without computing anything; `null` for `hold`. v1 never changes `sets`.
 - `harderVariations`: optional array of `exerciseId`s, present only with `REP_CEILING` and possibly empty. Derived **by rule** from the catalogue; v1 has **no curated progression links**: exercises with the same `primaryMuscle` and `trackingType`, `difficulty` exactly one level above this exercise's (`beginner → intermediate → advanced`), and equipment the original also uses (or none); at most 3. Ordering is **deterministic**: by exercise `name` ascending, then `id` ascending; the first 3 are returned. Empty when none match or the exercise is already `advanced`.
@@ -91,7 +96,11 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
 - `duration` 60 s → 65 s; 300 s → 330 s.
 - One session missing a set or a rep → `MISSED_TARGET`; `perceivedDifficulty` 4 in the window → `HIGH_EFFORT`.
 - Two consecutive misses → deload −10% (weight rounded down to 0.5 kg; duration 65 s → 55 s, rounded down to 5 s); two sessions at difficulty 5 → `VERY_HARD` deload.
+- Off-grid targets: 40.3 kg → 41.5 kg; 9.8 kg → 10.5 kg (never below current + min step).
+- Cooldown by entry: the same exercise in two workouts, only one entry raised 2 days ago → that entry `COOLDOWN`, the other `increase`; both share the same `basedOn`.
 - Cooldown: a version raising the load 3 days ago → `COOLDOWN` with `cooldownUntil`; 8 days ago → increase (faked clock, Date only).
-- Incomplete (`completed: false`) sets and in-progress sessions are ignored; corrections are applied.
+- Incomplete (`completed: false`) sets and in-progress sessions are ignored.
+- A set corrected with `PUT /workout-sessions/{id}/corrections/sets/{clientSetId}` (inside the correction window, faked clock) changes `metTarget` and the suggestion.
+- No load to lower (reps-only) → `hold` with the deload reason; deload after only 2 sessions.
 - The endpoint never changes the plan (version unchanged after the call); accepting via PATCH with `baseVersion` works and a stale `baseVersion` → 409 `VERSION_CONFLICT`.
 - Only the caller's sessions count.
