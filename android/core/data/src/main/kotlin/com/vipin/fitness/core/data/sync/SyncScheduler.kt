@@ -15,12 +15,18 @@ import javax.inject.Singleton
 /** Asks for the offline queue (pending_writes) to be sent when there is a network. */
 interface SyncScheduler {
     fun requestSync()
+
+    /** Same, but not before [delayMs] (a server Retry-After). */
+    fun requestSync(delayMs: Long) = requestSync()
 }
 
 @Singleton
 class WorkManagerSyncScheduler @Inject constructor(@ApplicationContext private val context: Context) : SyncScheduler {
-    override fun requestSync() {
+    override fun requestSync() = requestSync(0)
+
+    override fun requestSync(delayMs: Long) {
         val request = OneTimeWorkRequestBuilder<OutboxSyncWorker>()
+            .setInitialDelay(delayMs.coerceAtLeast(0), TimeUnit.MILLISECONDS)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()

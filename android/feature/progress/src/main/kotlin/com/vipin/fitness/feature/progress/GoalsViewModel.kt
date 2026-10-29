@@ -14,6 +14,7 @@ import com.vipin.fitness.core.data.NewGoal
 import com.vipin.fitness.core.data.newIdempotencyKey
 import com.vipin.fitness.core.data.userMessage
 import com.vipin.fitness.core.network.ApiResult
+import com.vipin.fitness.core.network.isRetryable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -112,8 +113,18 @@ class GoalsViewModel @Inject constructor(
         write { goals.create(goal, key).also { if (it is ApiResult.Success) { pendingCreate = null; _state.update { s2 -> s2.copy(form = null) } } } }
     }
 
-    fun setStatus(id: String, status: GoalStatus) = write { goals.update(id, GoalChanges(status = status)) }
-    fun delete(id: String) = write { goals.delete(id) }
+    fun setStatus(id: String, status: GoalStatus) = keyed("$id:status:$status") { goals.update(id, GoalChanges(status = status), it) }
+    fun delete(id: String) = keyed("$id:delete") { goals.delete(id, it) }
+
+    /** Same Idempotency-Key while retrying the same action after a retryable failure (offline, 429, 5xx). */
+    private val actionKeys = mutableMapOf<String, String>()
+
+    private fun keyed(slot: String, call: suspend (String) -> ApiResult<*>) {
+        val key = actionKeys.getOrPut(slot) { newIdempotencyKey() }
+        write {
+            call(key).also { r -> if (!(r is ApiResult.Failure && r.error.isRetryable)) actionKeys.remove(slot) }
+        }
+    }
 
     private fun write(block: suspend () -> ApiResult<*>) {
         if (_state.value.saving) return

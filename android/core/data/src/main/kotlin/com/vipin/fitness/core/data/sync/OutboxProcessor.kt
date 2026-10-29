@@ -15,7 +15,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import android.util.Log
+import com.vipin.fitness.core.network.parseRetryAfter
 import java.io.IOException
+import java.time.Clock
 import java.util.UUID
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -40,10 +42,20 @@ class OutboxProcessor @Inject constructor(
     private val sessions: WorkoutSessionDao,
     private val api: OutboxApi,
     private val json: Json,
+    private val clock: Clock = Clock.systemUTC(),
 ) {
     private val mutex = Mutex()
 
-    suspend fun drain(): DrainResult = mutex.withLock { drainLocked() }
+    /** Epoch ms before which nothing is sent, set by a 429's Retry-After (or a default backoff). */
+    @Volatile private var notBeforeMs = 0L
+
+    /** After [DrainResult.Retry]: ms to wait if the server rate-limited us, else null (normal backoff). */
+    fun rateLimitDelayMs(): Long? = (notBeforeMs - clock.millis()).takeIf { it > 0 }
+
+    suspend fun drain(): DrainResult = mutex.withLock {
+        // Rate-limited: don't send anything until the server's Retry-After has passed.
+        if (rateLimitDelayMs() != null) DrainResult.Retry else drainLocked()
+    }
 
     private suspend fun drainLocked(): DrainResult {
         var batch = pending.oldest(BATCH)
@@ -117,7 +129,14 @@ class OutboxProcessor @Inject constructor(
         val error = r.errorBody()?.string()?.let { runCatching { json.decodeFromString<ErrorDto>(it).code }.getOrNull() }
         // 404 (session gone, e.g. discarded on another device) and other 4xx: dropped below.
         return when {
-            code == 408 || code == 429 || code >= 500 || error == "IDEMPOTENCY_IN_PROGRESS" -> {
+            // 429: keep the write, its key and its place; wait out Retry-After before sending again.
+            code == 429 -> {
+                val wait = parseRetryAfter(r.headers()["Retry-After"], clock.millis()) ?: DEFAULT_RATE_LIMIT_WAIT_MS
+                notBeforeMs = clock.millis() + wait.coerceIn(MIN_RATE_LIMIT_WAIT_MS, MAX_RATE_LIMIT_WAIT_MS)
+                pending.markFailed(w.id, error ?: "RATE_LIMITED")
+                false
+            }
+            code == 408 || code >= 500 || error == "IDEMPOTENCY_IN_PROGRESS" -> {
                 pending.markFailed(w.id, error ?: "HTTP_$code")
                 false
             }
@@ -184,6 +203,10 @@ class OutboxProcessor @Inject constructor(
     }
 
     companion object {
+        const val DEFAULT_RATE_LIMIT_WAIT_MS = 30_000L
+        const val MIN_RATE_LIMIT_WAIT_MS = 1_000L
+        /** Cap so a bad header can't park the queue for days. */
+        const val MAX_RATE_LIMIT_WAIT_MS = 60 * 60_000L
         const val BAD_RESPONSE = "BAD_RESPONSE"
         const val CORRECTION_SET_NOT_FOUND = "SET_NOT_FOUND"
         private const val SETS_SUFFIX = "/sets"

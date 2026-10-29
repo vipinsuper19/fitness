@@ -22,6 +22,8 @@ import javax.inject.Inject
 enum class NotificationError {
     OFFLINE,
     FAILED,
+    /** 429: retryable; the retry reuses the same Idempotency-Key. */
+    RATE_LIMITED,
     /** 400: terminal; shown, then the screen refetches. */
     INVALID,
     /** Client-side: quiet-hours start == end, never sent. */
@@ -31,6 +33,7 @@ enum class NotificationError {
 internal fun ApiError.toNotificationError() = when {
     this == ApiError.Network -> NotificationError.OFFLINE
     this is ApiError.Http && status == 400 -> NotificationError.INVALID
+    this is ApiError.Http && status == 429 -> NotificationError.RATE_LIMITED
     else -> NotificationError.FAILED
 }
 
@@ -222,6 +225,7 @@ internal object NotificationFormat {
         when (e) {
             NotificationError.OFFLINE -> R.string.notif_error_offline
             NotificationError.FAILED -> R.string.notif_error_failed
+            NotificationError.RATE_LIMITED -> R.string.notif_error_rate_limited
             NotificationError.INVALID -> R.string.notif_error_invalid
             NotificationError.SAME_TIMES -> R.string.notif_error_same_times
         },

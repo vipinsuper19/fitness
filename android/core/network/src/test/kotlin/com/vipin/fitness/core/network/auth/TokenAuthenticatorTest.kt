@@ -140,6 +140,16 @@ class TokenAuthenticatorTest {
         assertEquals("old-refresh", store.tokens?.refreshToken)
     }
 
+    @Test fun rateLimitedRefreshIsFailedNotRejected() {
+        refreshResponse = { MockResponse(code = 429, headers = okhttp3.Headers.headersOf("Retry-After", "30"), body = """{"code":"RATE_LIMITED","message":"x","requestId":"r"}""") }
+
+        val response = api.profile().execute()
+
+        assertEquals(401, response.code())
+        assertEquals(1, refreshCalls.get())
+        assertEquals("old-refresh", store.tokens?.refreshToken) // session kept
+    }
+
     @Test fun doesNotLoopWhenNewTokenIsAlsoRejected() {
         validAccess = "never"
 

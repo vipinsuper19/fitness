@@ -122,7 +122,7 @@ internal fun NotificationSettingsScreen(
                 Text(stringResource(R.string.notif_timezone_note), style = MaterialTheme.typography.bodySmall)
                 s.saveError?.let { e ->
                     Text(NotificationFormat.error(res, e), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(Tags.SAVE_ERROR))
-                    if (e == NotificationError.OFFLINE || e == NotificationError.FAILED) {
+                    if (e == NotificationError.OFFLINE || e == NotificationError.FAILED || e == NotificationError.RATE_LIMITED) {
                         TextButton(onClick = onSave, enabled = !s.saving, modifier = Modifier.testTag(Tags.SAVE_RETRY)) { Text(stringResource(R.string.notif_retry)) }
                     }
                 }

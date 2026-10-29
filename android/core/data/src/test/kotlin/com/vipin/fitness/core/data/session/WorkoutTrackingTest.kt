@@ -74,7 +74,7 @@ class WorkoutTrackingTest {
 
     @Before fun setUp() {
         server.start()
-        outbox = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json)
+        outbox = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
     }
 
     @After fun tearDown() {
@@ -229,6 +229,39 @@ class WorkoutTrackingTest {
         assertEquals(2, q.size)
         assertEquals(1, q[0].attempts)
         assertEquals("UNAVAILABLE", q[0].lastError)
+    }
+
+    @Test fun rateLimitedWriteStaysQueuedWithItsKeyUntilRetryAfter() = runTest {
+        start()
+        val key = queued().single().idempotencyKey
+        server.enqueue(MockResponse(code = 429, headers = okhttp3.Headers.headersOf("Retry-After", "120"), body = """{"code":"RATE_LIMITED","message":"x"}"""))
+        assertEquals(DrainResult.Retry, outbox.drain())
+        assertEquals(120_000L, outbox.rateLimitDelayMs())
+        val w = queued().single()
+        assertEquals(key, w.idempotencyKey)
+        assertEquals("RATE_LIMITED", w.lastError)
+        assertNull(session().syncError)
+
+        clock.ms += 60_000 // still inside the window: nothing is sent
+        assertEquals(DrainResult.Retry, outbox.drain())
+        assertEquals(1, server.requestCount)
+
+        clock.ms += 61_000
+        assertNull(outbox.rateLimitDelayMs())
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        assertEquals(DrainResult.Done, outbox.drain())
+        server.takeRequest()
+        assertEquals(key, server.takeRequest().headers["Idempotency-Key"])
+        assertTrue(queued().isEmpty())
+    }
+
+    @Test fun rateLimitWithAnHttpDateRetryAfterIsHonoured() = runTest {
+        start()
+        val at = java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(java.time.Instant.ofEpochMilli(clock.ms + 45_000).atZone(ZoneOffset.UTC))
+        server.enqueue(MockResponse(code = 429, headers = okhttp3.Headers.headersOf("Retry-After", at), body = """{"code":"RATE_LIMITED","message":"x"}"""))
+        assertEquals(DrainResult.Retry, outbox.drain())
+        assertEquals(45_000L, outbox.rateLimitDelayMs())
+        assertEquals(1, queued().size)
     }
 
     @Test fun offlineIsRetry() = runTest {
