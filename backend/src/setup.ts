@@ -5,6 +5,7 @@ import helmet from 'helmet';
 
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { requestIdMiddleware } from './common/request-id';
+import { requestLogMiddleware } from './common/request-log';
 import { globalValidationPipe } from './common/validation';
 import type { Env } from './config/env';
 
@@ -19,6 +20,7 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   // Render terminates TLS in front of the service; trust one proxy hop for req.ip.
   app.set('trust proxy', env.TRUST_PROXY_HOPS);
   app.use(requestIdMiddleware);
+  if (env.REQUEST_LOG === 'on') app.use(requestLogMiddleware);
   app.use(helmet());
   app.useBodyParser('json', { limit: BODY_LIMIT });
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: false });

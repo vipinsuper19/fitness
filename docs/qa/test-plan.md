@@ -267,6 +267,19 @@ Notes:
 
 Notes: a PATCH creates a new plan version with new planned-workout ids, so suggestions after an accepted change are matched by the new ids (PG21–25). Cooldown is per (workout, exercise position): setting a target on a no-target entry is not a raise (PG24).
 
+### Auth sessions in the prod check (#131/#137) — `scripts/prod-check-p1.sh` AU01–AU07
+Throwaway account A, right after sign-up (3 calls in the 10/min auth bucket). Tokens stay in shell variables, temp files are emptied after each auth call, and only the decoded JWT payload's `sub`/`sid` are compared, never printed.
+
+| ID | Case | Expected |
+|---|---|---|
+| AU01 | Two logins on A | 200 each; both access tokens carry a uuid `sid`, different per login; `sub` = A |
+| AU02 | Register token | Carries a uuid `sid` |
+| AU03 | Refresh session 1 | 200; new access token keeps the same `sid` (same family) |
+| AU04 | Logout session 1 (its latest refresh token) | 204 |
+| AU05 | Refresh with session 1's latest and its rotated-out token | Both 401 `REFRESH_TOKEN_REUSED` |
+| AU06 | Refresh session 2 after session 1 logged out | 200, same `sid` as its login |
+| AU07 | Session 2's new access token | Authenticated GET 200 |
+
 ### Dated water goals in challenges and HYDRATED_7 (#109)
 
 Spec: `docs/specs/badges-challenges.md` §2 (water goal, dated). No new endpoints, so no prod-check section. Automated over HTTP in `backend/test/qa-challenges-dated-water.e2e-spec.ts` (DB_TESTS=1): the clock moves day by day and the user logs in again, so water is logged on its own day and goals change through `PUT /me/profile`.
@@ -326,3 +339,26 @@ Robolectric through `MainActivity` with `FakeNotificationPreferencesRepository` 
 | NT14 | Save in flight across user switch | Previous user's result dropped, never shown | `aSaveInFlightForThePreviousUserIsDropped` |
 
 Prod check (`scripts/prod-check-p1.sh`, NP01–NP08): GET defaults shape, 401 unauthenticated, PATCH partial merge, idempotent replay, 409 on key reuse with another body, start == end 400, master off keeps types, no leak to user B.
+
+### Water goal at join and rule line (#129) — `android/app/src/test/.../ui/WaterChallengeUiTest.kt`
+`ChallengeFormatTest` / `AchievementsViewModelsTest` already cover the formatter and the content composable; these go through the real `MainActivity` and ViewModels with `FakeAchievementsRepository`.
+
+| ID | Case | Expected | Test |
+|---|---|---|---|
+| WG1 | Active water challenge from the server (12500 ml) + a workout challenge | "Goal at join: 12,500 ml (for information only)" and the rule line on water only | `activeWaterCardFromTheServerShowsGoalAtJoinAndTheRule` |
+| WG2 | Leave a water challenge | Moves to history and keeps "Goal at join: 2,500 ml …" and the rule | `leavingAWaterChallengeKeepsTheGoalAtJoinInHistory` |
+| WG3 | Join WEEKLY_WATER_DAYS, server sends no waterGoalMl | Rule line shown (template code), no goal line invented | `joiningWaterWithoutAServerGoalShowsTheRuleButInventsNoGoal` |
+| WG4 | Completed and expired water history | Each card shows its own goal at join | `completedAndExpiredWaterHistoryCardsKeepTheirOwnGoals` |
+
+### Outbox 429 / Retry-After (#133) — `android/core/data/src/test/.../session/OutboxRateLimitTest.kt`
+Local MockWebServer only; no 429s are ever triggered against prod. Single-write 429 and HTTP-date Retry-After are in `WorkoutTrackingTest`; late refresh after logout / newer login is in `TokenAuthenticatorTest` and `EncryptedTokenStoreTest` (compare-and-save, clearIf), which already cover it.
+
+| ID | Case | Expected | Test |
+|---|---|---|---|
+| RL1 | 429 (Retry-After 10) on the first of 3 queued writes | Only 1 request; queue ids, order and keys unchanged; attempts [1,0,0]; drains inside the window send nothing and spend no attempts; after it, all 3 sent in order with their original keys | `a429OnTheFirstWriteHoldsTheWholeQueueInOrderWithKeysAndAttempts` |
+| RL2 | 429 on the second write | Sent start removed; rest in place, attempts [1,0], lastError RATE_LIMITED, wait 5 s | `a429MidQueueKeepsTheSentWriteGoneAndTheRestInPlace` |
+| RL3 | Second 429 after the window | New wait from the new Retry-After; attempts [2,0,0] | `aSecond429ExtendsTheWaitAndCountsOneMoreAttempt` |
+| RL4 | No Retry-After | Default 30 s | `missingRetryAfterWaitsTheDefault` |
+| RL5 | Retry-After 999999 | Capped at 1 h | `hugeRetryAfterIsCappedAtAnHour` |
+| RL6 | Retry-After 0 | Minimum 1 s | `zeroRetryAfterStillWaitsTheMinimum` |
+| RL7 | 503 after the window | Normal backoff (no rate-limit wait), attempts counted | `a503AfterTheWindowIsNormalBackoffNotARateLimit` |

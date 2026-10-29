@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # QA API checks against the Fitness API server for session corrections (#63), plan management (#65),
-# the nutrition summary (#70), strength progress (#72), macro targets (#85), progression suggestions (#90) and notification preferences (#116/#127), using TWO throwaway
+# the nutrition summary (#70), strength progress (#72), macro targets (#85), progression suggestions (#90) and notification preferences (#116/#127) and auth sessions (#131/#137), using TWO throwaway
 # accounts (A = owner, B = other user).
 #   scripts/prod-check-p1.sh              # the Fitness API server (only allowed host, see ALLOWED_API)
 #   scripts/prod-check-p1.sh --self-test  # register-timeout, signal, stale-state cleanup and the run lock against a local stub
@@ -224,6 +224,35 @@ if [ "${P1_SELFTEST:-}" = 1 ]; then
 fi
 TODAY="$(TZ=Asia/Kolkata date +%F)"; YDAY="$(TZ=Asia/Kolkata date -d yesterday +%F)"; TMRW="$(TZ=Asia/Kolkata date -d tomorrow +%F)"
 AS=A; r PUT /me/profile '{"timezone":"Asia/Kolkata"}' "$(uid)"   # best effort; ignored if not a field
+
+echo "== Auth sessions: logout family revoke, second session, sid claim (#131/#137) =="
+# Tokens live only in shell variables: r() never prints bodies, and the response/body temp files are emptied
+# right after each auth call. Only the decoded JWT *payload* fields sub/sid/typ are compared, never printed.
+# 3 calls in the strict 'auth' bucket (2 logins + 1 logout) right after the 2 registers: under its 10/min.
+wipe() { : > "$B"; : > "$BF"; : > "$HF"; }
+rt_of() { j '[.. | objects | .refreshToken? // empty][0] // empty'; }
+at_of() { j '[.. | objects | .accessToken? // empty][0] // empty'; }
+# claim TOKEN FIELD -> that field of the JWT payload (base64url-decoded locally); token never leaves the variable.
+claim() { local p; p="$(cut -d. -f2 <<<"$1" | tr '_-' '/+')"; while [ $(( ${#p} % 4 )) != 0 ]; do p+='='; done; base64 -d 2>/dev/null <<<"$p" | jq -r --arg f "$2" '.[$f] // empty' 2>/dev/null; }
+isuuid() { [[ "$1" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; }
+AUID="$(claim "${TOK[A]}" sub)"
+TOK[A1]=""; TOK[A2]=""
+AS=""; r POST /auth/login "$(cred A '{email:$e,password:$p}')"; L1=$C; A1="$(at_of)"; R1="$(rt_of)"; wipe
+AS=""; r POST /auth/login "$(cred A '{email:$e,password:$p}')"; L2=$C; A2="$(at_of)"; R2="$(rt_of)"; wipe
+S1="$(claim "$A1" sid)"; S2="$(claim "$A2" sid)"
+check "AU01 two logins on A -> 200, access tokens carry a uuid sid, distinct per login, sub = A" "$([ "$L1/$L2" = 200/200 ] && isuuid "$S1" && isuuid "$S2" && [ "$S1" != "$S2" ] && [ "$(claim "$A1" sub)" = "$AUID" ] && [ -n "$AUID" ] && echo 0 || echo 1)" "logins $L1/$L2 sid1 uuid=$(isuuid "$S1" && echo y || echo n) sid2 uuid=$(isuuid "$S2" && echo y || echo n) distinct=$([ "$S1" != "$S2" ] && echo y || echo n)"
+check "AU02 register token also carries a uuid sid" "$(isuuid "$(claim "${TOK[A]}" sid)" && echo 0 || echo 1)" "no sid on the register token"
+r POST /auth/refresh "$(jq -nc --arg t "$R1" '{refreshToken:$t}')"; RC=$C; A1B="$(at_of)"; R1B="$(rt_of)"; wipe
+check "AU03 refresh session 1 -> 200, new access keeps sid (same family)" "$([ "$RC" = 200 ] && [ -n "$R1B" ] && [ "$(claim "$A1B" sid)" = "$S1" ] && echo 0 || echo 1)" "C=$RC same-sid=$([ "$(claim "$A1B" sid)" = "$S1" ] && echo y || echo n)"
+TOK[A1]="$A1B"; AS=A1; r POST /auth/logout "$(jq -nc --arg t "$R1B" '{refreshToken:$t}')"; LC=$C; wipe; AS=""
+check "AU04 logout session 1 -> 204" "$([ "$LC" = 204 ] && echo 0 || echo 1)" "C=$LC"
+r POST /auth/refresh "$(jq -nc --arg t "$R1B" '{refreshToken:$t}')"; C1=$C; K1="$(j .code)"; wipe
+r POST /auth/refresh "$(jq -nc --arg t "$R1" '{refreshToken:$t}')"; C0=$C; K0="$(j .code)"; wipe
+check "AU05 after logout every token in the family -> 401 REFRESH_TOKEN_REUSED (latest and rotated-out)" "$([ "$C1/$K1/$C0/$K0" = 401/REFRESH_TOKEN_REUSED/401/REFRESH_TOKEN_REUSED ] && echo 0 || echo 1)" "latest $C1 $K1, old $C0 $K0"
+r POST /auth/refresh "$(jq -nc --arg t "$R2" '{refreshToken:$t}')"; RC=$C; A2B="$(at_of)"; R2B="$(rt_of)"; wipe
+check "AU06 session 2 survives session 1 logout: refresh -> 200, same sid" "$([ "$RC" = 200 ] && [ -n "$R2B" ] && [ "$(claim "$A2B" sid)" = "$S2" ] && echo 0 || echo 1)" "C=$RC"
+TOK[A2]="$A2B"; AS=A2; r GET /me/notification-preferences; check "AU07 session 2's new access token works -> 200" "$(is 200)" "C=$C"; AS=""
+unset A1 A2 A1B A2B R1 R2 R1B R2B; TOK[A1]=""; TOK[A2]=""
 
 echo "== Plan management (#65) =="
 AS=A

@@ -76,6 +76,20 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
 ## 4. Android staging URL
 Once the service exists, set the Android **debug** build's API base URL to `https://<service>.onrender.com/api/v1/`. No Play upload.
 
+## Request log
+Every request writes one JSON line to stdout (Render → Logs), for example:
+
+```json
+{"type":"request","requestId":"6f1c…","method":"GET","route":"/api/v1/goals/{goalId}","status":404,"durationMs":12.3,"userId":"9b2e…"}
+```
+
+- `route` is the route **template**, never the raw path or query string; unmatched paths log `route: null`.
+- `userId` is the opaque account UUID, only on authenticated requests.
+- **Never logged:** emails, request/response bodies, query strings, tokens, `Authorization`/cookie headers, IPs (not hashed either; rate-limit debugging uses the route, status and `requestId`), user agent.
+- `requestId` equals the `X-Request-Id` response header and `requestId` in error bodies; ask users for it in bug reports and search the logs for it.
+- `REQUEST_LOG=off` disables the line (default `on`; tests set `off`). Nest's existing logger and its default levels are unchanged.
+- Spec: [docs/specs/request-log.md](specs/request-log.md).
+
 ## Free-tier notes
 - **Cold starts (accepted):** Render Free spins down after ~15 min idle, so the first request after that takes **about 50 s**. **No keep-alive pinger is used**, by choice, to stay within the free plan; the app should show a loading state and retry.
 - Render Free has 512 MB RAM. argon2 (19 MiB per hash) fits.

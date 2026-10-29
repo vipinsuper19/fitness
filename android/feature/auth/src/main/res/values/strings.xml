@@ -30,6 +30,8 @@
     <string name="delete_account_cancel">Cancel</string>
     <string name="delete_account_wrong_password">That password isn\'t right. Your account was not deleted.</string>
     <string name="delete_account_offline">Couldn\'t reach the server, so your account was not deleted yet. Check your connection and try again.</string>
+    <string name="delete_account_maybe_deleted">Your account may already be deleted. Sign in to check.</string>
+    <string name="delete_account_sign_in_to_check">Sign in</string>
     <string name="delete_account_server">The server had a problem, so your account was not deleted yet. Please try again.</string>
     <string name="export_title">Export my data</string>
     <string name="export_body">Download everything we store about you (profile, plans, workouts, food and water logs, measurements, XP, badges and challenges) as a JSON file.</string>

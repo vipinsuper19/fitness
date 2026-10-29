@@ -42,6 +42,13 @@ class FakeSessionRepository(var signedIn: Boolean = false) : SessionRepository {
         signOuts++
         signedIn = false
     }
+
+    var localSignOuts = 0
+    override suspend fun endSessionLocally() {
+        localSignOuts++
+        gate?.await()
+        signedIn = false
+    }
 }
 
 /** Applies [ProfileChanges] the way the server does: Unchanged keeps, Clear nulls, Set replaces. */

@@ -37,6 +37,23 @@ class MigrationTest {
         }
     }
 
+    @Test fun v3ToV4KeepsQueuedWritesAndAddsTheRateLimitTable() {
+        helper.createDatabase("m4.db", 3).use { db ->
+            db.execSQL("INSERT INTO pending_writes (id, idempotency_key, method, path, body, created_at, attempts, owner_user_id) VALUES ('a', 'k', 'POST', 'food-logs', '{}', 1, 2, 'u1')")
+        }
+        helper.runMigrationsAndValidate("m4.db", 4, true).use { db ->
+            db.query("SELECT idempotency_key, attempts FROM pending_writes").use { c -> c.moveToFirst(); assertEquals("k", c.getString(0)); assertEquals(2, c.getInt(1)) }
+            db.query("SELECT COUNT(*) FROM outbox_rate_limit").use { c -> c.moveToFirst(); assertEquals(0, c.getInt(0)) }
+            db.execSQL("INSERT INTO outbox_rate_limit (owner_user_id, not_before_ms) VALUES ('u1', 5)")
+            db.query("SELECT not_before_ms FROM outbox_rate_limit WHERE owner_user_id = 'u1'").use { c -> c.moveToFirst(); assertEquals(5L, c.getLong(0)) }
+        }
+    }
+
+    @Test fun v1MigratesAllTheWayToV4() {
+        helper.createDatabase("m14.db", 1).close()
+        helper.runMigrationsAndValidate("m14.db", 4, true).close()
+    }
+
     @Test fun v1MigratesAllTheWayToV3() {
         helper.createDatabase("m13.db", 1).close()
         helper.runMigrationsAndValidate("m13.db", 3, true).close()

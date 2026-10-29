@@ -51,6 +51,12 @@ interface SessionRepository {
     /** [idempotencyKey]: one per sign-up attempt, reused on a retry of the same attempt. */
     suspend fun register(email: String, password: String, displayName: String?, idempotencyKey: String): AuthOutcome
     suspend fun signOut()
+    /**
+     * Ends the session on this device only, like a refresh-token expiry: forgets the tokens but
+     * sends no server logout and keeps local user state (outbox, unsynced workouts, consent), so
+     * the same user signing in again resumes where they were.
+     */
+    suspend fun endSessionLocally()
 }
 
 @Singleton
@@ -82,6 +88,10 @@ class DefaultSessionRepository @Inject constructor(
         withContext(Dispatchers.IO) { tokens.clear() }
         cache.clear()
         userState.forEach { it.clearUserState() }
+    }
+
+    override suspend fun endSessionLocally() {
+        withContext(Dispatchers.IO) { tokens.clear() }
     }
 
     private suspend fun authenticate(call: suspend () -> AuthResponseDto): AuthOutcome =

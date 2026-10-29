@@ -132,6 +132,16 @@ class RepositoriesTest {
         assertEquals("""{"refreshToken":"r"}""", server.takeRequest().body?.utf8())
     }
 
+    @Test fun endSessionLocallyClearsOnlyTokens() = runTest {
+        store.tokens = AuthTokens("a", "r", 0)
+        cache.completed = true
+        session.endSessionLocally()
+        assertNull(store.tokens)
+        assertEquals(0, userState.clears) // outbox, unsynced workouts... kept for the same user
+        assertEquals(true, cache.completed)
+        assertEquals(0, server.requestCount) // no server logout
+    }
+
     @Test fun signInClearsUserStateOnlyOnSuccess() = runTest {
         server.enqueue(MockResponse(code = 401, body = """{"code":"INVALID_CREDENTIALS","message":"no","requestId":"q"}"""))
         server.enqueue(MockResponse(code = 200, body = authBody))

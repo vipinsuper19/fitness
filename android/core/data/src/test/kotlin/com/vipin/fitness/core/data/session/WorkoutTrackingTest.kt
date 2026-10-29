@@ -255,6 +255,67 @@ class WorkoutTrackingTest {
         assertTrue(queued().isEmpty())
     }
 
+    private fun newProcessor() = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
+    private val rateLimited get() = MockResponse(code = 429, headers = okhttp3.Headers.headersOf("Retry-After", "120"), body = """{"code":"RATE_LIMITED","message":"x"}""")
+
+    @Test fun rateLimitWindowSurvivesAProcessRestartAndClearsOnSuccess() = runTest {
+        repo.onSignedIn("u1")
+        start()
+        server.enqueue(rateLimited)
+        assertEquals(DrainResult.Retry, outbox.drain())
+        assertEquals(clock.ms + 120_000, db.pendingWriteDao().notBefore("u1"))
+
+        clock.ms += 30_000
+        val restarted = newProcessor() // new process: nothing in memory
+        assertEquals(DrainResult.Retry, restarted.drain())
+        assertEquals(90_000L, restarted.rateLimitDelayMs()) // the worker reschedules for what's left
+        assertEquals(1, server.requestCount)
+
+        clock.ms += 91_000
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        assertEquals(DrainResult.Done, restarted.drain())
+        assertNull(db.pendingWriteDao().notBefore("u1"))
+        assertNull(restarted.rateLimitDelayMs())
+    }
+
+    @Test fun storedWindowFarInTheFutureIsIgnoredAsClockSkew() = runTest {
+        repo.onSignedIn("u1")
+        start()
+        db.pendingWriteDao().setNotBefore(com.vipin.fitness.core.database.outbox.OutboxRateLimitEntity("u1", clock.ms + 2 * 60 * 60_000L))
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        assertEquals(DrainResult.Done, newProcessor().drain())
+        assertEquals(1, server.requestCount)
+        assertNull(db.pendingWriteDao().notBefore("u1"))
+    }
+
+    @Test fun storedWindowWithinAnHourIsKept() = runTest {
+        repo.onSignedIn("u1")
+        start()
+        db.pendingWriteDao().setNotBefore(com.vipin.fitness.core.database.outbox.OutboxRateLimitEntity("u1", clock.ms + 60 * 60_000L))
+        val p = newProcessor()
+        assertEquals(DrainResult.Retry, p.drain())
+        assertEquals(60 * 60_000L, p.rateLimitDelayMs())
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test fun signOutClearsOnlyThatUsersWindow_andSignInDropsOthers() = runTest {
+        val dao = db.pendingWriteDao()
+        repo.onSignedIn("u1")
+        start()
+        server.enqueue(rateLimited)
+        assertEquals(DrainResult.Retry, outbox.drain())
+        dao.setNotBefore(com.vipin.fitness.core.database.outbox.OutboxRateLimitEntity("u2", clock.ms + 1_000))
+        repo.clearUserState()
+        assertNull(dao.notBefore("u1"))
+        assertEquals(clock.ms + 1_000, dao.notBefore("u2"))
+        repo.onSignedIn("u3")
+        assertNull(dao.notBefore("u2"))
+        // Signed out and back in: the old in-memory window doesn't hold the new session's queue.
+        start()
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        assertEquals(DrainResult.Done, outbox.drain())
+    }
+
     @Test fun rateLimitWithAnHttpDateRetryAfterIsHonoured() = runTest {
         start()
         val at = java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(java.time.Instant.ofEpochMilli(clock.ms + 45_000).atZone(ZoneOffset.UTC))
