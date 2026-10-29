@@ -11,7 +11,7 @@ export class SessionStartDto {
   @ApiPropertyOptional({ format: 'uuid' }) @IsOptional() @IsUUID()
   plannedWorkoutId?: string;
 
-  @ApiPropertyOptional({ minimum: 1 }) @IsOptional() @IsInt() @Min(1) @Max(1_000_000)
+  @ApiPropertyOptional({ minimum: 1, maximum: 1_000_000 }) @IsOptional() @IsInt() @Min(1) @Max(1_000_000)
   planVersion?: number;
 
   @ApiPropertyOptional({ format: 'date-time', description: 'Client time for offline starts; defaults to server time' })

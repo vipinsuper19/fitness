@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 import { PageQuery } from '../common/page.dto';
 
@@ -11,8 +11,8 @@ export class ChallengeJoinDto {
   @IsString() @MaxLength(40)
   templateCode!: string;
 
-  @ApiProperty({ minimum: 1 })
-  @IsInt() @Min(1)
+  @ApiProperty({ minimum: 1, maximum: 1000 })
+  @IsInt() @Min(1) @Max(1000)
   target!: number;
 }
 

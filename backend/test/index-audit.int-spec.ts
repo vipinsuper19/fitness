@@ -188,8 +188,8 @@ describeDb('index audit: hot read paths (EXPLAIN ANALYZE on seeded data)', () =>
   it('strength reads go through the user\'s completed sessions and the set-log session index', () => {
     for (const [title, plan] of plans) {
       if (!title.startsWith('strength')) continue;
-      // Either composite works: (user_id, status, completed_at), or (user_id, completed_at) for date ranges.
-      expect(plan).toMatch(/workout_sessions_user_id_(status_)?completed_at_idx/);
+      // (user_id, completed_at) was dropped as redundant in the index review (20261029001600).
+      expect(plan).toContain('workout_sessions_user_id_status_completed_at_idx');
       expect(plan).toContain('exercise_set_logs_session_id_idx');
     }
   });

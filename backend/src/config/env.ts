@@ -9,6 +9,8 @@ export const envSchema = z.object({
   /** One PII-free JSON line per request on stdout (docs/specs/request-log.md). */
   REQUEST_LOG: z.enum(['on', 'off']).default('on'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  /** Max time to let in-flight requests finish after SIGTERM; must stay under Render's 30 s shutdown delay. */
+  SHUTDOWN_GRACE_MS: z.coerce.number().int().min(0).max(25_000).default(10_000),
   /** Supabase pooled connection string (pgbouncer, port 6543) used at runtime. */
   DATABASE_URL: z.string().url().refine((v) => /^postgres(ql)?:\/\//.test(v), 'must be a postgres URL'),
   /** Supabase direct connection (port 5432) for migrations. Optional at runtime. */

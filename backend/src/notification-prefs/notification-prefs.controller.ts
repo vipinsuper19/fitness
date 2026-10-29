@@ -1,12 +1,14 @@
 import { Body, Controller, Get, Patch, Req, Res } from '@nestjs/common';
-import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader } from '../auth/idempotency-key';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
-import type { PrefsView } from './notification-prefs.rules';
+import { LOCAL_TIME, NOTIFICATION_TYPES, type PrefsView } from './notification-prefs.rules';
+
+const localTime = { type: 'string', pattern: LOCAL_TIME.source, description: 'Local wall-clock time HH:MM (24 h)' };
 import { NotificationPrefsService } from './notification-prefs.service';
 
 /**
@@ -31,6 +33,19 @@ export class NotificationPrefsController {
 
   @Patch()
   @ApiHeader({ name: 'Idempotency-Key', required: false })
+  // Documentation only: the body is validated by hand in NotificationPrefsService (contract NotificationPreferencesUpdate).
+  @ApiBody({
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      description: 'Partial merge. Unknown properties, unknown type keys and nulls are 400 VALIDATION_FAILED.',
+      properties: {
+        enabled: { type: 'boolean' },
+        types: { type: 'object', description: `Keys: ${NOTIFICATION_TYPES.join(', ')}`, additionalProperties: { type: 'boolean' } },
+        quietHours: { type: 'object', additionalProperties: false, properties: { enabled: { type: 'boolean' }, start: localTime, end: localTime } },
+      },
+    },
+  })
   patch(
     @CurrentUserId() userId: string,
     @Body() body: unknown,

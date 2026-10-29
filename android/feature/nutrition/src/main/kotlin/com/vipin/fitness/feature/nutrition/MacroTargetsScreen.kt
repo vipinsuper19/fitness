@@ -14,7 +14,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -56,6 +59,17 @@ object MacroTargetsTags {
     const val MISSING = "macro_missing"
     fun missing(input: com.vipin.fitness.core.data.MacroInput) = "macro_missing_${input.name.lowercase()}"
     const val OPEN_PROFILE = "macro_open_profile"
+    const val EDIT = "macro_edit"
+    const val EDITOR = "macro_editor"
+    const val EDIT_PROTEIN = "macro_edit_protein"
+    const val EDIT_CARBS = "macro_edit_carbs"
+    const val EDIT_FAT = "macro_edit_fat"
+    fun editError(field: MacroField) = "macro_edit_error_${field.name.lowercase()}"
+    const val EDIT_NOTE = "macro_edit_note"
+    const val SAVE = "macro_save"
+    const val CANCEL_EDIT = "macro_cancel_edit"
+    const val SAVE_ERROR = "macro_save_error"
+    const val SAVED = "macro_saved"
 }
 
 @Composable
@@ -63,8 +77,19 @@ fun MacroTargetsRoute(onBack: () -> Unit, onOpenProfile: () -> Unit, modifier: M
     val vm: MacroTargetsViewModel = hiltViewModel(key = "macro_targets")
     val s by vm.state.collectAsStateWithLifecycle()
     BackHandler(onBack = onBack)
-    MacroTargetsContent(s, onBack, onOpenProfile, vm::load, vm::suggest, vm::apply, vm::dismiss, modifier)
+    MacroTargetsContent(
+        s, onBack, onOpenProfile, vm::load, vm::suggest, vm::apply, vm::dismiss, modifier,
+        MacroEditActions(vm::edit, vm::onField, vm::save, vm::cancelEdit),
+    )
 }
+
+/** Manual target editing callbacks. */
+data class MacroEditActions(
+    val onEdit: () -> Unit = {},
+    val onField: (MacroField, String) -> Unit = { _, _ -> },
+    val onSave: () -> Unit = {},
+    val onCancel: () -> Unit = {},
+)
 
 @Composable
 fun MacroTargetsContent(
@@ -76,6 +101,7 @@ fun MacroTargetsContent(
     onApply: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    editActions: MacroEditActions = MacroEditActions(),
 ) {
     val res = LocalContext.current.resources
     Column(modifier.fillMaxSize().testTag(MacroTargetsTags.SCREEN)) {
@@ -99,14 +125,20 @@ fun MacroTargetsContent(
                         Line(stringResource(R.string.macro_calorie_target), MacroFormat.kcal(res, t.calorieTargetKcal), null)
                     }
                 }
+                if (s.saved) Text(stringResource(R.string.macro_saved), modifier = Modifier.testTag(MacroTargetsTags.SAVED))
                 if (s.applied) Text(stringResource(R.string.macro_applied), modifier = Modifier.testTag(MacroTargetsTags.APPLIED))
                 val sug = s.suggestion
+                val edit = s.edit
                 when {
+                    edit != null -> EditCard(s, edit, editActions)
                     s.suggesting -> Box(Modifier.fillMaxWidth().testTag(MacroTargetsTags.SUGGEST_LOADING), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     s.suggestError != null -> ErrorBlock(s.suggestError.suggestMessage(), MacroTargetsTags.SUGGEST_ERROR, MacroTargetsTags.SUGGEST_RETRY, onSuggest)
                     sug != null && sug.suggestion != null -> SuggestionCard(s, sug, onApply, onDismiss)
                     sug != null -> MissingCard(sug, onOpenProfile)
-                    else -> Button(onClick = onSuggest, modifier = Modifier.testTag(MacroTargetsTags.SUGGEST)) { Text(stringResource(R.string.macro_suggest)) }
+                    else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = onSuggest, modifier = Modifier.testTag(MacroTargetsTags.SUGGEST)) { Text(stringResource(R.string.macro_suggest)) }
+                        OutlinedButton(onClick = editActions.onEdit, modifier = Modifier.testTag(MacroTargetsTags.EDIT)) { Text(stringResource(R.string.macro_edit)) }
+                    }
                 }
             }
         }
@@ -135,7 +167,7 @@ private fun SuggestionCard(s: MacroTargetsState, m: MacroSuggestion, onApply: ()
                     Text(stringResource(R.string.macro_diet_hint), style = MaterialTheme.typography.bodySmall)
                 }
             }
-            s.applyError?.let { Text(stringResource(it.applyMessage()), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(MacroTargetsTags.APPLY_ERROR)) }
+            s.applyError?.let { Text(MacroFormat.applyError(res, it, s.retryAfterMs), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(MacroTargetsTags.APPLY_ERROR)) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onApply, enabled = !s.applying, modifier = Modifier.testTag(MacroTargetsTags.APPLY)) {
                     Text(stringResource(if (s.applyError != null) R.string.macro_retry else R.string.macro_apply))
@@ -144,6 +176,53 @@ private fun SuggestionCard(s: MacroTargetsState, m: MacroSuggestion, onApply: ()
             }
         }
     }
+}
+
+@Composable
+private fun EditCard(s: MacroTargetsState, e: MacroEdit, a: MacroEditActions) {
+    val res = LocalContext.current.resources
+    val errors = s.editErrors
+    Card(Modifier.fillMaxWidth().testTag(MacroTargetsTags.EDITOR)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.macro_edit_title), style = MaterialTheme.typography.titleMedium)
+            MacroField.entries.forEach { f ->
+                val err = errors[f]
+                OutlinedTextField(
+                    value = e.text(f),
+                    onValueChange = { a.onField(f, it) },
+                    enabled = !s.saving,
+                    singleLine = true,
+                    label = { Text(stringResource(f.label())) },
+                    suffix = { Text(stringResource(R.string.macro_grams_unit)) },
+                    isError = err != null,
+                    supportingText = err?.let { er -> { Text(MacroFormat.gramsError(res, er), Modifier.testTag(MacroTargetsTags.editError(f))) } },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth().testTag(f.editTag()),
+                )
+            }
+            Text(stringResource(R.string.macro_edit_hint), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.macro_edit_note), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag(MacroTargetsTags.EDIT_NOTE))
+            s.saveError?.let { Text(MacroFormat.saveError(res, it, s.retryAfterMs), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(MacroTargetsTags.SAVE_ERROR)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = a.onSave, enabled = s.canSave, modifier = Modifier.testTag(MacroTargetsTags.SAVE)) {
+                    Text(stringResource(if (s.saveError != null && s.saveError != MacroError.INVALID) R.string.macro_retry else R.string.macro_save))
+                }
+                OutlinedButton(onClick = a.onCancel, enabled = !s.saving, modifier = Modifier.testTag(MacroTargetsTags.CANCEL_EDIT)) { Text(stringResource(R.string.macro_cancel)) }
+            }
+        }
+    }
+}
+
+private fun MacroField.label() = when (this) {
+    MacroField.PROTEIN -> R.string.macro_protein
+    MacroField.CARBS -> R.string.macro_carbs
+    MacroField.FAT -> R.string.macro_fat
+}
+
+private fun MacroField.editTag() = when (this) {
+    MacroField.PROTEIN -> MacroTargetsTags.EDIT_PROTEIN
+    MacroField.CARBS -> MacroTargetsTags.EDIT_CARBS
+    MacroField.FAT -> MacroTargetsTags.EDIT_FAT
 }
 
 @Composable
@@ -174,6 +253,13 @@ private fun ErrorBlock(message: Int, tag: String, retryTag: String, onRetry: () 
     }
 }
 
-private fun MacroError.loadMessage() = if (this == MacroError.OFFLINE) R.string.macro_offline else R.string.macro_failed
-private fun MacroError.suggestMessage() = if (this == MacroError.OFFLINE) R.string.macro_offline else R.string.macro_suggest_failed
-private fun MacroError.applyMessage() = if (this == MacroError.OFFLINE) R.string.macro_offline else R.string.macro_apply_failed
+private fun MacroError.loadMessage() = when (this) {
+    MacroError.OFFLINE -> R.string.macro_offline
+    MacroError.RATE_LIMITED -> R.string.macro_rate_limited_unknown
+    else -> R.string.macro_failed
+}
+private fun MacroError.suggestMessage() = when (this) {
+    MacroError.OFFLINE -> R.string.macro_offline
+    MacroError.RATE_LIMITED -> R.string.macro_rate_limited_unknown
+    else -> R.string.macro_suggest_failed
+}

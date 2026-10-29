@@ -16,7 +16,9 @@ services:
     # needed at build time even though NODE_ENV=production.
     buildCommand: npm ci --include=dev --no-audit --no-fund && npm run build
     # Free plan has no pre-deploy command, so migrate on start (idempotent).
-    startCommand: npm run migrate:deploy && npm start
+    # `exec` replaces the shell with node, so node gets Render's SIGTERM
+    # directly and graceful shutdown runs (see docs/DEPLOY.md).
+    startCommand: npm run migrate:deploy && exec node dist/main.js
     healthCheckPath: /health
     buildFilter:
       paths:

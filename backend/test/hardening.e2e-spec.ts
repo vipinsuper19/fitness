@@ -32,8 +32,31 @@ describe('app hardening', () => {
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ email: 'a@b.in', password: 'x'.repeat(110_000) }))
       .expect(413);
-    expect(res.body).toMatchObject({ code: 'PAYLOAD_TOO_LARGE' });
+    expect(res.body).toMatchObject({ code: 'PAYLOAD_TOO_LARGE', message: 'Request body is too large.' });
     expect(typeof res.body.requestId).toBe('string');
+    expect(res.headers['x-request-id']).toBe(res.body.requestId);
+  });
+
+  it('caps plan create/PATCH bodies at 256kb (a maximal plan is ~145kb) and other routes at 100kb, before auth', async () => {
+    const post = (url: string, bytes: number) =>
+      request(app.getHttpServer()).post(url).set('Content-Type', 'application/json').send(JSON.stringify({ name: 'x'.repeat(bytes) }));
+    // Under the plan cap the body is parsed and reaches the auth guard (401), so it is not a 413.
+    expect((await post('/api/v1/workout-plans', 150_000)).status).toBe(401);
+    expect((await request(app.getHttpServer()).patch('/api/v1/workout-plans/3c7e9a1b-5d2f-4a6c-8e0b-1f3d5a7c9e24').set('Content-Type', 'application/json').send(JSON.stringify({ n: 'x'.repeat(150_000) }))).status).toBe(401);
+    const big = await post('/api/v1/workout-plans', 262_200).expect(413);
+    expect(big.body).toMatchObject({ code: 'PAYLOAD_TOO_LARGE', requestId: big.headers['x-request-id'] });
+    const other = await post('/api/v1/foods', 102_400).expect(413);
+    expect(other.body).toMatchObject({ code: 'PAYLOAD_TOO_LARGE', requestId: other.headers['x-request-id'] });
+    expect((await post('/api/v1/foods', 99_000)).status).toBe(401);
+  });
+
+  it('over-max string over HTTP is 400 VALIDATION_FAILED naming the field', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({ email: 'asha@example.invalid', password: 'p'.repeat(129) })
+      .expect(400);
+    expect(res.body.code).toBe('VALIDATION_FAILED');
+    expect(res.body.details.fields).toHaveProperty('password');
   });
 
   it('returns 400 for malformed JSON', async () => {
