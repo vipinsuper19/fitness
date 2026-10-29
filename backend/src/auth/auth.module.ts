@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 
+import { throttlerOptions } from '../common/rate-limit';
 import { ENV } from '../config/config.module';
 import type { Env } from '../config/env';
 import { AuthController, MeController } from './auth.controller';
@@ -17,13 +18,7 @@ import { TokenService } from './token.service';
     JwtModule.register({}),
     ThrottlerModule.forRootAsync({
       inject: [ENV],
-      useFactory: (env: Env) => [
-        { name: 'auth', ttl: 60_000, limit: env.AUTH_RATE_LIMIT_PER_MINUTE },
-        { name: 'refresh', ttl: 60_000, limit: env.AUTH_REFRESH_RATE_LIMIT_PER_MINUTE },
-        { name: 'export', ttl: 3_600_000, limit: env.EXPORT_RATE_LIMIT_PER_HOUR },
-        { name: 'targetHistory', ttl: 60_000, limit: env.TARGET_HISTORY_RATE_LIMIT_PER_MINUTE },
-        { name: 'notificationPrefs', ttl: 60_000, limit: env.NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE },
-      ],
+      useFactory: (env: Env) => throttlerOptions(env),
     }),
   ],
   controllers: [AuthController, MeController],

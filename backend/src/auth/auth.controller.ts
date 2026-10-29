@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 
 import { AuthResponse, AuthService } from './auth.service';
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from './current-user.decorator';
 import { DeleteAccountDto, LoginDto, RefreshDto, RegisterDto } from './dto/auth.dto';
 import { IdempotencyKeyHeader } from './idempotency-key';
@@ -11,12 +11,11 @@ import type { TokenPair } from './token.service';
 
 @ApiTags('auth')
 @Controller('auth')
-@UseGuards(ThrottlerGuard)
-@SkipThrottle({ refresh: true, export: true, targetHistory: true, notificationPrefs: true })
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
+  @RateLimit('auth')
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiHeader({ name: 'Idempotency-Key', required: false })
@@ -25,6 +24,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit('auth')
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto): Promise<AuthResponse> {
@@ -33,13 +33,14 @@ export class AuthController {
 
   @Public()
   // Looser 'refresh' bucket instead of the strict 'auth' one.
-  @SkipThrottle({ auth: true, refresh: false })
+  @RateLimit('refresh')
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshDto): Promise<TokenPair> {
     return this.auth.refresh(dto.refreshToken);
   }
 
+  @RateLimit('auth')
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
@@ -50,11 +51,10 @@ export class AuthController {
 
 @ApiTags('me')
 @Controller('me')
-@UseGuards(ThrottlerGuard)
-@SkipThrottle({ refresh: true, export: true, targetHistory: true, notificationPrefs: true })
 export class MeController {
   constructor(private readonly auth: AuthService) {}
 
+  @RateLimit('auth')
   @Delete()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()

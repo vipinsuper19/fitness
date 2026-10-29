@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res } fr
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
@@ -23,6 +24,7 @@ export class GoalsController {
     return this.goals.list(userId, q);
   }
 
+  @RateLimit('goals')
   @Post()
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   create(
@@ -40,6 +42,7 @@ export class GoalsController {
     return this.goals.get(userId, id);
   }
 
+  @RateLimit('goals')
   @Patch(':goalId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   update(
@@ -53,6 +56,7 @@ export class GoalsController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.goals.update(userId, id, dto) });
   }
 
+  @RateLimit('goals')
   @Delete(':goalId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async remove(

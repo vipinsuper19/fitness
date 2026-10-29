@@ -1,12 +1,11 @@
-import { Body, Controller, Get, Patch, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader } from '../auth/idempotency-key';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
-import { UserThrottlerGuard } from '../me/export.controller';
 import type { PrefsView } from './notification-prefs.rules';
 import { NotificationPrefsService } from './notification-prefs.service';
 
@@ -17,9 +16,8 @@ import { NotificationPrefsService } from './notification-prefs.service';
  */
 @ApiTags('me')
 @ApiBearerAuth()
+@RateLimit('notificationPrefs')
 @Controller('me/notification-preferences')
-@UseGuards(UserThrottlerGuard)
-@SkipThrottle({ auth: true, refresh: true, export: true, targetHistory: true, notificationPrefs: false })
 export class NotificationPrefsController {
   constructor(
     private readonly prefs: NotificationPrefsService,

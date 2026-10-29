@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/com
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
@@ -36,6 +37,7 @@ export class AchievementsController {
   }
 
   @ApiTags('challenges')
+  @RateLimit('challenges')
   @Post('challenges')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   join(
@@ -55,6 +57,7 @@ export class AchievementsController {
   }
 
   @ApiTags('challenges')
+  @RateLimit('challenges')
   @Post('challenges/:challengeId/leave')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   leave(

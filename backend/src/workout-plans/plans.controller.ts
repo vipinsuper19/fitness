@@ -1,8 +1,8 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
@@ -23,14 +23,14 @@ export class PlansController {
   ) {}
 
   /** Read-only (never persists), so no Idempotency-Key; throttled per IP like auth. */
+  @RateLimit('auth')
   @Post('generate')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(ThrottlerGuard)
-  @SkipThrottle({ refresh: true, export: true, targetHistory: true, notificationPrefs: true })
   generate(@Body() dto: PlanGenerateDto): Promise<WorkoutPlanDraft> {
     return this.plans.generate(dto);
   }
 
+  @RateLimit('plans')
   @Post()
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   create(
@@ -69,6 +69,7 @@ export class PlansController {
     return this.progression.suggestions(userId, id);
   }
 
+  @RateLimit('plans')
   @Patch(':planId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   update(
@@ -82,6 +83,7 @@ export class PlansController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.update(userId, id, dto) });
   }
 
+  @RateLimit('plans')
   @Put(':planId/name')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   rename(
@@ -95,6 +97,7 @@ export class PlansController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.rename(userId, id, dto.name) });
   }
 
+  @RateLimit('plans')
   @Post(':planId/unarchive')
   @HttpCode(HttpStatus.OK)
   @ApiHeader({ name: 'Idempotency-Key', required: false })
@@ -108,6 +111,7 @@ export class PlansController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.unarchive(userId, id) });
   }
 
+  @RateLimit('plans')
   @Post(':planId/activate')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   activate(
@@ -121,6 +125,7 @@ export class PlansController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.activate(userId, id, dto?.resume === true) });
   }
 
+  @RateLimit('plans')
   @Post(':planId/deactivate')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async deactivate(
@@ -133,6 +138,7 @@ export class PlansController {
     await this.idem.run({ userId, key, req, res, status: 204, handler: () => this.plans.deactivate(userId, id) });
   }
 
+  @RateLimit('plans')
   @Delete(':planId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async archive(
