@@ -54,6 +54,7 @@ describe('contracts/openapi.yaml', () => {
       'patch /food-logs/{foodLogId}', 'delete /food-logs/{foodLogId}',
       'get /water-logs', 'post /water-logs', 'patch /water-logs/{waterLogId}', 'delete /water-logs/{waterLogId}', 'get /nutrition/daily',
       'get /body-measurements', 'post /body-measurements', 'get /progress/summary',
+      'get /progress/exercises', 'get /progress/exercises/{exerciseId}',
       'get /xp/ledger', 'get /xp/balance',
       // P1: badges & challenges (docs/specs/badges-challenges.md)
       'get /badges', 'get /challenges/templates', 'get /challenges', 'post /challenges',

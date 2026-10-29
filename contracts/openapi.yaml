@@ -1363,6 +1363,88 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /progress/exercises:
+    get:
+      tags: [progress]
+      operationId: listExerciseProgress
+      summary: Strength progress per exercise (exercises performed in the range, with all-time records)
+      description: |
+        Read-only; no XP and no Idempotency-Key. Same range rules as `/progress/summary`: `from` and `to`
+        required, `from` ≤ `to`, at most 366 days, dates within years 1900–2100 (otherwise `400`).
+        Discarded sessions are excluded; corrections show up on the next read (nothing is cached).
+        A set counts only if it is `completed` in a `completed` session; discarded sessions are gone and
+        corrected sets count as corrected. A session's local date is its `completedAt` in the **current** profile timezone (changing the timezone re-buckets history).
+        Lists exercises with at least one counting set in the range, most recently performed first
+        (`lastPerformedAt` DESC, then `exerciseId` DESC), paged with `cursor`/`limit`. `sessions` and
+        `lastPerformedAt` are within the range; `pr` is **all-time** (see `PersonalRecords`).
+        Rules: `docs/specs/strength-progress.md`.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of exercises
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PageMeta'
+                  - type: object
+                    required: [from, to, timezone, items]
+                    properties:
+                      from: { type: string, format: date }
+                      to: { type: string, format: date }
+                      timezone: { type: string, description: Profile timezone used for local dates }
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/ExerciseProgressSummary' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /progress/exercises/{exerciseId}:
+    get:
+      tags: [progress]
+      operationId: getExerciseProgress
+      summary: One exercise's progress by day, week or month, with all-time records
+      description: |
+        Read-only; same range rules and counting rules as `GET /progress/exercises`. The range is at most
+        366 days for **every** bucket (`day`, `week` and `month` alike). Periods use local dates in the profile
+        timezone (echoed as `timezone`). `week` periods start on
+        Monday and `month` periods are calendar months; the first and last periods are clipped to `from`/`to`,
+        and `period` is the first date of the (clipped) period. Every period in the range is returned, in date
+        order; a period with no counting set has `sessions: 0`, `sets: 0` and every other value `null`.
+        An exercise the user never performed is `200` with all-null `pr` and empty periods; an unknown id is `404`.
+      parameters:
+        - $ref: '#/components/parameters/ExerciseId'
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: bucket
+          in: query
+          required: false
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        '200':
+          description: One point per period
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExerciseProgress' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /xp/balance:
     get:
       tags: [xp]
@@ -2399,6 +2481,68 @@ components:
         activeMinutes: { type: integer, minimum: 0 }
         energyKcal: { type: [number, 'null'], description: null = nothing logged that day }
         xpEarned: { type: integer, minimum: 0 }
+    PersonalRecords:
+      type: object
+      description: |
+        All-time bests over every counting set (not limited to `from`/`to`), so a record never disappears
+        when the range changes. Recomputed from the current sets on every read: discarded sessions are
+        excluded and corrections apply immediately, so a record can go **down** after a correction or discard. `null` = no qualifying set, never 0. Each `…AchievedAt` is the `completedAt`
+        of the session that first reached the value (earliest wins a tie) and is null exactly when its value is.
+        Weights in kg (stored unit; clients convert for `unitSystem: imperial`).
+      required: [maxWeightKg, maxWeightKgAchievedAt, maxReps, maxRepsAchievedAt, best1RmKg, best1RmKgAchievedAt, maxDurationSec, maxDurationSecAchievedAt, maxDistanceM, maxDistanceMAchievedAt]
+      properties:
+        maxWeightKg: { type: [number, 'null'], minimum: 0, description: Heaviest `weightKg` > 0 in a set with reps ≥ 1 }
+        maxWeightKgAchievedAt: { type: [string, 'null'], format: date-time }
+        maxReps: { type: [integer, 'null'], minimum: 1, description: 'Best `reps` in a single completed set, for every tracking type that logs reps (weighted, bodyweight); not a sum' }
+        maxRepsAchievedAt: { type: [string, 'null'], format: date-time }
+        best1RmKg:
+          type: [number, 'null']
+          minimum: 0
+          description: 'Epley estimate `weightKg × (1 + reps / 30)`, only for sets with `weightKg` > 0 and 1 ≤ `reps` ≤ 12; a 1-rep set counts as its weight. One decimal, HALF_UP.'
+        best1RmKgAchievedAt: { type: [string, 'null'], format: date-time }
+        maxDurationSec: { type: [integer, 'null'], minimum: 1, description: 'Longest `durationSeconds` in a single completed set (> 0); null for exercises/sets without duration' }
+        maxDurationSecAchievedAt: { type: [string, 'null'], format: date-time }
+        maxDistanceM: { type: [number, 'null'], minimum: 0, description: 'Longest `distanceM` in a single completed set (> 0, one decimal as stored); null without distance' }
+        maxDistanceMAchievedAt: { type: [string, 'null'], format: date-time }
+    ExerciseProgressSummary:
+      type: object
+      required: [exerciseId, name, trackingType, sessions, lastPerformedAt, pr]
+      properties:
+        exerciseId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        trackingType: { $ref: '#/components/schemas/TrackingType' }
+        sessions: { type: integer, minimum: 1, description: Completed sessions in the range with at least one counting set of this exercise }
+        lastPerformedAt: { type: string, format: date-time, description: Latest such session's `completedAt` in the range }
+        pr: { $ref: '#/components/schemas/PersonalRecords' }
+    ExerciseProgress:
+      type: object
+      required: [exerciseId, name, trackingType, from, to, bucket, timezone, pr, points]
+      properties:
+        exerciseId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        trackingType: { $ref: '#/components/schemas/TrackingType' }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        bucket: { type: string, enum: [day, week, month] }
+        timezone: { type: string }
+        pr: { $ref: '#/components/schemas/PersonalRecords' }
+        points: { type: array, items: { $ref: '#/components/schemas/ExerciseProgressPoint' } }
+    ExerciseProgressPoint:
+      type: object
+      required: [period, sessions, sets, volumeKg, totalReps, topSetWeightKg, best1RmKg, totalDurationSec, totalDistanceM, maxSetDurationSec, maxSetDistanceM]
+      properties:
+        period: { type: string, format: date, description: First date of the (clipped) period }
+        sessions: { type: integer, minimum: 0 }
+        sets: { type: integer, minimum: 0, description: Counting sets of this exercise }
+        volumeKg: { type: [number, 'null'], minimum: 0, description: 'Σ `weightKg × reps` over sets with both > 0 (two decimals). Null when the period has no weighted set (bodyweight, duration).' }
+        totalReps: { type: [integer, 'null'], minimum: 0, description: Σ `reps` over sets that have reps (weighted and bodyweight). Null when none do. }
+        topSetWeightKg: { type: [number, 'null'], minimum: 0, description: Heaviest `weightKg` > 0 with reps ≥ 1 in the period }
+        best1RmKg: { type: [number, 'null'], minimum: 0, description: Best Epley estimate in the period (same rule as `PersonalRecords.best1RmKg`) }
+        totalDurationSec: { type: [integer, 'null'], minimum: 0, description: 'Σ `durationSeconds` over sets that have it (> 0). Null when none do (e.g. reps-only exercises).' }
+        totalDistanceM: { type: [number, 'null'], minimum: 0, description: 'Σ `distanceM` over sets that have it (> 0), one decimal. Null when none do.' }
+        maxSetDurationSec: { type: [integer, 'null'], minimum: 1, description: Longest single-set `durationSeconds` in the period }
+        maxSetDistanceM: { type: [number, 'null'], minimum: 0, description: Longest single-set `distanceM` in the period }
+
     ProgressSummary:
       type: object
       required: [from, to, points, streakDays]

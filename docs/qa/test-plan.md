@@ -49,3 +49,16 @@ Source: `docs/specs/badges-challenges.md` §5 (weekly cap) and §9 (anti-abuse).
 | AB4 | Challenge bonus XP capped at 150 / ISO week | Complete challenges in one Monday-start week (profile tz, week of `completed_at`) whose bonuses sum > 150 | Award trimmed to the remainder, then 0; `xp_awarded` stored on the challenge; ledger row only when > 0; capped amount never paid later; badge XP not capped | `achievements.int-spec.ts` › "caps challenge XP at 150 per Monday-start week: partial, then 0 with no ledger row" |
 | AB5 | Cap week boundary | Complete one challenge Sunday 23:59 and one Monday 00:01 (profile tz) | Each counts toward its own week's 150 | manual / to automate |
 | AB6 | Android shows capped XP | History card for a capped challenge | Shows `xpAwarded` (after cap), not the template's `bonusXp` | manual (UI) |
+
+## Account deletion — retry behaviour (differs from contract)
+
+`contracts/openapi.yaml` documents `DELETE /me` → `204` and says writes with a reused `Idempotency-Key` replay the stored response. **Observed on prod (2026-10-21, PR #59):** a same-key retry after a successful delete returns **`401 UNAUTHENTICATED`**, not a replayed `204`, because every token was revoked by the delete (the auth guard rejects the request before idempotency replay).
+
+| # | Case | Expected app behaviour | Test |
+|---|---|---|---|
+| DA1 | First attempt → 204 | Local wipe (`SessionRepository.signOut()`), reset to Sign in, Back can't return | `delete_success_signsOut_toSignIn_andBackCannotReturn` |
+| DA2 | First attempt outcome unknown (offline / 5xx / timeout), retry with **same key** → 401 | Treated as already deleted: local sign-out to Sign in | `delete_lostSuccess_retryGets401_treatedAsDeleted_signsOutToSignIn` |
+| DA3 | 401 on a **first** attempt | Normal expired session (no "deleted" assumption) | ViewModel unit tests in #59 |
+| DA4 | 403 `INVALID_PASSWORD` | Error, stays signed in, Confirm enabled, next attempt new key | `delete_wrongPassword_showsError_staysSignedIn_andCanRetry` |
+
+Follow-up for Backend/contract: document the 401-after-delete retry in `openapi.yaml` (or replay 204 for that key) so clients don't rely on undocumented behaviour.

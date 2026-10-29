@@ -15,6 +15,7 @@ import com.vipin.fitness.feature.auth.RegisterRoute
 import com.vipin.fitness.feature.auth.SignInRoute
 import com.vipin.fitness.feature.onboarding.OnboardingRoute
 import com.vipin.fitness.feature.onboarding.ProfileEditRoute
+import com.vipin.fitness.feature.onboarding.ConsentGate
 import com.vipin.fitness.feature.achievements.AchievementsRoute
 import com.vipin.fitness.feature.auth.DeleteAccountRoute
 import com.vipin.fitness.feature.auth.ExportRoute
@@ -69,24 +70,28 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                     )
                 }
                 Route.Onboarding -> NavEntry(key) {
-                    OnboardingRoute(onFinished = { AppNavigation.onOnboardingFinished(stack) })
+                    // Consent first (once per user on this device), then the profile steps.
+                    ConsentGate { OnboardingRoute(onFinished = { AppNavigation.onOnboardingFinished(stack) }) }
                 }
                 Route.Main -> NavEntry(key) {
-                    FitnessApp(
-                        onOpenProfile = { backStack.add(Route.Profile) },
-                        onOpenAchievements = { backStack.add(Route.Achievements) },
-                        onWorkoutNavigate = { dest ->
-                            backStack.add(
-                                when (dest) {
-                                    WorkoutDestination.NewPlan -> Route.WorkoutNewPlan
-                                    WorkoutDestination.Library -> Route.ExerciseLibrary()
-                                    is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
-                                    WorkoutDestination.ActiveSession -> Route.ActiveSession
-                                    WorkoutDestination.History -> Route.WorkoutHistory
-                                },
-                            )
-                        },
-                    )
+                    // Every signed-in user without the current consent version answers before Main.
+                    ConsentGate {
+                        FitnessApp(
+                            onOpenProfile = { backStack.add(Route.Profile) },
+                            onOpenAchievements = { backStack.add(Route.Achievements) },
+                            onWorkoutNavigate = { dest ->
+                                backStack.add(
+                                    when (dest) {
+                                        WorkoutDestination.NewPlan -> Route.WorkoutNewPlan
+                                        WorkoutDestination.Library -> Route.ExerciseLibrary()
+                                        is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
+                                        WorkoutDestination.ActiveSession -> Route.ActiveSession
+                                        WorkoutDestination.History -> Route.WorkoutHistory
+                                    },
+                                )
+                            },
+                        )
+                    }
                 }
                 Route.Profile -> NavEntry(key) {
                     ProfileEditRoute(

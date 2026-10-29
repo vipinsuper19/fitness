@@ -77,6 +77,20 @@ export class FoodCreateDto {
   isVegetarian?: boolean | null;
 }
 
+export const SUMMARY_BUCKETS = ['day', 'week', 'month'] as const;
+export type SummaryBucket = (typeof SUMMARY_BUCKETS)[number];
+
+export class NutritionSummaryQuery {
+  @ApiProperty({ format: 'date' }) @IsCalendarDate()
+  from!: string;
+
+  @ApiProperty({ format: 'date' }) @IsCalendarDate()
+  to!: string;
+
+  @ApiPropertyOptional({ enum: SUMMARY_BUCKETS, default: 'day' }) @IsOptional() @IsIn(SUMMARY_BUCKETS)
+  bucket?: SummaryBucket;
+}
+
 export class DateQuery {
   @ApiProperty({ format: 'date', description: "Local date in the user's timezone" }) @IsCalendarDate()
   date!: string;

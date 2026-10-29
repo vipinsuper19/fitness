@@ -1,0 +1,21 @@
+name: docs
+on:
+  pull_request:
+    paths: ["docs/**", "**/*.md"]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Markdown files are non-empty and have no merge markers
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            [ -s "$f" ] || { echo "::error file=$f::empty file"; fail=1; }
+            if grep -nE '^(<<<<<<<|>>>>>>>|=======$)' "$f"; then echo "::error file=$f::merge conflict marker"; fail=1; fi
+          done < <(git ls-files '*.md')
+          exit $fail

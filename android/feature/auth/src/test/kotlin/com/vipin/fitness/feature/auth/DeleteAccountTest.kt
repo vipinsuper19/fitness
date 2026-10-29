@@ -32,6 +32,24 @@ class DeleteAccountViewModelTest {
     private val session = FakeSessionRepository(signedIn = true)
     private val vm = DeleteAccountViewModel(repo, session)
 
+    @Test fun deletionForgetsThatUsersConsentBeforeSigningOut() {
+        val consent = com.vipin.fitness.core.testing.FakeConsentRepository(consented = true)
+        val vm = DeleteAccountViewModel(repo, session, consent)
+        vm.onPassword("hunter22")
+        vm.delete()
+        assertEquals(1, consent.forgets)
+        assertEquals(1, session.signOuts)
+    }
+
+    @Test fun wrongPasswordKeepsConsent() {
+        val consent = com.vipin.fitness.core.testing.FakeConsentRepository(consented = true)
+        val vm = DeleteAccountViewModel(repo, session, consent)
+        repo.deleteResult = WRONG_PASSWORD
+        vm.onPassword("nope")
+        vm.delete()
+        assertEquals(0, consent.forgets)
+    }
+
     @Test fun nothingIsSentWithoutAPassword() {
         assertFalse(vm.state.value.canConfirm)
         vm.delete()

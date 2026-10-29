@@ -119,6 +119,30 @@ class CacheExportFilesTest {
 }
 
 @RunWith(AndroidJUnit4::class)
+class ExportCleanupTest {
+    private val app = ApplicationProvider.getApplicationContext<Application>()
+    private val files = CacheExportFiles(app, Clock.fixed(Instant.parse("2026-10-21T06:00:00Z"), ZoneOffset.UTC))
+    private val dir get() = File(app.cacheDir, "exports")
+
+    // Written directly: FileProvider caches its roots per authority across Robolectric tests.
+    private fun putExport() = File(dir.apply { mkdirs() }, files.suggestedName()).writeText("{}")
+
+    @Test fun signOutAndAccountDeletionRemoveTheExport() = runTest {
+        putExport()
+        assertTrue(dir.exists())
+        files.clearUserState() // what SessionRepository.signOut runs (sign-out and after deletion)
+        assertFalse(dir.exists())
+        files.clearUserState() // nothing there: no crash
+    }
+
+    @Test fun anotherAccountSigningInDoesNotSeeThePreviousExport() = runTest {
+        putExport()
+        files.onSignedIn("u2")
+        assertFalse(dir.exists())
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
 class ExportScreenTest {
     @get:Rule val compose = createComposeRule()
 
