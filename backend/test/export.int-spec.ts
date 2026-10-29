@@ -54,7 +54,8 @@ describeDb('GET /me/export (HTTP + Postgres)', () => {
     const goal = (await u.post('/api/v1/goals').send({ type: 'lose_weight', startValue: 72, targetValue: 65 }).expect(201)).body;
     const draft = (await u.post('/api/v1/workout-plans/generate').send({ goal: 'gain_muscle', experienceLevel: 'beginner', daysPerWeek: 3, sessionMinutes: 45, equipment: ['dumbbell', 'bench'] }).expect(200)).body;
     const plan = (await u.post('/api/v1/workout-plans').send(draft).expect(201)).body;
-    await u.patch(`/api/v1/workout-plans/${plan.id}`).send({ ...draft, name: 'Edited plan', baseVersion: 1 }).expect(200);
+    await u.patch(`/api/v1/workout-plans/${plan.id}`).send({ ...draft, baseVersion: 1 }).expect(200);
+    await u.put(`/api/v1/workout-plans/${plan.id}/name`).send({ name: 'Edited plan' }).expect(200);
     const session = (await u.post('/api/v1/workout-sessions').send({}).expect(201)).body;
     const set = (await u.post(`/api/v1/workout-sessions/${session.id}/sets`).send({ clientSetId: randomUUID(), exerciseId: seedId('exercise', 'push-up'), setIndex: 0, reps: 10, completed: true }).expect(200)).body;
     await u.post(`/api/v1/workout-sessions/${session.id}/complete`).send({}).expect(200);

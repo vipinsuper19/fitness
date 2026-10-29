@@ -270,7 +270,8 @@ describeDb('plan management (HTTP + Postgres)', () => {
       const t = await signUp();
       const a = await newPlan(t);
       const before = (await plan(t, a.id)).name;
-      await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(await editOf(t, a.id)).expect(200);
+      const e1 = await editOf(t, a.id);
+      await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(e1).expect(200);
       expect((await rename(t, a.id, 'Renamed').expect(200)).body).toMatchObject({ version: 2, name: 'Renamed' });
       expect((await as(t).get(`/api/v1/workout-plans/${a.id}?version=1`).expect(200)).body.name).toBe(before);
       expect(await versions(a.id)).toBe(2);
@@ -279,12 +280,12 @@ describeDb('plan management (HTTP + Postgres)', () => {
     it('paused and inactive plans: status, pausedAt, activatedAt and currentWeek unchanged (faked clock)', async () => {
       jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'] });
       try {
-        jest.setSystemTime(new Date('2026-10-20T06:00:00Z'));
+        jest.setSystemTime(new Date('2026-10-28T06:00:00Z'));
         const t = await signUp();
         const a = await newPlan(t);
         const b = await newPlan(t);
         await activate(t, a.id);
-        jest.setSystemTime(new Date('2026-10-28T06:00:00Z'));
+        await prisma.workoutPlan.update({ where: { id: a.id }, data: { activatedAt: new Date('2026-10-20T06:00:00Z') } });
         await pause(t, a.id);
         const pa = await plan(t, a.id);
         const pb = await plan(t, b.id);
@@ -357,7 +358,8 @@ describeDb('plan management (HTTP + Postgres)', () => {
       const stale = await editOf(t, a.id, { name: 'Stale pre-rename name' });
       let v = 1;
       for (const extra of [{ name: 'Different' }, {}, { name: '' }, { name: 'x'.repeat(500) }]) {
-        const r = (await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(await editOf(t, a.id, extra)).expect(200)).body;
+        const body = await editOf(t, a.id, extra);
+        const r = (await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(body).expect(200)).body;
         expect(r).toMatchObject({ version: ++v, name: 'Kept' });
       }
       // After a rename, a stale replay (old name, correct baseVersion) keeps the renamed name.
@@ -389,16 +391,15 @@ describeDb('plan management (HTTP + Postgres)', () => {
     it('paused plan comes back paused with the same pausedAt; resume continues the week (faked clock)', async () => {
       jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'] });
       try {
-        jest.setSystemTime(new Date('2026-10-01T06:00:00Z'));
+        jest.setSystemTime(new Date('2026-10-20T06:00:00Z'));
         const t = await signUp();
         const a = await newPlan(t);
         await activate(t, a.id);
-        jest.setSystemTime(new Date('2026-10-09T06:00:00Z')); // week 2
         await pause(t, a.id);
+        // Activated Oct 1, paused Oct 9 (week 2), archived Oct 20.
+        await prisma.workoutPlan.update({ where: { id: a.id }, data: { activatedAt: new Date('2026-10-01T06:00:00Z'), pausedAt: new Date('2026-10-09T06:00:00Z') } });
         const pausedAt = (await plan(t, a.id)).pausedAt;
-        jest.setSystemTime(new Date('2026-10-10T06:00:00Z'));
         await archive(t, a.id);
-        jest.setSystemTime(new Date('2026-10-20T06:00:00Z'));
         expect((await unarchive(t, a.id).expect(200)).body).toMatchObject({ pausedAt, archivedAt: null, isActive: false });
         expect((await list(t, '?status=paused')).items).toEqual([expect.objectContaining({ id: a.id, status: 'paused' })]);
         expect(await activate(t, a.id, { resume: true })).toMatchObject({ isActive: true, currentWeek: 2 });
