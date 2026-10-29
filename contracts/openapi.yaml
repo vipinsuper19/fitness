@@ -593,7 +593,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
-        '204': { description: Not archived (already restored, or never archived); nothing changed }
+        '204': { description: 'Not archived (already restored, or never archived); nothing changed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
