@@ -231,6 +231,9 @@ model UserProfile {
   currency               String           @default("INR") @db.Char(3)
   dailyCalorieTargetKcal Int?             @map("daily_calorie_target_kcal")
   dailyWaterTargetMl     Int?             @map("daily_water_target_ml")
+  dailyProteinTargetG    Int?             @map("daily_protein_target_g")
+  dailyCarbsTargetG      Int?             @map("daily_carbs_target_g")
+  dailyFatTargetG        Int?             @map("daily_fat_target_g")
   onboardingCompleted    Boolean          @default(false) @map("onboarding_completed")
   /// At most one active plan per user, enforced by this single column.
   activePlanId           String?          @unique @map("active_plan_id") @db.Uuid

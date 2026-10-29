@@ -1854,9 +1854,9 @@ components:
         currency: { type: string, const: INR }
         dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
         dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
-        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
-        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
-        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PUT /me/profile, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PUT /me/profile, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PUT /me/profile, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
         onboardingCompleted: { type: boolean }
         updatedAt: { type: string, format: date-time }
     ProfileUpdate:
@@ -1875,9 +1875,9 @@ components:
         timezone: { type: string, maxLength: 64 }
         dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
         dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
-        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
-        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
-        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PUT /me/profile, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PUT /me/profile, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PUT /me/profile, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
         onboardingCompleted: { type: boolean }
     DataExport:
       type: object
@@ -2419,7 +2419,7 @@ components:
         bucket: { type: string, enum: [day, week, month] }
         timezone: { type: string, description: 'Profile timezone used for local dates (IANA, e.g. Asia/Kolkata)' }
         targets:
-          description: Null when the user has set no nutrition or water target
+          description: 'Null only when none of kcal, water, protein, carbs or fat has a target; only macro targets set gives a non-null object with kcal and waterMl null'
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/NutritionTargets'
