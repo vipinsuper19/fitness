@@ -78,7 +78,29 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
 ## Accepting suggestions
 `PATCH /workout-plans/{planId}` takes a **full** `WorkoutPlanDraft` (every workout and exercise) plus `baseVersion`, and creates one new version. So **one PATCH can carry every accepted suggestion**: the client takes the plan at `planVersion`, replaces `sets/repsMin/repsMax/targetWeightKg/durationSeconds` of each accepted exercise (matched by `plannedWorkoutId` + `exerciseId`) with `suggested`, and sends it with `baseVersion = planVersion`. A stale version gets the existing `409 VERSION_CONFLICT`; the client refetches the plan and suggestions. After a successful PATCH, suggestions computed for the old version are stale (accepted ones now enter cooldown); refetch before applying more. Dismissing needs no call (v1 keeps no dismiss state).
 
+### Android apply recipe (shipped behaviour)
+1. `GET /workout-plans/{planId}` and `GET .../progression-suggestions`; check `suggestions.planVersion == plan.version` (refetch both if not).
+2. For each accepted item, find the workout whose `id == plannedWorkoutId` in the fetched plan, then the exercise with the same `order` (**not** `exerciseId`: an exercise can repeat in a workout). Replace only `sets`, `repsMin`, `repsMax`, `targetWeightKg` and `durationSeconds` with `suggested`.
+3. Send the **whole** plan (every workout in the same array order, every exercise with its `restSeconds` and `notes`) as `WorkoutPlanUpdate` with `baseVersion = planVersion`. The body has no workout ids, so workouts are matched by array position. `name` is ignored.
+4. Send an `Idempotency-Key` (a UUID per apply action, reused on retries). The same key and body within 24 h replays the stored `200` with `Idempotent-Replayed: true`: no second version and no `VERSION_CONFLICT`, even though `baseVersion` is now stale. The same key with another body is `409 IDEMPOTENCY_KEY_REUSED`; a concurrent duplicate is `409 IDEMPOTENCY_IN_PROGRESS`.
+5. `200` is the new `WorkoutPlan` (`version = baseVersion + 1`). Workouts get **new ids**, so refetch suggestions; accepted increases now show `COOLDOWN`.
+6. A stale `baseVersion` is `409 VERSION_CONFLICT` with `details.currentVersion`; nothing is written, so refetch the plan and suggestions. Also `409 PLAN_ARCHIVED`, `400 VALIDATION_FAILED`, `404` and `429 RATE_LIMITED` with `Retry-After` (per-user `plans` throttle, `PLANS_RATE_LIMIT_PER_MINUTE`).
+
+openapi has request and response examples for both calls (`mixed`, `noHistory`, `applySuggestions`, `staleVersion`, `keyReused`). test/contract.spec.ts checks that they validate, use the server's `reasonText` and agree with each other.
+
+## Reason inputs (contract only, not implemented)
+Android wants the inputs behind each reason in machine-readable form. Today they are only partly derivable: `basedOn` (sessions, `metTarget`, difficulty) and `cooldownUntil` (only while the cooldown is active). Nothing tells the client whether the cap, the minimum step, rounding or a schema limit shaped `suggested`. The planned **additive, optional** `ProgressionSuggestion.inputs` (`ProgressionInputs` in openapi) is:
+- `sessionsRequired` (3), `sessionsConsidered`, `sessionsMetTarget`, `maxPerceivedDifficulty`;
+- `cooldown {active, lastRaisedAt, until, days: 7}`. `lastRaisedAt` is reported even after the cooldown ends;
+- `step` (null for `hold`): `{field, rule, percent, capPercent, capApplied, minStepApplied, rounding, limitApplied}`.
+It isn't returned yet, so clients must treat it as optional. Implementing it needs `increase()` / `deload()` in progression.rules.ts to report how they derived the step. That's a follow-up.
+
 ## Errors and edge cases
+- Plan status: `active`, `paused` and `inactive` plans all get suggestions; `archived` → `409 PLAN_ARCHIVED` (works again after unarchive).
+- `suggestions` is never empty (a plan always has at least one workout with at least one exercise).
+- A malformed `planId` → `404` (same as unknown).
+- The GET is **not rate-limited** today (no `429`); only the apply `PATCH` is.
+- `reasonText` is a fixed sentence per `reason` (no numbers in it); build value copy from `current` / `suggested`.
 - Auth required (`401`); another user's plan or unknown id → `404`.
 - No history (or fewer than 3 qualifying sessions): `200` with every item `hold` / `NOT_ENOUGH_HISTORY`, `suggested: null`, `basedOn` listing what exists (possibly `[]`).
 - Exercises added in the latest version use only sessions that logged them.

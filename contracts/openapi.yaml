@@ -684,9 +684,37 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/WorkoutPlanUpdate' }
+            examples:
+              applySuggestions:
+                summary: Apply two progression suggestions (increase + deload) in one version
+                description: |
+                  Body = the plan at `planVersion` (GET /workout-plans/{planId}) with each accepted item's
+                  `sets/repsMin/repsMax/targetWeightKg/durationSeconds` replaced by its `suggested` values.
+                  Workouts carry no id in the body; locate the item's workout by `plannedWorkoutId` in the
+                  fetched plan and keep it at the same array position; locate the exercise by `order`
+                  (not `exerciseId`, which can repeat). Copy everything else (`restSeconds`, `notes`, other
+                  exercises and workouts) unchanged: the body replaces the whole plan.
+                value:
+                  baseVersion: 4
+                  weeks: 8
+                  generator: rule_based
+                  workouts:
+                    - dayOfWeek: 1
+                      name: Push
+                      exercises:
+                        - { exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13, order: 0, sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 41, durationSeconds: null, restSeconds: 90, notes: null }
+                        - { exerciseId: 8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81, order: 1, sets: 3, repsMin: null, repsMax: null, targetWeightKg: null, durationSeconds: 65, restSeconds: 60, notes: null }
+                        - { exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13, order: 2, sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 27, durationSeconds: null, restSeconds: 90, notes: null }
       responses:
         '200':
-          description: New version
+          description: |
+            New version (`version = baseVersion + 1`), with new workout ids: suggestions fetched before are
+            stale, refetch them. Only the replaced prescription fields differ from the previous version.
+            With `Idempotency-Key`, a retry with the same key and body returns this stored response with
+            `Idempotent-Replayed: true` (no second version, and no `VERSION_CONFLICT` even though
+            `baseVersion` is now stale) for 24 hours.
+          headers:
+            Idempotent-Replayed: { description: '`true` on a replayed response', schema: { type: string, enum: ['true'] } }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
@@ -694,10 +722,18 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
-          description: '`VERSION_CONFLICT`, `PLAN_ARCHIVED` (archived plans are read-only), or an idempotency conflict'
+          description: |
+            `VERSION_CONFLICT` (stale `baseVersion`; `details.currentVersion` is the latest version: refetch the
+            plan and the suggestions, nothing was written), `PLAN_ARCHIVED` (archived plans are read-only),
+            `IDEMPOTENCY_KEY_REUSED` (same key, different body) or `IDEMPOTENCY_IN_PROGRESS` (retry later).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                staleVersion:
+                  value: { code: VERSION_CONFLICT, message: 'This plan changed since you opened it. Reload and edit the latest version.', details: { currentVersion: 5 }, requestId: 7f3a9c1e-2b4d-4e6f-8a0c-1d3e5f7a9b21 }
+                keyReused:
+                  value: { code: IDEMPOTENCY_KEY_REUSED, message: 'This Idempotency-Key was used for a different request.', requestId: 7f3a9c1e-2b4d-4e6f-8a0c-1d3e5f7a9b22 }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-plans]
@@ -877,12 +913,83 @@ paths:
         a deload is checked first and can fire after only 2 sessions; with no load to lower it is `hold` with the
         deload reason and `suggested: null`. Setting a first target (null → value) does not start a cooldown.
         An exercise in several workouts gets one suggestion per entry, sharing the same history.
+        Status: active, paused and inactive plans all get suggestions (paused/inactive are not special-cased);
+        archived → `409 PLAN_ARCHIVED` (unarchive first). A plan always has at least one exercise, so
+        `suggestions` is never empty; with no completed sessions every item is `hold` / `NOT_ENOUGH_HISTORY`
+        with `suggested: null` and `basedOn: []`. A malformed `planId` is `404` like an unknown one.
+        Not rate-limited today (no 429 on this GET); the apply PATCH is (`429` + `Retry-After`).
       responses:
         '200':
           description: Suggestions in plan order
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ProgressionSuggestions' }
+              examples:
+                mixed:
+                  summary: An increase, a cooldown hold and a deload
+                  value:
+                    planId: 3c7e9a1b-5d2f-4a6c-8e0b-1f3d5a7c9e24
+                    planVersion: 4
+                    generatedAt: '2026-10-29T09:00:00+05:30'
+                    windowSessions: 3
+                    suggestions:
+                      - plannedWorkoutId: 0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01
+                        exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13
+                        order: 0
+                        trackingType: reps_weight
+                        action: increase
+                        reason: ALL_SETS_COMPLETED
+                        reasonText: 'You completed every prescribed set in your last 3 sessions.'
+                        current: { sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 40, durationSeconds: null }
+                        suggested: { sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 41, durationSeconds: null }
+                        cooldownUntil: null
+                        basedOn:
+                        - { sessionId: c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51, completedAt: '2026-10-28T07:40:00+05:30', perceivedDifficulty: 3, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: 10, bestWeightKg: 40, bestDurationSeconds: null, bestDistanceM: null }
+                        - { sessionId: c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52, completedAt: '2026-10-26T07:40:00+05:30', perceivedDifficulty: 3, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: 10, bestWeightKg: 40, bestDurationSeconds: null, bestDistanceM: null }
+                        - { sessionId: c1a2b3d4-0003-4e5f-8a9b-0c1d2e3f4a53, completedAt: '2026-10-24T07:40:00+05:30', perceivedDifficulty: 2, completedSets: 3, plannedSets: 3, metTarget: true, bestReps: 10, bestWeightKg: 40, bestDurationSeconds: null, bestDistanceM: null }
+                      - plannedWorkoutId: 0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01
+                        exerciseId: 8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81
+                        order: 1
+                        trackingType: duration
+                        action: hold
+                        reason: COOLDOWN
+                        reasonText: 'This exercise was progressed less than 7 days ago.'
+                        current: { sets: 3, repsMin: null, repsMax: null, targetWeightKg: null, durationSeconds: 65 }
+                        suggested: null
+                        cooldownUntil: '2026-11-01T18:30:00+05:30'
+                        basedOn: []
+                      - plannedWorkoutId: 0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01
+                        exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13
+                        order: 2
+                        trackingType: reps_weight
+                        action: deload
+                        reason: REPEATED_MISSES
+                        reasonText: 'Your last two sessions missed the target, so a lighter load is suggested.'
+                        current: { sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 30, durationSeconds: null }
+                        suggested: { sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 27, durationSeconds: null }
+                        cooldownUntil: null
+                        basedOn:
+                          - { sessionId: c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51, completedAt: '2026-10-28T07:40:00+05:30', perceivedDifficulty: 4, completedSets: 2, plannedSets: 3, metTarget: false, bestReps: 8, bestWeightKg: 30, bestDurationSeconds: null, bestDistanceM: null }
+                          - { sessionId: c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52, completedAt: '2026-10-26T07:40:00+05:30', perceivedDifficulty: 4, completedSets: 3, plannedSets: 3, metTarget: false, bestReps: 7, bestWeightKg: 30, bestDurationSeconds: null, bestDistanceM: null }
+                noHistory:
+                  summary: New plan, no completed sessions yet
+                  value:
+                    planId: 3c7e9a1b-5d2f-4a6c-8e0b-1f3d5a7c9e24
+                    planVersion: 1
+                    generatedAt: '2026-10-29T09:00:00+05:30'
+                    windowSessions: 3
+                    suggestions:
+                      - plannedWorkoutId: 0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01
+                        exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13
+                        order: 0
+                        trackingType: reps_weight
+                        action: hold
+                        reason: NOT_ENOUGH_HISTORY
+                        reasonText: Complete this exercise in 3 sessions to get a suggestion.
+                        current: { sets: 3, repsMin: 8, repsMax: 10, targetWeightKg: 40, durationSeconds: null }
+                        suggested: null
+                        cooldownUntil: null
+                        basedOn: []
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -890,6 +997,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example: { code: PLAN_ARCHIVED, message: 'This plan is archived. Save a new plan instead.', requestId: 7f3a9c1e-2b4d-4e6f-8a0c-1d3e5f7a9b20 }
   /workout-sessions:
     post:
       tags: [workout-sessions]
@@ -2549,6 +2657,39 @@ components:
           description: Null for `hold`; otherwise the complete values to write (unchanged fields equal `current`)
         cooldownUntil: { type: [string, 'null'], format: date-time }
         basedOn: { type: array, maxItems: 3, items: { $ref: '#/components/schemas/ProgressionBasis' }, description: Newest first }
+        inputs: { $ref: '#/components/schemas/ProgressionInputs' }
+    ProgressionInputs:
+      type: object
+      description: |
+        **Planned, not returned yet** (additive; docs/specs/adaptive-progression.md "Reason inputs"). Optional:
+        clients must work without it. The machine-readable inputs behind `reason`.
+      required: [sessionsRequired, sessionsConsidered, sessionsMetTarget, maxPerceivedDifficulty, cooldown, step]
+      properties:
+        sessionsRequired: { type: integer, const: 3, description: "Sessions needed for an increase (`windowSessions`)" }
+        sessionsConsidered: { type: integer, minimum: 0, maximum: 3, description: '= `basedOn.length`' }
+        sessionsMetTarget: { type: integer, minimum: 0, maximum: 3 }
+        maxPerceivedDifficulty: { type: [integer, 'null'], minimum: 1, maximum: 5, description: "Highest in the window; null when none reported" }
+        cooldown:
+          type: object
+          required: [active, lastRaisedAt, until, days]
+          properties:
+            active: { type: boolean }
+            lastRaisedAt: { type: [string, 'null'], format: date-time, description: "createdAt of the newest version that raised this entry's load (any age); null if never" }
+            until: { type: [string, 'null'], format: date-time, description: "Equals `cooldownUntil`" }
+            days: { type: integer, const: 7 }
+        step:
+          type: [object, 'null']
+          description: Null for `hold`. How `suggested` was derived from `current`.
+          required: [field, rule, percent, capPercent, capApplied, minStepApplied, rounding, limitApplied]
+          properties:
+            field: { type: string, enum: [targetWeightKg, reps, durationSeconds] }
+            rule: { type: string, enum: [percent_increase, heaviest_used, rep_step, deload], description: '`heaviest_used` for NO_TARGET_SET' }
+            percent: { type: [number, 'null'], description: 'Rule percentage (2.5, 5, 10, −10); null for rep_step and heaviest_used' }
+            capPercent: { type: [number, 'null'], description: '10 for load increases; null when exempt (reps, deload, heaviest_used)' }
+            capApplied: { type: boolean, description: "The 10% load cap reduced the step" }
+            minStepApplied: { type: boolean, description: "The minimum step (+0.5/+1.0 kg, +5 s) overrode the percentage or the cap" }
+            rounding: { type: string, enum: [down_0_5_kg, up_0_5_kg, down_5_s, none] }
+            limitApplied: { type: boolean, description: "A schema limit (1000 kg, 100 reps, 20-rep ceiling, 7200 s) bounded the value" }
     ProgressionSuggestions:
       type: object
       required: [planId, planVersion, generatedAt, windowSessions, suggestions]

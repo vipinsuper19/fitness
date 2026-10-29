@@ -160,3 +160,38 @@ describe('contracts/schemas/workout-plan-draft.schema.json', () => {
     expect(validate({ ...draft, generator: 'gpt' })).toBe(false);
   });
 });
+
+describe('progression-suggestions examples (Android)', () => {
+  const doc = spec as unknown as {
+    paths: Record<string, Record<string, { responses: Record<string, { content?: Record<string, { examples?: Record<string, { value: unknown }> }> }>; requestBody?: { content: Record<string, { examples?: Record<string, { value: Record<string, unknown> }> }> } }>>;
+    components: { schemas: Record<string, unknown> };
+  };
+  const ajv = new Ajv2020({ allErrors: true, strict: false });
+  addFormats(ajv);
+  const defs = JSON.parse(JSON.stringify(doc.components.schemas).replaceAll('#/components/schemas/', '#/$defs/'));
+  const schemaFor = (name: string) => ajv.compile({ $defs: defs, $ref: `#/$defs/${name}` });
+
+  it('every GET 200 example validates against ProgressionSuggestions and uses the server reason texts', async () => {
+    const { REASON_TEXT } = await import('../src/workout-plans/progression.rules');
+    const examples = doc.paths['/workout-plans/{planId}/progression-suggestions']!.get!.responses['200']!.content!['application/json']!.examples!;
+    expect(Object.keys(examples).length).toBeGreaterThanOrEqual(2);
+    const validate = schemaFor('ProgressionSuggestions');
+    for (const [name, ex] of Object.entries(examples)) {
+      expect({ name, ok: validate(ex.value), errors: validate.errors }).toEqual({ name, ok: true, errors: null });
+      for (const s of (ex.value as { suggestions: { reason: keyof typeof REASON_TEXT; reasonText: string }[] }).suggestions) expect(s.reasonText).toBe(REASON_TEXT[s.reason]);
+    }
+  });
+
+  it('the PATCH apply example is a valid plan draft that carries the GET example\'s suggested values', () => {
+    const ex = doc.paths['/workout-plans/{planId}']!.patch!.requestBody!.content['application/json']!.examples!.applySuggestions!.value;
+    const { baseVersion, ...draft } = ex;
+    const validate = ajv.compile(draftSchema);
+    expect(validate({ ...draft, name: 'Push / Pull' })).toBe(true);
+    const mixed = doc.paths['/workout-plans/{planId}/progression-suggestions']!.get!.responses['200']!.content!['application/json']!.examples!.mixed!.value as {
+      planVersion: number; suggestions: { order: number; suggested: Record<string, unknown> | null; current: Record<string, unknown> }[];
+    };
+    expect(baseVersion).toBe(mixed.planVersion);
+    const sent = (draft as { workouts: { exercises: Record<string, unknown>[] }[] }).workouts[0]!.exercises;
+    for (const s of mixed.suggestions) expect(sent.find((e) => e.order === s.order)).toMatchObject(s.suggested ?? s.current);
+  });
+});

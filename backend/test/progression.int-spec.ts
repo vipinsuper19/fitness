@@ -415,4 +415,50 @@ describeDb('progression suggestions (HTTP + Postgres)', () => {
     const s = await suggest(u.token, plan);
     expect(s.suggestions.map((x) => x.reason === 'COOLDOWN')).toEqual([false, false]);
   });
+
+  it('Android cases: paused and inactive plans get suggestions; archived is 409; unarchived works again', async () => {
+    const u = await signUp();
+    const a = await mkEx();
+    const paused = await mkPlan(u.token, [{ ex: a, repsMax: 10, targetWeightKg: 40 }]);
+    const inactive = await mkPlan(u.token, [{ ex: a, repsMax: 10, targetWeightKg: 40 }]);
+    await as(u.token).post(`/api/v1/workout-plans/${paused}/activate`).send({}).expect(200);
+    await as(u.token).post(`/api/v1/workout-plans/${paused}/deactivate`).expect(204);
+    const statuses = (await as(u.token).get('/api/v1/workout-plans').expect(200)).body.items as { id: string; status: string }[];
+    expect(statuses.find((p) => p.id === paused)!.status).toBe('paused');
+    expect(statuses.find((p) => p.id === inactive)!.status).toBe('inactive');
+    await three(u.id, paused, { [a]: rep(2, { reps: 10, kg: 40 }) });
+    expect(byEx(await suggest(u.token, paused), a)).toMatchObject({ action: 'increase', reason: 'ALL_SETS_COMPLETED' });
+    const none = await suggest(u.token, inactive);
+    expect(none.suggestions).toHaveLength(1);
+    expect(none.suggestions[0]).toMatchObject({ action: 'hold', reason: 'NOT_ENOUGH_HISTORY', suggested: null, cooldownUntil: null, basedOn: [] });
+
+    await as(u.token).delete(`/api/v1/workout-plans/${paused}`).expect(204);
+    expect((await as(u.token).get(`/api/v1/workout-plans/${paused}/progression-suggestions`).expect(409)).body.code).toBe('PLAN_ARCHIVED');
+    await as(u.token).post(`/api/v1/workout-plans/${paused}/unarchive`).send({}).expect(200);
+    await suggest(u.token, paused);
+    // A malformed id is 404 like an unknown one.
+    expect((await as(u.token).get('/api/v1/workout-plans/not-a-uuid/progression-suggestions').expect(404)).body.code).toBe('NOT_FOUND');
+  });
+
+  it('applying with Idempotency-Key: replay returns the stored version (no second version, no VERSION_CONFLICT); other key is 409 with details.currentVersion', async () => {
+    const u = await signUp();
+    const a = await mkEx();
+    const plan = await mkPlan(u.token, [{ ex: a, repsMax: 10, targetWeightKg: 40 }]);
+    await three(u.id, plan, { [a]: rep(2, { reps: 10, kg: 40 }) });
+    const s = await suggest(u.token, plan);
+    const body = { ...draftOf(s.suggestions.map((x) => ({ ex: x.exerciseId, ...(x.suggested as object) }))), baseVersion: s.planVersion };
+    const key = randomUUID();
+    const patch = (k: string) => http().patch(`/api/v1/workout-plans/${plan}`).set('Authorization', `Bearer ${u.token}`).set('Idempotency-Key', k);
+    const first = await patch(key).send(body).expect(200);
+    expect(first.body.version).toBe(2);
+    expect(first.body.workouts[0].exercises[0].targetWeightKg).toBe(41);
+    const replay = await patch(key).send(body).expect(200);
+    expect(replay.headers['idempotent-replayed']).toBe('true');
+    expect(replay.body).toEqual(first.body);
+    expect((await prisma.workoutPlan.findUniqueOrThrow({ where: { id: plan } })).currentVersion).toBe(2);
+    const reused = await patch(key).send({ ...body, weeks: 5 }).expect(409);
+    expect(reused.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+    const stale = await patch(randomUUID()).send(body).expect(409);
+    expect(stale.body).toMatchObject({ code: 'VERSION_CONFLICT', details: { currentVersion: 2 } });
+  });
 });
