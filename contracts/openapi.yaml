@@ -68,7 +68,7 @@ tags:
   - name: auth
     description: Email and password sign-in with self-issued JWTs
   - name: me
-    description: Account, profile, export and deletion
+    description: Account, profile, notification preferences, export and deletion
   - name: goals
     description: Fitness goals
   - name: exercises
@@ -273,6 +273,49 @@ paths:
               schema: { $ref: '#/components/schemas/TargetHistory' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /me/notification-preferences:
+    get:
+      tags: [me]
+      operationId: getNotificationPreferences
+      summary: Notification preferences (stored only; nothing is sent yet)
+      description: |
+        Per-type opt-in, a master switch and quiet hours. With no saved row, returns the defaults and writes nothing.
+        `types` always lists every current type; clients must ignore type keys they don't know. Quiet hours are local
+        wall-clock times in the **current** profile timezone (`timezone`, echoed read-only); `start > end` crosses midnight.
+        Storage and API only: sending (FCM, device tokens, scheduling) is out of scope. See docs/specs/notification-preferences.md.
+      responses:
+        '200':
+          description: Current preferences (defaults merged in)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferences' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [me]
+      operationId: updateNotificationPreferences
+      summary: Partially update notification preferences
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      description: |
+        Partial merge: omitted fields are kept; `types` merges per key and `quietHours` per field, then `start`/`end` are
+        validated together. `Idempotency-Key` is optional (standard replay rules); the merge is idempotent anyway. A no-op keeps `updatedAt`.
+        `400 VALIDATION_FAILED` (nothing saved) for an unknown type (`types.<key>`: unknown notification type), a non-boolean
+        or null value, a time not `HH:MM` (00:00-23:59), `start == end` after the merge (`quietHours`), or any unknown or
+        read-only property. `{}` is a valid no-op.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationPreferencesUpdate' }
+      responses:
+        '200':
+          description: Full preferences after the merge
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationPreferences' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
   /me/profile:
     get:
       tags: [me]
@@ -2062,6 +2105,7 @@ components:
         exportedAt: { type: string, format: date-time }
         user: { $ref: '#/components/schemas/User' }
         profile: { $ref: '#/components/schemas/Profile' }
+        notificationPreferences: { $ref: '#/components/schemas/NotificationPreferences', description: 'Same shape as GET /me/notification-preferences, defaults included. Optional until implemented.' }
         goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
         workoutPlans: { type: array, items: { $ref: '#/components/schemas/WorkoutPlan' } }
         workoutSessions: { type: array, items: { $ref: '#/components/schemas/WorkoutSession' } }
@@ -2081,6 +2125,61 @@ components:
           items: { type: string }
           description: Collections cut at their cap, e.g. `foodLogs`, `workoutSessions.sets` or `workoutPlans.exercises`; empty when complete.
 
+    NotificationType:
+      type: string
+      enum: [workout_reminder, streak_reminder, water_reminder, food_log_reminder, challenge_updates, badge_earned, progression_suggestion]
+      description: New types can be added (with a default); clients must ignore unknown keys in responses.
+    LocalTime:
+      type: string
+      pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+      description: Local wall-clock time `HH:MM` (24 h) in the profile timezone
+      examples: ['22:00']
+    QuietHours:
+      type: object
+      required: [enabled, start, end]
+      description: '`[start, end)` in local wall time of the current profile timezone; `start > end` crosses midnight; `start` never equals `end`. DST: same wall-clock hours (a skipped time never occurs; a repeated hour is checked each time).'
+      properties:
+        enabled: { type: boolean, default: true }
+        start: { $ref: '#/components/schemas/LocalTime' }
+        end: { $ref: '#/components/schemas/LocalTime' }
+    NotificationPreferences:
+      type: object
+      required: [enabled, types, quietHours, timezone, updatedAt]
+      properties:
+        enabled: { type: boolean, default: true, description: Master switch; a type is effectively on only when this and its flag are true }
+        types:
+          type: object
+          description: Every current type with its flag (stored value, else default). Unknown keys may appear in future versions.
+          required: [workout_reminder, streak_reminder, water_reminder, food_log_reminder, challenge_updates, badge_earned, progression_suggestion]
+          properties:
+            workout_reminder: { type: boolean, default: true }
+            streak_reminder: { type: boolean, default: true }
+            water_reminder: { type: boolean, default: false }
+            food_log_reminder: { type: boolean, default: false }
+            challenge_updates: { type: boolean, default: true }
+            badge_earned: { type: boolean, default: true }
+            progression_suggestion: { type: boolean, default: true }
+          additionalProperties: { type: boolean }
+        quietHours: { $ref: '#/components/schemas/QuietHours' }
+        timezone: { type: string, readOnly: true, description: Profile timezone that quiet hours use (read-only; change it via PUT /me/profile) }
+        updatedAt: { type: [string, 'null'], format: date-time, description: Null until the first save }
+    NotificationPreferencesUpdate:
+      type: object
+      additionalProperties: false
+      description: Partial merge. Unknown properties, unknown type keys and nulls are 400 VALIDATION_FAILED.
+      properties:
+        enabled: { type: boolean }
+        types:
+          type: object
+          propertyNames: { $ref: '#/components/schemas/NotificationType' }
+          additionalProperties: { type: boolean }
+        quietHours:
+          type: object
+          additionalProperties: false
+          properties:
+            enabled: { type: boolean }
+            start: { $ref: '#/components/schemas/LocalTime' }
+            end: { $ref: '#/components/schemas/LocalTime' }
     TargetHistoryEntry:
       type: object
       required: [effectiveFrom, kcal, waterMl, proteinG, carbsG, fatG]

@@ -59,6 +59,8 @@ describe('contracts/openapi.yaml', () => {
       // P1: badges & challenges (docs/specs/badges-challenges.md)
       'get /badges', 'get /challenges/templates', 'get /challenges', 'post /challenges',
       'get /challenges/{challengeId}', 'post /challenges/{challengeId}/leave',
+      // P1: notification preferences, storage only (docs/specs/notification-preferences.md)
+      'get /me/notification-preferences', 'patch /me/notification-preferences',
     ];
     const actual = new Set(operations().map(({ method, path }) => `${method} ${path}`));
     for (const route of expected) expect(actual).toContain(route);
