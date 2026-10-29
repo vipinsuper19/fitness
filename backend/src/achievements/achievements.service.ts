@@ -5,6 +5,7 @@ import type { Env } from '../config/env';
 import { localDate, nextDate, startOfLocalDay } from '../common/time';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { loadResolver } from '../targets/target-history';
 import {
   BADGES, CATALOG_VERSION, cappedAward, challengeCount, DEFAULT_TIMEZONE, DEFAULT_WATER_GOAL_ML, Facts, nextStatus, templateByCode, weekStart,
   counts,
@@ -131,7 +132,7 @@ export class AchievementsService implements OnModuleDestroy {
    */
   async facts(userId: string, now = new Date()): Promise<Facts> {
     const db = this.prisma;
-    const profile = await db.userProfile.findUnique({ where: { userId }, select: { timezone: true, dailyWaterTargetMl: true } });
+    const profile = await db.userProfile.findUnique({ where: { userId }, select: { timezone: true } });
     const tz = profile?.timezone ?? DEFAULT_TIMEZONE;
     const today = localDate(now, tz);
     const ok = (r: { date: Date; createdAt: Date; dateChangedAt?: Date | null }) => counts(day(r.date), r.dateChangedAt ?? r.createdAt, today, tz);
@@ -143,6 +144,7 @@ export class AchievementsService implements OnModuleDestroy {
     const water = await db.waterLog.findMany({ where: { userId }, select: { date: true, createdAt: true, dateChangedAt: true, amountMl: true } });
     const measurements = await db.bodyMeasurement.findMany({ where: { userId }, select: { date: true, createdAt: true, dateChangedAt: true } });
 
+    const targetsOn = await loadResolver(db, userId, today);
     const waterByDate = new Map<string, number>();
     for (const w of water.filter(ok)) waterByDate.set(day(w.date), (waterByDate.get(day(w.date)) ?? 0) + w.amountMl);
     return {
@@ -153,7 +155,7 @@ export class AchievementsService implements OnModuleDestroy {
       coreXp: xp._sum.amount ?? 0,
       foodDates: [...new Set(food.filter(ok).map((r) => day(r.date)))],
       waterByDate,
-      waterGoalMl: profile?.dailyWaterTargetMl ?? DEFAULT_WATER_GOAL_ML,
+      waterGoalOn: (date) => targetsOn(date).waterMl ?? DEFAULT_WATER_GOAL_ML,
       measurementDates: [...new Set(measurements.filter(ok).map((r) => day(r.date)))],
     };
   }
