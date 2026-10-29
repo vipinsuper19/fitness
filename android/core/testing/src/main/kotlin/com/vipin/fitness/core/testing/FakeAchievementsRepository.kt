@@ -31,11 +31,21 @@ fun testChallenge(
     progress: Int = 1,
     target: Int = 3,
     windowEnd: LocalDate? = LocalDate.of(2026, 10, 25),
+    waterGoalMl: Int? = null,
+    unit: String = "workouts",
 ) = Challenge(
-    id, templateCode, ChallengeType.WEEKLY, "Challenge $id", target, progress, "workouts",
-    LocalDate.of(2026, 10, 19), windowEnd, ZoneId.of("Asia/Kolkata"), null, status,
+    id, templateCode, ChallengeType.WEEKLY, "Challenge $id", target, progress, unit,
+    LocalDate.of(2026, 10, 19), windowEnd, ZoneId.of("Asia/Kolkata"), waterGoalMl, status,
     Instant.parse("2026-10-20T04:00:00Z"), null, null, 0,
 )
+
+/** WEEKLY_WATER_DAYS joined with a 2500 ml goal (information only). */
+fun testWaterChallenge(id: String = "w1", waterGoalMl: Int? = 2500, status: ChallengeStatus = ChallengeStatus.ACTIVE, progress: Int = 2, target: Int = 5) =
+    testChallenge(id, "WEEKLY_WATER_DAYS", status, progress, target, waterGoalMl = waterGoalMl, unit = "days")
+
+/** HYDRATED_7: 7 days at that day's own water goal (else 2000 ml). */
+fun testHydratedBadge(earnedAt: Instant? = null, current: Int = 3) =
+    testBadge("HYDRATED_7", earnedAt, BadgeProgress(current, 7), BadgeFamily.HYDRATION)
 
 /**
  * In-memory [AchievementsRepository] following contract #43's rules: one active challenge per

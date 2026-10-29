@@ -64,6 +64,55 @@ class AchievementsRepositoryTest {
         assertEquals(ZoneId.of("Asia/Kolkata"), c.timezone)
     }
 
+    @Test fun waterChallengeKeepsTheGoalAtJoinAsInformation() = runTest {
+        val water = challenge().replace("\"WEEKLY_WORKOUTS\"", "\"WEEKLY_WATER_DAYS\"").replace("\"waterGoalMl\":null", "\"waterGoalMl\":2500")
+            .replace("\"unit\":\"workouts\"", "\"unit\":\"days\"").replace("\"target\":3,\"progress\":1", "\"target\":5,\"progress\":2")
+        server.enqueue(MockResponse(code = 200, body = """{"items":[$water],"nextCursor":null}"""))
+        val c = (repo.challenges() as ApiResult.Success).value.items.single()
+        assertEquals("WEEKLY_WATER_DAYS", c.templateCode)
+        assertEquals(2500, c.waterGoalMl)
+        assertTrue(c.isWater)
+        // Progress is the server's count of days at each day's own goal; the goal at join doesn't change it.
+        assertEquals(2, c.progress)
+        assertEquals(5, c.target)
+    }
+
+    @Test fun workoutChallengeHasNoWaterGoal() = runTest {
+        server.enqueue(MockResponse(code = 200, body = """{"items":[${challenge()}],"nextCursor":null}"""))
+        val c = (repo.challenges() as ApiResult.Success).value.items.single()
+        assertNull(c.waterGoalMl)
+        assertEquals(false, c.isWater)
+    }
+
+    @Test fun hydrated7BadgeLockedAndEarned() = runTest {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"items":[
+                    {"code":"HYDRATED_7","title":"Hydrated","description":"Reach that day's water goal on 7 days","family":"hydration","bonusXp":20,"earnedAt":null,"progress":{"current":3,"target":7}}
+                ],"earnedCount":0}""",
+            ),
+        )
+        val locked = (repo.badges() as ApiResult.Success).value.items.single()
+        assertEquals("HYDRATED_7", locked.code)
+        assertEquals(BadgeFamily.HYDRATION, locked.family)
+        assertEquals(20, locked.bonusXp)
+        assertEquals(BadgeProgress(3, 7), locked.progress)
+        assertNull(locked.earnedAt)
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"items":[
+                    {"code":"HYDRATED_7","title":"Hydrated","description":"","family":"hydration","bonusXp":20,"earnedAt":"2026-10-28T18:30:00Z","progress":null}
+                ],"earnedCount":1}""",
+            ),
+        )
+        val earned = (repo.badges() as ApiResult.Success).value
+        assertEquals(1, earned.earnedCount)
+        assertEquals(Instant.parse("2026-10-28T18:30:00Z"), earned.items.single().earnedAt)
+        assertNull(earned.items.single().progress)
+    }
+
     @Test fun templatesPairTargetsWithDeadlines() = runTest {
         server.enqueue(
             MockResponse(

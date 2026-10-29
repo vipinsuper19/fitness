@@ -54,6 +54,7 @@ data class ChallengeDto(
     val windowStart: String,
     val windowEnd: String? = null,
     val timezone: String = "Asia/Kolkata",
+    /** Goal in force at join (water templates only); information only, it doesn't drive progress. */
     val waterGoalMl: Int? = null,
     val status: String,
     val joinedAt: String,

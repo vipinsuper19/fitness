@@ -69,6 +69,8 @@ data class ChallengeTemplate(
     val bonusXp: Int,
 )
 
+const val WEEKLY_WATER_DAYS = "WEEKLY_WATER_DAYS"
+
 data class Challenge(
     val id: String,
     val templateCode: String,
@@ -82,6 +84,10 @@ data class Challenge(
     val windowEnd: LocalDate?,
     /** Captured at join; the window is in this zone, not the device's. */
     val timezone: ZoneId,
+    /**
+     * Water templates only: the water goal in force at join, for information only. It does not
+     * drive progress; the server judges each day against that day's own water target (else 2000 ml).
+     */
     val waterGoalMl: Int?,
     val status: ChallengeStatus,
     val joinedAt: Instant,
@@ -91,6 +97,9 @@ data class Challenge(
     /** Local date of joining, in [timezone]. Streak challenges count only days from it. */
     val joinDate: LocalDate? = null,
 ) {
+    /** A water challenge: has a goal at join, or is the weekly water template. */
+    val isWater: Boolean get() = waterGoalMl != null || templateCode == WEEKLY_WATER_DAYS
+
     val fraction: Float get() = if (target <= 0) 0f else (progress.toFloat() / target).coerceIn(0f, 1f)
 
     /** Days left including today, in the challenge's own timezone; null without a deadline. Never negative. */
