@@ -28,6 +28,9 @@
   - `waterPct` = `avgWaterMlPerLoggedDay / targets.waterMl`
 
   `kcalPct`, `proteinPct`, `carbsPct` and `fatPct` are `null` when no food was logged in the period or their target is `null`. `waterPct` is `null` when no water was logged or `targets.waterMl` is `null`. A target of 0 is treated as `null`. `adherence` is `null` only when every pct is `null`.
+- **Client local date:** periods use the local `date` the client sends on each food and water log. The profile timezone is only echoed back as `timezone` and is not used to re-bucket logs, so the client must send the correct local date for logs made near midnight.
+- **Unrounded pcts:** the pcts are computed from the unrounded average, so a pct may not exactly match the displayed (rounded) average divided by the target.
+- **Water-only days:** a day with only water logged counts in `waterDaysLogged` but not in `daysLogged`.
 - **Follow-up:** macro targets (`proteinG`, `carbsG`, `fatG`) stay `null`, and so do their pcts, until a later profile change adds macro targets. That change is listed as a follow-up and is not part of this endpoint.
 - If targets are stored with history later, each day should use the target in effect that day. That would be an additive change, documented then.
 
