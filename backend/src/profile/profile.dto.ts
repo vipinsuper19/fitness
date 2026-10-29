@@ -65,6 +65,18 @@ export class ProfileUpdateDto {
   @IsOptional() @IsInt() @Min(250) @Max(10000)
   dailyWaterTargetMl?: number | null;
 
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, maximum: 1000, description: '0 is stored as null' })
+  @IsOptional() @IsInt() @Min(0) @Max(1000)
+  dailyProteinTargetG?: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, maximum: 1000, description: '0 is stored as null' })
+  @IsOptional() @IsInt() @Min(0) @Max(1000)
+  dailyCarbsTargetG?: number | null;
+
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, maximum: 1000, description: '0 is stored as null' })
+  @IsOptional() @IsInt() @Min(0) @Max(1000)
+  dailyFatTargetG?: number | null;
+
   @ApiPropertyOptional()
   @IsDefinedWhenPresent() @IsBoolean()
   onboardingCompleted?: boolean;
