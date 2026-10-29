@@ -1,0 +1,54 @@
+name: purge-expired
+
+# Manually purges expired rows in the database behind secrets.FITNESS_DATABASE_URL: `npm run purge:expired`
+# (src/maintenance/purge-expired.ts): idempotency_keys past their 24 h TTL, and refresh_tokens revoked or expired
+# more than 7 days ago in families with no live token. DRY RUN unless the `execute` input is true. Never runs
+# automatically (no schedule). Prints counts and cutoffs only; never token values, hashes or the URL.
+# Running it with execute=true against production needs Vipin's OK.
+on:
+  workflow_dispatch:
+    inputs:
+      execute:
+        description: "Delete rows (false = dry run, counts only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: purge-expired
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # DATABASE_URL is set per step, only where the database is used (never during npm ci).
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Check secret
+        env:
+          DATABASE_URL: ${{ secrets.FITNESS_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Repository secret FITNESS_DATABASE_URL is not set."; exit 1; fi
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+      - name: Purge expired rows
+        env:
+          DATABASE_URL: ${{ secrets.FITNESS_DATABASE_URL }}
+          EXECUTE: ${{ inputs.execute }}
+        run: |
+          args=()
+          if [ "$EXECUTE" = "true" ]; then args+=(-- --execute); fi
+          npm run purge:expired "${args[@]}" 2>&1 | sed -E 's#postgres(ql)?://[^[:space:]]*#[REDACTED]#g'; exit "${PIPESTATUS[0]}"
+        shell: bash
