@@ -82,4 +82,17 @@
     <string name="goal_err_weight">Enter a weight between 20 and 400 kg (44–880 lb).</string>
     <string name="goal_err_workouts">Enter a whole number from 1 to 7.</string>
     <string name="goal_err_date">Use YYYY-MM-DD, today or later.</string>
+    <string name="progress_strength">Strength</string>
+    <string name="strength_empty">No strength sets in the last 90 days.</string>
+    <string name="strength_sessions">%1$s sessions · last %2$s</string>
+    <string name="strength_back">Back</string>
+    <string name="strength_records">All-time records</string>
+    <string name="strength_no_records">No records yet.</string>
+    <string name="strength_no_sets">No sets</string>
+    <string name="strength_bucket_day">Day</string>
+    <string name="strength_bucket_week">Week</string>
+    <string name="strength_bucket_month">Month</string>
+    <string name="strength_offline">You\'re offline. Check your connection.</string>
+    <string name="strength_failed">Couldn\'t load strength progress.</string>
+    <string name="strength_not_found">This exercise no longer exists.</string>
 </resources>
