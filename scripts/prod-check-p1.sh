@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # QA API checks against the Fitness API server for session corrections (#63), plan management (#65),
-# the nutrition summary (#70), strength progress (#72) and macro targets (#85), using TWO throwaway
+# the nutrition summary (#70), strength progress (#72), macro targets (#85) and progression suggestions (#90), using TWO throwaway
 # accounts (A = owner, B = other user).
 #   scripts/prod-check-p1.sh              # the Fitness API server (only allowed host, see ALLOWED_API)
-#   scripts/prod-check-p1.sh --self-test  # register-timeout and signal cleanup against a local stub
+#   scripts/prod-check-p1.sh --self-test  # register-timeout, signal and stale-state cleanup against a local stub
+#   scripts/prod-check-p1.sh --cleanup-stale  # only delete accounts left in $P1_STATE_DIR by killed runs, then exit
+# - Every run first sweeps $P1_STATE_DIR: each leftover account is logged into, deleted, login
+#   confirmed 401, and its file removed (already-gone accounts: file just removed).
 # Safety:
 # - Host allowlist: refuses to run unless API is exactly https://fitness-api-6pcc.onrender.com/api/v1
 #   (loopback is allowed only inside --self-test).
-# - Credentials only in per-run mode-600 state files (umask 077); password/token never in argv or
+# - Credentials only in per-run mode-600 state files in $P1_STATE_DIR (default ~/.cache/p1-state, umask 077); password/token never in argv or
 #   output; JSON built with jq.
 # - Cleanup on EXIT, INT and TERM: every account registered so far (or possibly registered, after a
 #   register timeout) is logged into and deleted (DELETE /me), then login must return 401.
@@ -17,7 +20,7 @@
 set -uo pipefail
 ALLOWED_API="https://fitness-api-6pcc.onrender.com/api/v1"
 if [ "${1:-}" = --self-test ]; then
-  PORT=8798; STUB="$(mktemp)"; cat > "$STUB" <<'PY'
+  PORT=8798; STUB="$(mktemp)"; trap 'rm -f "$STUB"' EXIT; cat > "$STUB" <<'PY'
 import http.server,json,sys,time,threading
 acc={}; slow={'n':int(sys.argv[2])}; lock=threading.Lock()
 class H(http.server.BaseHTTPRequestHandler):
@@ -45,6 +48,8 @@ class H(http.server.BaseHTTPRequestHandler):
 http.server.ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),H).serve_forever()
 PY
   LOCAL="http://127.0.0.1:$PORT/api/v1"; rc=0
+  # Never touch the real state dir: every self-test run uses its own.
+  export P1_STATE_DIR="$(mktemp -d)"; trap 'rm -rf "$STUB" "$P1_STATE_DIR"' EXIT
   left() { curl -s "http://127.0.0.1:$PORT/__accounts" | jq -r .n; }
   # 1) A's register times out (account created server-side): login + delete, run stops, 0 left.
   python3 "$STUB" "$PORT" 1 & SP=$!; sleep 1
@@ -62,10 +67,28 @@ PY
     n="$(left)"; [ "$(grep -c 'deleted (login 401)' "/tmp/p1-selftest-$sig.log")" = 2 ] && [ "$n" = 0 ] && echo "SELFTEST $sig cleanup: PASS (0 accounts left)" || { echo "SELFTEST $sig cleanup: FAIL ($n left)"; rc=1; }
     kill "$SP"; wait "$SP" 2>/dev/null
   done
-  # 3) Allowlist: any other host is refused before any request.
+  # 3) Stale state: one leftover account that still exists, one already gone. --cleanup-stale
+  #    deletes the first (login then 401), removes both files; a normal run sweeps at start too.
+  python3 "$STUB" "$PORT" 0 & SP=$!; sleep 1
+  mk() { local f; f="$(mktemp -p "$P1_STATE_DIR" p1.state.XXXXXXXX)"; printf '%s\n%s\n' "$1" "$2" > "$f"; }
+  curl -s -o /dev/null -X POST "$LOCAL/auth/register" -d '{"email":"stale1@example.invalid","password":"pw-stale-1"}'
+  mk stale1@example.invalid pw-stale-1; mk gone@example.invalid pw-gone
+  API="$LOCAL" P1_SELFTEST=1 bash "$0" --cleanup-stale > /tmp/p1-selftest-stale.log 2>&1; s1=$?
+  n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
+  [ "$s1" = 0 ] && [ "$n" = 0 ] && [ "$f" = 0 ] && grep -q "account deleted (login 401)" /tmp/p1-selftest-stale.log && grep -q "already gone (login 401)" /tmp/p1-selftest-stale.log \
+    && echo "SELFTEST stale-state --cleanup-stale: PASS (1 deleted, 1 already gone, 0 files left)" || { echo "SELFTEST stale-state --cleanup-stale: FAIL (rc=$s1, $n accounts, $f files left)"; rc=1; }
+  curl -s -o /dev/null -X POST "$LOCAL/auth/register" -d '{"email":"stale2@example.invalid","password":"pw-stale-2"}'; mk stale2@example.invalid pw-stale-2
+  API="$LOCAL" P1_SELFTEST=1 P1_SELFTEST_HOLD=1 bash "$0" > /tmp/p1-selftest-stale2.log 2>&1 & RP=$!
+  for _ in $(seq 50); do grep -q HOLDING /tmp/p1-selftest-stale2.log && break; sleep 0.2; done
+  kill -s TERM "$RP"; wait "$RP" 2>/dev/null
+  n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
+  [ "$n" = 0 ] && [ "$f" = 0 ] && grep -q "STALE .*account deleted (login 401)" /tmp/p1-selftest-stale2.log \
+    && echo "SELFTEST stale-state at run start: PASS (swept before signup, 0 left)" || { echo "SELFTEST stale-state at run start: FAIL ($n accounts, $f files left)"; rc=1; }
+  kill "$SP"; wait "$SP" 2>/dev/null
+  # 4) Allowlist: any other host is refused before any request.
   API="https://example.com/api/v1" bash "$0" > /tmp/p1-selftest-host.log 2>&1; h=$?
   [ "$h" = 2 ] && grep -q "refusing" /tmp/p1-selftest-host.log && echo "SELFTEST allowlist: PASS" || { echo "SELFTEST allowlist: FAIL"; rc=1; }
-  rm -f "$STUB"; exit $rc
+  rm -rf "$STUB" "$P1_STATE_DIR"; exit $rc
 fi
 API="${API:-$ALLOWED_API}"; API="${API%/}"
 if [ "$API" != "$ALLOWED_API" ] && ! { [ "${P1_SELFTEST:-}" = 1 ] && [[ "$API" =~ ^http://127\.0\.0\.1:[0-9]+/api/v1$ ]]; }; then
@@ -75,6 +98,10 @@ umask 077
 B="$(mktemp -t p1.body.XXXXXXXX)"; BF="$(mktemp -t p1.req.XXXXXXXX)"; HF="$(mktemp -t p1.hdr.XXXXXXXX)"
 declare -A ST TOK CREATED DELETED
 ACCOUNTS=()   # every account we attempted to register, in order
+TMPS=()       # extra per-run temp files, removed at cleanup
+# Credential state files live outside /tmp so a crash or reboot mid-run cannot lose them: an
+# undeleted account can then still be logged into and deleted by hand.
+STATE_DIR="${P1_STATE_DIR:-$HOME/.cache/p1-state}"; mkdir -p "$STATE_DIR"; chmod 700 "$STATE_DIR"
 AS=""   # current account; "" = unauthenticated
 PASS=0; FAIL=0; FAILS=()
 uid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
@@ -106,17 +133,36 @@ delete_account() {
   r DELETE /me "$(cred "$a" '{password:$p}')" "$(uid)"; [ "$C" = 204 ] && DELETED[$a]=1
   AS=""
 }
+# Leftover state files (a run killed before its cleanup, e.g. by a reboot): log in, DELETE /me,
+# confirm login 401, then remove the file. Already gone (login 401): just remove the file.
+# Anything else (network error, 5xx) keeps the file for the next sweep. Returns 1 if any is kept.
+sweep_stale() {
+  local f n=0 kept=0
+  for f in "$STATE_DIR"/p1.state.*; do
+    [ -e "$f" ] || continue
+    n=$((n+1)); ST[stale]="$f"; DELETED[stale]=0
+    delete_account stale
+    TOK[stale]=""; AS=""; r POST /auth/login "$(cred stale '{email:$e,password:$p}')"
+    if [ "$C" = 401 ]; then
+      [ "${DELETED[stale]}" = 1 ] && echo "STALE $(basename "$f"): account deleted (login 401), file removed" || echo "STALE $(basename "$f"): account already gone (login 401), file removed"
+      rm -f "$f"
+    else echo "STALE $(basename "$f"): NOT confirmed deleted (login $C); file kept"; kept=1; fi
+  done
+  unset 'ST[stale]'
+  echo "STALE sweep: $n state file(s) in $STATE_DIR, $([ $kept = 0 ] && echo 'all cleared' || echo 'some kept')"
+  return $kept
+}
 CLEANED=0
 cleanup() {
   [ "$CLEANED" = 1 ] && return; CLEANED=1
   set +e; trap '' INT TERM
-  for a in "${ACCOUNTS[@]}"; do
+  for a in ${ACCOUNTS[@]+"${ACCOUNTS[@]}"}; do
     if [ "${CREATED[$a]}" = 1 ] && [ "${DELETED[$a]}" = 0 ]; then delete_account "$a"; fi
     TOK[$a]=""; AS=""; r POST /auth/login "$(cred "$a" '{email:$e,password:$p}')"
     if [ "$C" = 401 ]; then echo "CLEANUP account $a deleted (login 401)"; rm -f "${ST[$a]}"
     else echo "CLEANUP account $a NOT confirmed deleted (login $C); credentials kept in ${ST[$a]} (mode 600)"; fi
   done
-  rm -f "$B" "$BF" "$HF"
+  rm -f "$B" "$BF" "$HF" ${TMPS[@]+"${TMPS[@]}"}
   echo "SUMMARY pass=$PASS fail=$FAIL ${FAILS[*]:-}"
 }
 trap cleanup EXIT
@@ -125,7 +171,7 @@ trap 'echo "terminated (TERM)"; exit 143' TERM
 
 signup() {
   local a=$1
-  ST[$a]="$(mktemp -t p1.state.XXXXXXXX)"
+  ST[$a]="$(mktemp -p "$STATE_DIR" p1.state.XXXXXXXX)"
   { printf 'p1check-%s@example.invalid\n' "$(openssl rand -hex 5)"; printf 'Pr0be-'; openssl rand -hex 12; } > "${ST[$a]}"
   TOK[$a]=""; DELETED[$a]=0
   # Counted as (possibly) created before the request goes out, so any exit from here on cleans it up.
@@ -142,6 +188,8 @@ signup() {
   echo "FAIL could not register throwaway account $a"; exit 1
 }
 echo "API $API (first call may take ~60-90 s: cold start)"
+if [ "${1:-}" = --cleanup-stale ]; then trap - EXIT; sweep_stale; rc=$?; rm -f "$B" "$BF" "$HF"; exit $rc; fi
+sweep_stale || echo "  (continuing: kept state files are retried on the next run)"
 signup A; signup B
 [ -n "${TOK[A]}" ] && [ -n "${TOK[B]}" ] || { echo "FAIL could not get tokens for throwaway accounts"; exit 1; }
 if [ "${P1_SELFTEST:-}" = 1 ]; then
@@ -343,6 +391,115 @@ r GET /me/profile; check "MT16 other user unaffected (null targets)" "$([ "$(pf)
 r GET "/nutrition/summary?from=$YDAY&to=$TODAY"; check "MT17 other user summary targets null" "$([ "$(j .targets)" = null ] && echo 0 || echo 1)" "$(j -c .targets)"
 AS=""
 r PUT /me/profile '{"dailyProteinTargetG":10}' "$(uid)"; check "MT18 unauthenticated PUT -> 401" "$(is 401)" "C=$C"
+
+echo "== Progression suggestions (#90) =="
+AS=A
+declare -A X
+for s in dumbbell-bench-press leg-press dumbbell-bicep-curl dumbbell-shoulder-press dumbbell-row lat-pulldown cable-tricep-pushdown push-up bodyweight-squat plank superman brisk-walk dumbbell-goblet-squat glute-bridge; do
+  r GET "/exercises?query=$s&limit=20"; X[$s]="$(j "[.. | objects | select(.slug? == \"$s\") | .id][0] // empty")"
+done
+BP=${X[dumbbell-bench-press]}; LP=${X[leg-press]}; BC=${X[dumbbell-bicep-curl]}; SPR=${X[dumbbell-shoulder-press]}
+ROW=${X[dumbbell-row]}; LAT=${X[lat-pulldown]}; TRI=${X[cable-tricep-pushdown]}; PU=${X[push-up]}; SQ=${X[bodyweight-squat]}
+PL=${X[plank]}; SUP=${X[superman]}; WALK=${X[brisk-walk]}; GOB=${X[dumbbell-goblet-squat]}; GB=${X[glute-bridge]}
+# pe ORDER EXID SETS REPSMIN REPSMAX DURATION WEIGHT (use null for none)
+pe() { jq -nc --argjson o "$1" --arg x "$2" --argjson s "$3" --argjson a "$4" --argjson b "$5" --argjson d "$6" --argjson w "$7" \
+  '{exerciseId:$x,order:$o,sets:$s,repsMin:$a,repsMax:$b,durationSeconds:$d,targetWeightKg:$w,restSeconds:60}'; }
+W1="[$(pe 0 "$BP" 2 8 10 null 40),$(pe 1 "$LP" 2 8 10 null 100),$(pe 2 "$BC" 2 8 10 null 8),$(pe 3 "$SPR" 2 8 10 null 40.3),$(pe 4 "$ROW" 2 8 10 null null),$(pe 5 "$LAT" 2 8 10 null 50),$(pe 6 "$TRI" 2 8 10 null 30),$(pe 7 "$PU" 2 8 12 null null),$(pe 8 "$SQ" 2 10 15 null null),$(pe 9 "$PL" 2 null null 60 null),$(pe 10 "$SUP" 2 null null 65 null),$(pe 11 "$WALK" 2 null null 300 null)]"
+W2="[$(pe 0 "$BP" 2 8 10 null 40),$(pe 1 "$PU" 2 19 20 null null)]"
+PLAN="$(jq -nc --argjson a "$W1" --argjson b "$W2" '{name:"QA progression",weeks:4,generator:"custom",rationale:null,workouts:[{dayOfWeek:1,name:"W1",exercises:$a},{dayOfWeek:3,name:"W2",exercises:$b}]}')"
+r POST /workout-plans "$PLAN" "$(uid)"; PG="$(j .id)"
+r GET "/workout-plans/$PG"; PV="$(j .version)"; PW1="$(j '.workouts[0].id')"; PW2="$(j '.workouts[1].id')"
+SG="$(mktemp -t p1.sugg.XXXXXXXX)"; TMPS+=("$SG")
+sug() { r GET "/workout-plans/$1/progression-suggestions"; cp "$B" "$SG"; }
+# s W EXID WORKOUT -> jq on the suggestion for that exercise in that workout
+s() { jq -rc --arg w "$1" --arg x "$2" "[.suggestions[]|select(.plannedWorkoutId==\$w and .exerciseId==\$x)][0]|$3" "$SG" 2>/dev/null; }
+sug "$PG"
+check "PG01 empty history: 200, planVersion, 14 suggestions, window 3" "$([ "$C" = 200 ] && [ "$(j '.suggestions|length')" = 14 ] && [ "$(j .planVersion)" = "$PV" ] && [ "$(j .windowSessions)" = 3 ] && echo 0 || echo 1)" "C=$C n=$(j '.suggestions|length')"
+check "PG02 all hold NOT_ENOUGH_HISTORY, order 0..11,0,1" "$([ "$(j '[.suggestions[]|select(.action=="hold" and .reason=="NOT_ENOUGH_HISTORY")]|length')" = 14 ] && [ "$(jq -c '[.suggestions[].order]' "$B")" = '[0,1,2,3,4,5,6,7,8,9,10,11,0,1]' ] && echo 0 || echo 1)" "$(jq -c '[.suggestions[]|[.order,.reason]]' "$B")"
+# session PW DIFFICULTY then set specs "EXID reps weight dur dist" per set
+SN=0
+session() {
+  local pw=$1 pd=$2; shift 2; local i=0 sid
+  r POST /workout-sessions "$(jq -nc --arg p "$pw" '{plannedWorkoutId:$p}')" "$(uid)"; sid="$(j .id)"
+  for spec in "$@"; do
+    set -- $spec
+    r POST "/workout-sessions/$sid/sets" "$(jq -nc --arg c "$(uid)" --arg x "$1" --argjson i $i --argjson r "$2" --argjson w "$3" --argjson d "$4" --argjson m "$5" \
+      '{clientSetId:$c,exerciseId:$x,setIndex:$i,reps:$r,weightKg:$w,durationSeconds:$d,distanceM:$m,completed:true}')" "$(uid)"
+    [ "$C" = 201 ] || [ "$C" = 200 ] || echo "  set failed: $C $(j -c .)"
+    i=$((i+1))
+  done
+  r POST "/workout-sessions/$sid/complete" "{\"perceivedDifficulty\":$pd}" "$(uid)"; SN=$((SN+1)); [ "$C" = 200 ] || echo "  complete failed: $C"
+}
+two() { echo "$1" "$1"; }
+w1() { # w1 DIFFICULTY LATREPS TRIKG SQREPS SUPSEC
+  session "$PW1" "$1" "$BP 10 40 null null" "$BP 10 40 null null" "$LP 10 100 null null" "$LP 10 100 null null" \
+    "$BC 10 8 null null" "$BC 10 8 null null" "$SPR 10 40.3 null null" "$SPR 10 40.3 null null" \
+    "$ROW 10 22.3 null null" "$ROW 10 20 null null" "$LAT $2 50 null null" "$LAT 10 50 null null" \
+    "$TRI 10 $3 null null" "$TRI 10 $3 null null" "$PU 20 null null null" "$PU 20 null null null" \
+    "$SQ $4 null null null" "$SQ $4 null null null" "$PL null null 60 null" "$PL null null 60 null" \
+    "$SUP null null $5 null" "$SUP null null $5 null" "$WALK null null 300 2000" "$WALK null null 300 2000"
+}
+w1 3 9 30 15 65
+w1 2 10 27.5 12 50
+sug "$PG"; check "PG03 two sessions: still NOT_ENOUGH_HISTORY (BP, LP)" "$([ "$(s "$PW1" "$BP" .reason)" = NOT_ENOUGH_HISTORY ] && [ "$(s "$PW1" "$LP" .reason)" = NOT_ENOUGH_HISTORY ] && echo 0 || echo 1)" "BP=$(s "$PW1" "$BP" .reason)"
+w1 3 10 27.5 12 50
+sug "$PG"
+sw() { s "$PW1" "$1" "$2"; }
+inc() { [ "$(sw "$1" .action)/$(sw "$1" .reason)/$(sw "$1" "$2")" = "increase/ALL_SETS_COMPLETED/$3" ] && echo 0 || echo 1; }
+check "PG04 BP (chest 40) -> increase 41" "$(inc "$BP" .suggested.targetWeightKg 41)" "$(sw "$BP" .)"
+check "PG05 LP (quads 100, 5%) -> increase 105" "$(inc "$LP" .suggested.targetWeightKg 105)" "$(sw "$LP" .)"
+check "PG06 BC (8 kg, min step 0.5) -> 8.5" "$(inc "$BC" .suggested.targetWeightKg 8.5)" "$(sw "$BC" .)"
+check "PG07 SPR (40.3 off-grid) -> 41.5" "$(inc "$SPR" .suggested.targetWeightKg 41.5)" "$(sw "$SPR" .)"
+check "PG08 ROW no target -> increase NO_TARGET_SET 22 (heaviest 22.3 floored)" "$([ "$(sw "$ROW" '.action+"/"+.reason+"/"+(.suggested.targetWeightKg|tostring)')" = increase/NO_TARGET_SET/22 ] && echo 0 || echo 1)" "$(sw "$ROW" .)"
+check "PG09 PU W1 (8-12 reps) -> 9-13" "$(inc "$PU" '(.suggested.repsMin|tostring)+"-"+(.suggested.repsMax|tostring)' 9-13)" "$(sw "$PU" .)"
+check "PG10 PU W2 (19-20) -> hold REP_CEILING with harderVariations array" "$([ "$(s "$PW2" "$PU" '.action+"/"+.reason+"/"+(.harderVariations|type)')" = hold/REP_CEILING/array ] && echo 0 || echo 1)" "$(s "$PW2" "$PU" .)"
+check "PG11 PL 60 s -> 65" "$(inc "$PL" .suggested.durationSeconds 65)" "$(sw "$PL" .)"
+check "PG12 WALK 300 s -> 330" "$(inc "$WALK" .suggested.durationSeconds 330)" "$(sw "$WALK" .)"
+check "PG13 LAT missed once -> hold MISSED_TARGET" "$([ "$(sw "$LAT" '.action+"/"+.reason')" = hold/MISSED_TARGET ] && echo 0 || echo 1)" "$(sw "$LAT" .)"
+check "PG14 TRI missed twice -> deload REPEATED_MISSES 27" "$([ "$(sw "$TRI" '.action+"/"+.reason+"/"+(.suggested.targetWeightKg|tostring)')" = deload/REPEATED_MISSES/27 ] && echo 0 || echo 1)" "$(sw "$TRI" .)"
+check "PG15 SUP missed twice -> deload 55 s" "$([ "$(sw "$SUP" '.action+"/"+.reason+"/"+(.suggested.durationSeconds|tostring)')" = deload/REPEATED_MISSES/55 ] && echo 0 || echo 1)" "$(sw "$SUP" .)"
+check "PG16 SQ (reps) missed twice -> hold REPEATED_MISSES, no suggestion" "$([ "$(sw "$SQ" '.action+"/"+.reason+"/"+(.suggested|tostring)')" = hold/REPEATED_MISSES/null ] && echo 0 || echo 1)" "$(sw "$SQ" .)"
+check "PG17 basedOn: 3 sessions newest first, BP met, best 40/10, WALK distance 2000" "$([ "$(sw "$BP" '.basedOn|length')" = 3 ] && [ "$(sw "$BP" '[.basedOn[].completedAt]|(.==(sort|reverse))')" = true ] && [ "$(sw "$BP" '[.basedOn[]|.metTarget and .bestWeightKg==40 and .bestReps==10 and .completedSets==2 and .plannedSets==2]|all')" = true ] && [ "$(sw "$WALK" '.basedOn[0].bestDistanceM')" = 2000 ] && [ "$(sw "$BP" '[.basedOn[].perceivedDifficulty]|tostring')" = '[3,2,3]' ] && echo 0 || echo 1)" "$(sw "$BP" -c .basedOn)"
+check "PG18 all suggested weights on the 0.5 kg grid, no cooldownUntil yet" "$(jq -e '[.suggestions[]|.suggested.targetWeightKg//empty|(.*2)|(.==floor)]|all' "$SG" >/dev/null && [ "$(jq '[.suggestions[]|select(.cooldownUntil!=null)]|length' "$SG")" = 0 ] && echo 0 || echo 1)" "$(jq -c '[.suggestions[].suggested.targetWeightKg]' "$SG")"
+r GET "/workout-plans/$PG"; V1="$(j .version)"; r GET /xp/balance; XP1="$(j .total)"
+sug "$PG"; r GET "/workout-plans/$PG"; V2="$(j .version)"; r GET /xp/balance; XP2="$(j .total)"
+check "PG19 GET is read-only: plan version and XP unchanged" "$([ "$V1" = "$V2" ] && [ "$XP1" = "$XP2" ] && echo 0 || echo 1)" "version $V1->$V2 xp $XP1->$XP2"
+r GET "/workout-plans/$PG"
+ACC="$(jq -c --argjson v "$V2" '{name,weeks,generator:"custom",rationale,baseVersion:$v,workouts:[.workouts[]|{dayOfWeek,name,exercises:[.exercises[]|{exerciseId,order,sets,repsMin,repsMax,durationSeconds,targetWeightKg,restSeconds:(.restSeconds//60)}]}]}
+  | .workouts[0].exercises[0].targetWeightKg=41 | .workouts[0].exercises[4].targetWeightKg=22 | .workouts[0].exercises[7].repsMin=9 | .workouts[0].exercises[7].repsMax=13' "$B")"
+r PATCH "/workout-plans/$PG" "$ACC" "$(uid)"; TP="$(date -u +%s)"; PV2="$(j .version)"
+check "PG20 accept BP/ROW/PU (W1) with PATCH baseVersion -> version+1" "$([ "$C" = 200 ] && [ "$PV2" = $((V2+1)) ] && echo 0 || echo 1)" "C=$C v=$PV2 $(j .message)"
+r GET "/workout-plans/$PG"; PW1="$(j '.workouts[0].id')"; PW2="$(j '.workouts[1].id')"   # a new version has new planned-workout ids
+sug "$PG"
+CU="$(sw "$BP" .cooldownUntil)"; CUS="$(date -u -d "$CU" +%s 2>/dev/null || echo 0)"
+check "PG21 BP W1 -> hold COOLDOWN, cooldownUntil ~ PATCH + 7 d" "$([ "$(sw "$BP" '.action+"/"+.reason')" = hold/COOLDOWN ] && [ $(( CUS - TP - 604800 )) -le 120 ] && [ $(( CUS - TP - 604800 )) -ge -120 ] && echo 0 || echo 1)" "$(sw "$BP" '{action,reason,cooldownUntil}') patch=$TP"
+check "PG22 PU W1 (9-13 accepted) -> COOLDOWN" "$([ "$(sw "$PU" .reason)" = COOLDOWN ] && echo 0 || echo 1)" "$(sw "$PU" '{action,reason}')"
+check "PG23 BP W2 (not raised) still increase 41, same basedOn" "$([ "$(s "$PW2" "$BP" '.action+"/"+(.suggested.targetWeightKg|tostring)+"/"+(.basedOn|length|tostring)+"/"+.plannedWorkoutId')" = "increase/41/3/$PW2" ] && echo 0 || echo 1)" "$(s "$PW2" "$BP" '{action,reason,suggested}')"
+check "PG24 ROW 22 (target set from null: not a raise) -> increase 23, no cooldown" "$([ "$(sw "$ROW" '.action+"/"+.reason+"/"+(.suggested.targetWeightKg|tostring)+"/"+(.cooldownUntil|tostring)')" = increase/ALL_SETS_COMPLETED/23/null ] && echo 0 || echo 1)" "$(sw "$ROW" '{action,reason,suggested,cooldownUntil}')"
+check "PG25 LP untouched still increase 105, planVersion = new version" "$([ "$(sw "$LP" .suggested.targetWeightKg)" = 105 ] && [ "$(jq -r .planVersion "$SG")" = $((V2+1)) ] && echo 0 || echo 1)" "$(sw "$LP" -c .suggested) pv=$(jq -r .planVersion "$SG")"
+r PATCH "/workout-plans/$PG" "$ACC" "$(uid)"; check "PG26 PATCH stale baseVersion -> 409 VERSION_CONFLICT" "$(code_is 409 VERSION_CONFLICT)" "C=$C code=$(j .code)"
+
+EFF="$(jq -nc --argjson a "[$(pe 0 "$GOB" 2 8 10 null 20),$(pe 1 "$GB" 2 10 12 null null)]" '{name:"QA effort",weeks:4,generator:"custom",rationale:null,workouts:[{dayOfWeek:2,name:"E1",exercises:$a}]}')"
+r POST /workout-plans "$EFF" "$(uid)"; PE="$(j .id)"; r GET "/workout-plans/$PE"; PWE="$(j '.workouts[0].id')"
+e1() { session "$PWE" "$1" "$GOB 10 20 null null" "$GOB 10 20 null null" "$GB 12 null null null" "$GB 12 null null null"; }
+e1 5; e1 5; sug "$PE"
+check "PG27 two very hard sessions: GOB -> deload VERY_HARD 18" "$([ "$(s "$PWE" "$GOB" '.action+"/"+.reason+"/"+(.suggested.targetWeightKg|tostring)')" = deload/VERY_HARD/18 ] && echo 0 || echo 1)" "$(s "$PWE" "$GOB" '{action,reason,suggested}')"
+check "PG28 GB (reps) -> hold VERY_HARD, no suggestion" "$([ "$(s "$PWE" "$GB" '.action+"/"+.reason+"/"+(.suggested|tostring)')" = hold/VERY_HARD/null ] && echo 0 || echo 1)" "$(s "$PWE" "$GB" '{action,reason}')"
+e1 3; sug "$PE"
+check "PG29 third session at 3 (window has a 5): GOB and GB hold HIGH_EFFORT" "$([ "$(s "$PWE" "$GOB" .reason)/$(s "$PWE" "$GB" .reason)" = HIGH_EFFORT/HIGH_EFFORT ] && echo 0 || echo 1)" "$(s "$PWE" "$GOB" .reason)/$(s "$PWE" "$GB" .reason)"
+r GET "/workout-plans/$(uid)/progression-suggestions"; check "PG30 unknown plan id -> 404" "$(is 404)" "C=$C"
+r GET "/workout-plans/not-a-uuid/progression-suggestions"; check "PG31 malformed plan id -> 404" "$(is 404)" "C=$C"
+AS=B
+r GET "/workout-plans/$PG/progression-suggestions"; check "PG32 other user -> 404" "$(is 404)" "C=$C"
+r POST /workout-sessions "$(jq -nc --arg p "$PW1" '{plannedWorkoutId:$p}')" "$(uid)"; check "PG33 other user starts session on A's planned workout -> 404" "$(is 404)" "C=$C"
+r POST /workout-plans "$(jq -nc --argjson a "[$(pe 0 "$BP" 2 8 10 null 40)]" '{name:"QA B",weeks:4,generator:"custom",rationale:null,workouts:[{dayOfWeek:1,name:"B1",exercises:$a}]}')" "$(uid)"; PB="$(j .id)"
+sug "$PB"; check "PG34 B's own plan (same exercise): no history from A" "$([ "$C" = 200 ] && [ "$(jq -r '.suggestions[0].reason+"/"+(.suggestions[0].basedOn|length|tostring)' "$SG")" = NOT_ENOUGH_HISTORY/0 ] && echo 0 || echo 1)" "$(jq -c '.suggestions[0]|{reason,basedOn}' "$SG")"
+AS=A
+r DELETE "/workout-plans/$PE" '' "$(uid)"; r GET "/workout-plans/$PE/progression-suggestions"
+check "PG35 archived plan -> 409 PLAN_ARCHIVED" "$(code_is 409 PLAN_ARCHIVED)" "C=$C code=$(j .code)"
+AS=B; r GET "/workout-plans/$PE/progression-suggestions"; check "PG36 other user on archived plan -> 404 (not 409)" "$(is 404)" "C=$C"
+AS=""; r GET "/workout-plans/$PG/progression-suggestions"; check "PG37 unauthenticated -> 401" "$(is 401)" "C=$C"
+AS=A
 
 # Delete both accounts now (trap also covers failures).
 for a in A B; do AS=$a; r DELETE /me "$(cred $a '{password:$p}')" "$(uid)"; [ "$C" = 204 ] && DELETED[$a]=1; done

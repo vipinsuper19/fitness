@@ -3,11 +3,7 @@ package com.vipin.fitness.ui
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTextClearance
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.test.core.app.ActivityScenario
 import com.vipin.fitness.MainActivity
 import com.vipin.fitness.core.data.Profile

@@ -49,9 +49,12 @@ import com.vipin.fitness.core.data.WaterLog
 fun NutritionScreen(modifier: Modifier = Modifier) {
     val diary: DiaryViewModel = hiltViewModel(key = "nutrition_diary")
     var addingTo by rememberSaveable { mutableStateOf<MealType?>(null) }
+    var showSummary by rememberSaveable { mutableStateOf(false) }
     val meal = addingTo
-    if (meal == null) {
-        DiaryScreen(diary, onAdd = { addingTo = it }, modifier = modifier)
+    if (showSummary) {
+        NutritionSummaryRoute(onBack = { showSummary = false }, modifier = modifier)
+    } else if (meal == null) {
+        DiaryScreen(diary, onAdd = { addingTo = it }, onOpenSummary = { showSummary = true }, modifier = modifier)
     } else {
         val date = diary.state.collectAsStateWithLifecycle().value.date
         FoodSearchScreen(
@@ -67,12 +70,15 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DiaryScreen(vm: DiaryViewModel, onAdd: (MealType) -> Unit, modifier: Modifier) {
+private fun DiaryScreen(vm: DiaryViewModel, onAdd: (MealType) -> Unit, onOpenSummary: () -> Unit, modifier: Modifier) {
     val s by vm.state.collectAsStateWithLifecycle()
     var editingWater by remember { mutableStateOf<WaterLog?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
     Column(modifier.fillMaxSize()) {
         DateBar(s, vm)
+        androidx.compose.material3.TextButton(onClick = onOpenSummary, modifier = Modifier.padding(horizontal = 8.dp).testTag("open_nutrition_summary")) {
+            Text(stringResource(R.string.summary_open))
+        }
         when {
             s.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             s.loadError != null -> Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
