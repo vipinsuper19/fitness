@@ -1851,6 +1851,9 @@ components:
         currency: { type: string, const: INR }
         dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
         dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
+        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. 0 or null means no target.' }
+        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. 0 or null means no target.' }
+        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. 0 or null means no target.' }
         onboardingCompleted: { type: boolean }
         updatedAt: { type: string, format: date-time }
     ProfileUpdate:
@@ -1869,6 +1872,9 @@ components:
         timezone: { type: string, maxLength: 64 }
         dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
         dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
+        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. 0 or null means no target.' }
+        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. 0 or null means no target.' }
+        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. 0 or null means no target.' }
         onboardingCompleted: { type: boolean }
     DataExport:
       type: object
@@ -2348,9 +2354,9 @@ components:
       required: [kcal, proteinG, carbsG, fatG, waterMl]
       properties:
         kcal: { type: [integer, 'null'], description: '`dailyCalorieTargetKcal`' }
-        proteinG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
-        carbsG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
-        fatG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        proteinG: { type: [number, 'null'], description: '`dailyProteinTargetG`; null when unset or 0' }
+        carbsG: { type: [number, 'null'], description: '`dailyCarbsTargetG`; null when unset or 0' }
+        fatG: { type: [number, 'null'], description: '`dailyFatTargetG`; null when unset or 0' }
         waterMl: { type: [integer, 'null'], description: '`dailyWaterTargetMl`' }
     NutritionAdherence:
       type: object
