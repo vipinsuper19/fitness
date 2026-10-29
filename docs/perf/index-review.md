@@ -87,27 +87,29 @@ nothing.
 
 Sub-0.2 ms differences are noise. "Seq Scan" appears after only in the badge count and is explained next.
 
-## Finding: badge completed-set count (no index fix)
+## Finding: badge completed-set count (no change needed)
 
-`AchievementsService` counts the user's completed sets in completed sessions
-(`exerciseSetLog.count({ where: { userId, completed: true, session: { status: 'completed' } } })`). Written as a
-join, the planner hash-joins all completed sessions (Seq Scan, 15k rows) because that is cheaper than 2,700
-index probes at this size. It will switch to a nested loop as the table grows. If Prisma renders the relation
-filter as `id IN (SELECT t1.id FROM exercise_set_logs t1 JOIN workout_sessions j1 … WHERE j1.status = 'completed')`,
-the shape it has used for relation filters, the plan hashes **every** completed set in the table (62 ms here, and growing with
-all users' data):
+`AchievementsService` counts the user's completed sets in completed sessions:
+`exerciseSetLog.count({ where: { userId, completed: true, session: { status: 'completed' } } })`. An earlier
+draft of this review guessed that Prisma renders the relation filter as a whole-table `IN (subquery)`. Prisma
+query logging (client 7.10.1, against the seeded local DB) shows it doesn't. The generated SQL is a per-user join:
 
-```
-Parallel Hash Semi Join (rows=1350 loops=2)
-  ->  Parallel Bitmap Heap Scan on exercise_set_logs l   (user's sets)
-  ->  Parallel Hash (rows=113850 loops=2)
-        ->  Hash Join  ->  Parallel Seq Scan on exercise_set_logs t1  /  Seq Scan on workout_sessions j1
-Execution Time: 62.469 ms
+```sql
+SELECT COUNT(*) AS "_count$_all" FROM (SELECT "public"."exercise_set_logs"."id" FROM "public"."exercise_set_logs"
+  LEFT JOIN "public"."workout_sessions" AS "j0" ON ("j0"."id") = ("public"."exercise_set_logs"."session_id")
+  WHERE ("public"."exercise_set_logs"."user_id" = $1 AND "public"."exercise_set_logs"."completed" = $2
+    AND ("j0"."status" = CAST($3::text AS "public"."SessionStatus") AND ("j0"."id" IS NOT NULL))) OFFSET $4) AS "sub"
+-- params: [userId, true, "completed", "0"]
 ```
 
-No index fixes that shape. Follow-up (not in this PR): count via a raw
-`SELECT count(*) FROM exercise_set_logs l JOIN workout_sessions s ON s.id = l.session_id WHERE l.user_id = $1 AND l.completed AND s.status = 'completed'`
-(4 ms here, user-bounded), after confirming the generated SQL with Prisma query logging.
+`EXPLAIN (ANALYZE, BUFFERS)` of that statement, prepared, with both the custom and the forced generic plan:
+
+- The user's sets come from an index (`exercise_set_logs_user_id_client_set_id_key`): **2,700 rows**, 87 buffers. No other user's sets are read.
+- A **hash join** to `workout_sessions` (a Seq Scan of 15,180 rows, 276 buffers; 363 buffers in total), about **5–6 ms**. A user with a month of data (225 sets) gets the same plan in 5.3 ms.
+- Forcing a nested loop (a primary-key lookup per set instead of the hash) is **worse: 627 vs 363 buffers**. At this size the planner's hash join is the right choice, and it will switch by itself as the table grows.
+
+**Conclusion:** no rewrite and no index needed. The extra `(user_id, completed, session_id)` index (see Changes)
+stays rejected.
 
 ## Key plans
 
