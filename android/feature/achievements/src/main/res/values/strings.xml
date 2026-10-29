@@ -27,6 +27,8 @@
         <item quantity="other">%d days left</item>
     </plurals>
     <string name="challenge_ends_today">Ends today</string>
+    <string name="challenge_water_goal_at_join">Goal at join: %1$s ml (for information only)</string>
+    <string name="challenge_water_rule">Each day counts against that day\'s own water target, or 2000 ml if none is set.</string>
     <string name="challenge_no_deadline">No deadline</string>
     <string name="challenge_join">Join</string>
     <string name="challenge_joined">Joined</string>
