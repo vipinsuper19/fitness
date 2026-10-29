@@ -10,6 +10,7 @@ import com.vipin.fitness.core.data.HomeRepository
 import com.vipin.fitness.core.data.ProgressRepository
 import com.vipin.fitness.core.data.UnitPreference
 import com.vipin.fitness.core.data.XpBalance
+import com.vipin.fitness.core.data.history.SessionChanges
 import com.vipin.fitness.core.data.workout.ActivePlan
 import com.vipin.fitness.core.data.workout.PlannedWorkout
 import com.vipin.fitness.core.data.workout.WorkoutPlan
@@ -76,6 +77,7 @@ class HomeViewModel @Inject constructor(
     units: UnitPreference,
     private val clock: Clock,
     private val goals: GoalProgressService,
+    sessionChanges: SessionChanges = SessionChanges(),
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeState(today = clock.today()))
     val state: StateFlow<HomeState> = _state.asStateFlow()
@@ -85,6 +87,8 @@ class HomeViewModel @Inject constructor(
     init {
         viewModelScope.launch { units.units.collect { u -> _state.update { it.copy(units = u) } } }
         refresh()
+        // A past workout was corrected or discarded: XP (and the streak) changed on the server.
+        viewModelScope.launch { sessionChanges.events.collect { refresh() } }
     }
 
     /** Called when the screen resumes: totals may have changed in other tabs, and the day may have rolled over. */

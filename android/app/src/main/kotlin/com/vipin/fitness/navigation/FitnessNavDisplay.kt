@@ -144,7 +144,7 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                     HistoryRoute(onOpen = { backStack.add(Route.PastSession(it)) })
                 }
                 is Route.PastSession -> NavEntry(key) {
-                    PastSessionRoute(route.id)
+                    PastSessionRoute(route.id, onDiscarded = { backStack.removeLastOrNull() })
                 }
                 Route.ExportData -> NavEntry(key) { ExportRoute() }
                 Route.Achievements -> NavEntry(key) {

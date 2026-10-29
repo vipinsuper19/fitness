@@ -16,6 +16,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -131,18 +135,57 @@ private fun ErrorState(error: HistoryError, onRetry: () -> Unit) {
 @Composable
 fun PastSessionRoute(
     sessionId: String,
+    onDiscarded: () -> Unit = {},
     viewModel: PastSessionViewModel = hiltViewModel<PastSessionViewModel, PastSessionViewModel.Factory>(
         key = sessionId,
+        creationCallback = { it.create(sessionId) },
+    ),
+    corrections: SessionCorrectionViewModel = hiltViewModel<SessionCorrectionViewModel, SessionCorrectionViewModel.Factory>(
+        key = "correction-$sessionId",
         creationCallback = { it.create(sessionId) },
     ),
 ) {
     val s by viewModel.state.collectAsStateWithLifecycle()
     val display by viewModel.display.collectAsStateWithLifecycle()
-    PastSessionContent(s, onRetry = viewModel::load, display = display)
+    val c by corrections.state.collectAsStateWithLifecycle()
+    // After a correction, show the session the server returned.
+    val shown = s.copy(session = c.session ?: s.session)
+    val editable = s.session != null && corrections.canCorrect(shown.session)
+    LaunchedEffect(c.discarded) { if (c.discarded) onDiscarded() }
+    var editing by remember { mutableStateOf<PastSet?>(null) }
+    PastSessionContent(
+        shown, onRetry = viewModel::load, display = display.copy(zone = c.zone),
+        editable = editable && !c.busy,
+        onEditSet = { editing = it },
+        correctionSection = {
+            CorrectionSection(
+                c, editable = editable, session = shown.session, units = display.units,
+                onSaveDetails = { at, diff, notes -> shown.session?.let { corrections.correctCompletion(it, at, diff, notes) } },
+                onDiscard = corrections::discard,
+                onDismiss = corrections::dismissMessage,
+            )
+        },
+    )
+    editing?.let { set ->
+        EditSetDialog(
+            set, display.units,
+            canDelete = (shown.session?.completedSets ?: 0) > 1 || !set.completed,
+            onSave = { corrections.saveSet(it); editing = null },
+            onDelete = { corrections.deleteSet(set.clientSetId); editing = null },
+            onDismiss = { editing = null },
+        )
+    }
 }
 
 @Composable
-fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit, display: HistoryDisplay = HistoryDisplay()) {
+fun PastSessionContent(
+    s: PastSessionState,
+    onRetry: () -> Unit,
+    display: HistoryDisplay = HistoryDisplay(),
+    editable: Boolean = false,
+    onEditSet: (PastSet) -> Unit = {},
+    correctionSection: @Composable () -> Unit = {},
+) {
     val session = s.session
     when {
         s.loading -> Box(Modifier.fillMaxSize().testTag(HistoryTags.LOADING), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -158,6 +201,7 @@ fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit, display: Histor
                 session.perceivedDifficulty?.let { Text(stringResource(R.string.history_difficulty, it)) }
                 session.notes?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             }
+            item(key = "corrections") { correctionSection() }
             val byExercise = session.sets.groupBy { it.exerciseId }
             byExercise.forEach { (exerciseId, sets) ->
                 item(key = exerciseId) {
@@ -165,9 +209,14 @@ fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit, display: Histor
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(s.exerciseNames[exerciseId] ?: stringResource(R.string.history_unknown_exercise), style = MaterialTheme.typography.titleMedium)
                             sets.sortedBy { it.setIndex }.forEach { set ->
-                                Row(Modifier.fillMaxWidth().testTag(HistoryTags.SET)) {
+                                Row(Modifier.fillMaxWidth().testTag(HistoryTags.SET), verticalAlignment = Alignment.CenterVertically) {
                                     Text(stringResource(R.string.history_set_n, set.setIndex + 1), modifier = Modifier.weight(1f))
                                     Text(set.summary(display.units) + if (set.completed) "" else " · " + stringResource(R.string.history_skipped))
+                                    if (editable) {
+                                        TextButton(onClick = { onEditSet(set) }, modifier = Modifier.testTag(CorrectionTags.editSet(set.clientSetId))) {
+                                            Text(stringResource(R.string.correction_edit))
+                                        }
+                                    }
                                 }
                             }
                         }

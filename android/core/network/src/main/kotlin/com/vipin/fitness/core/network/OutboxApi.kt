@@ -4,9 +4,11 @@ import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.HTTP
 import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 
 /**
@@ -26,5 +28,18 @@ interface OutboxApi {
         @Path(value = "path", encoded = true) path: String,
         @Header("Idempotency-Key") idempotencyKey: String,
         @Body body: RequestBody,
+    ): Response<ResponseBody>
+
+    @PUT("{path}")
+    suspend fun put(
+        @Path(value = "path", encoded = true) path: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Body body: RequestBody,
+    ): Response<ResponseBody>
+
+    @HTTP(method = "DELETE", path = "{path}", hasBody = false)
+    suspend fun delete(
+        @Path(value = "path", encoded = true) path: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
     ): Response<ResponseBody>
 }

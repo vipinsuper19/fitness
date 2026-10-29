@@ -3,6 +3,7 @@ package com.vipin.fitness.feature.workout
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.data.history.PastSession
+import com.vipin.fitness.core.data.history.SessionChanges
 import com.vipin.fitness.core.data.history.WorkoutHistoryRepository
 import com.vipin.fitness.core.data.workout.WorkoutRepository
 import com.vipin.fitness.core.network.ApiError
@@ -45,6 +46,7 @@ data class HistoryState(
 class HistoryViewModel @Inject constructor(
     private val repo: WorkoutHistoryRepository,
     displaySource: HistoryDisplaySource,
+    sessionChanges: SessionChanges = SessionChanges(),
 ) : ViewModel() {
     val display: StateFlow<HistoryDisplay> = displaySource.display.stateIn(viewModelScope, SharingStarted.Eagerly, HistoryDisplay())
     private val _state = MutableStateFlow(HistoryState())
@@ -52,6 +54,8 @@ class HistoryViewModel @Inject constructor(
 
     init {
         refresh()
+        // A correction or discard on the detail screen: reload so the list matches.
+        viewModelScope.launch { sessionChanges.events.collect { refresh() } }
     }
 
     fun refresh() {

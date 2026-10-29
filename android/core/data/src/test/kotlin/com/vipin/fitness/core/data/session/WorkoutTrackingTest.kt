@@ -260,6 +260,56 @@ class WorkoutTrackingTest {
         server.takeRequest(1, TimeUnit.SECONDS)
     }
 
+    @Test fun setAfterTheSessionCompletedBecomesACorrectionPut() = runTest {
+        start()
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        outbox.drain()
+        server.takeRequest()
+        val set = session().exercises[0].sets[0]
+        repo.setCompleted(set.clientSetId, true)
+        val postKey = queued().single().idempotencyKey
+        server.enqueue(MockResponse(code = 409, body = """{"code":"SESSION_COMPLETED","message":"x"}"""))
+        server.enqueue(ok("""{"session":$sessionJson,"xpDelta":5,"xpBalance":{"total":45,"level":1,"xpIntoLevel":45,"xpForNextLevel":100}}"""))
+        assertEquals(DrainResult.Done, outbox.drain())
+        val post = server.takeRequest()
+        val put = server.takeRequest()
+        assertEquals("POST" to "/api/v1/workout-sessions/srv1/sets", post.method to post.url.encodedPath)
+        assertEquals("PUT" to "/api/v1/workout-sessions/srv1/corrections/sets/${set.clientSetId}", put.method to put.url.encodedPath)
+        assertEquals(post.body?.utf8(), put.body?.utf8())
+        val putKey = put.headers["Idempotency-Key"]!!
+        assertTrue(putKey != postKey)
+        java.util.UUID.fromString(putKey) // the contract wants a uuid
+        assertTrue(queued().isEmpty())
+    }
+
+    @Test fun correctionPutThatCantGoYetStaysQueuedAsAPut() = runTest {
+        start()
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        outbox.drain()
+        repo.setCompleted(session().exercises[0].sets[0].clientSetId, true)
+        server.enqueue(MockResponse(code = 409, body = """{"code":"SESSION_COMPLETED","message":"x"}"""))
+        server.enqueue(MockResponse(code = 503, body = """{"code":"UNAVAILABLE","message":"x"}"""))
+        assertEquals(DrainResult.Retry, outbox.drain())
+        val w = queued().single()
+        assertEquals("PUT", w.method)
+        assertTrue(w.path.contains("/corrections/sets/"))
+    }
+
+    @Test fun setNotFoundDropsTheEntryQuietly() = runTest {
+        val id = start()
+        server.enqueue(MockResponse(code = 201, body = sessionJson))
+        outbox.drain()
+        db.pendingWriteDao().enqueue(
+            com.vipin.fitness.core.database.outbox.PendingWriteEntity(
+                "d1", java.util.UUID.randomUUID().toString(), "DELETE", "workout-sessions/srv1/corrections/sets/cs1", null, Long.MAX_VALUE,
+            ),
+        )
+        server.enqueue(MockResponse(code = 404, body = """{"code":"SET_NOT_FOUND","message":"x"}"""))
+        assertEquals(DrainResult.Done, outbox.drain())
+        assertTrue(queued().isEmpty())
+        assertNull(repo.session(id).first()!!.syncError)
+    }
+
     // (a) Ownership
 
     @Test fun writesAndSessionsCarryTheSignedInUser() = runTest {
