@@ -38,13 +38,10 @@ function expectRateLimited(res: request.Response) {
   expect(res.status).toBe(429);
   expect(res.headers['retry-after']).toMatch(/^[1-9][0-9]*$/);
   expect(res.body).toEqual(expect.objectContaining({ code: 'RATE_LIMITED', requestId: expect.any(String) }));
-<<<<<<< HEAD
   // Standard Error: clean message, details.retryAfterSeconds equal to the Retry-After header, nothing else.
   expect(Object.keys(res.body).sort()).toEqual(['code', 'details', 'message', 'requestId']);
   expect(res.body.details).toEqual({ retryAfterSeconds: Number(res.headers['retry-after']) });
   expect(res.body.message).not.toMatch(/Throttler|Exception/i);
-=======
->>>>>>> origin/main
   // Documented on components/responses/RateLimited: X-Request-Id is set on 429s too and equals the body's requestId.
   expect(res.headers['x-request-id']).toMatch(/^[A-Za-z0-9._-]{8,64}$/);
   expect(res.headers['x-request-id']).toBe(res.body.requestId);
