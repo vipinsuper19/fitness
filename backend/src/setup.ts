@@ -3,6 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 
+import { connectionCloseWhileDraining } from './common/graceful-shutdown';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { requestIdMiddleware } from './common/request-id';
 import { requestLogMiddleware } from './common/request-log';
@@ -30,7 +31,8 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
       { path: 'health', method: RequestMethod.GET },
       { path: 'health/deep', method: RequestMethod.GET },
     ] });
-  app.enableShutdownHooks();
+  // Signals are handled by installShutdownSignals (main.ts), not enableShutdownHooks: see common/graceful-shutdown.ts.
+  app.use(connectionCloseWhileDraining);
   const origins = env.CORS_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean);
   if (origins && origins.length > 0) app.enableCors({ origin: origins });
 

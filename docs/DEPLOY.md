@@ -91,6 +91,18 @@ Every request writes one JSON line to stdout (Render → Logs), for example:
 - `REQUEST_LOG=off` disables the line (default `on`; tests set `off`). Nest's existing logger and its default levels are unchanged.
 - Spec: [docs/specs/request-log.md](specs/request-log.md).
 
+## Graceful shutdown
+Render sends `SIGTERM` to the old instance (60 s after switching traffic to the new one on a deploy) and `SIGKILL` if the process hasn't exited within the service's shutdown delay, **30 s by default** (`maxShutdownDelaySeconds`, 1–300; [Render: Deploys → Graceful shutdown](https://render.com/docs/deploys#graceful-shutdown), [Blueprint spec](https://render.com/docs/blueprint-spec)). The API handles it in `backend/src/common/graceful-shutdown.ts`:
+
+1. Stop accepting new connections (`server.close()`), close idle keep-alive sockets, and send `Connection: close` on any response still going out.
+2. Let in-flight requests finish for up to `SHUTDOWN_GRACE_MS` (default `10000`, max `25000`, so it stays well under Render's 30 s); after that the remaining sockets are closed and a warning is logged.
+3. Run Nest's shutdown hooks (`app.close()`): Prisma `$disconnect` and timers, only **after** the last response.
+4. Exit `0`.
+
+Nest's `enableShutdownHooks()` is deliberately not used: it disconnects Prisma while requests are still running and re-raises the signal (exit 143). `/health` doesn't report "shutting down": once `SIGTERM` arrives Render has already moved traffic and health checks to the new instance, and the closed listener refuses new connections, so a status would never be seen; `/health`'s contract stays unchanged.
+
+**Signal delivery caveat:** `startCommand` is `npm run migrate:deploy && npm start`, so `node` runs under `sh` and `npm`. If logs show `SIGKILL` / exit 137 instead of `shutdown complete`, change the start command to `npm run migrate:deploy && exec node dist/main.js` so Node receives `SIGTERM` directly (not changed here: it's a production deploy setting, Vipin's call).
+
 ## Free-tier notes
 - **Cold starts (accepted):** Render Free spins down after ~15 min idle, so the first request after that takes **about 50 s**. **No keep-alive pinger is used**, by choice, to stay within the free plan; the app should show a loading state and retry.
 - Render Free has 512 MB RAM. argon2 (19 MiB per hash) fits.
