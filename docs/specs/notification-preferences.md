@@ -2,7 +2,7 @@
 
 Users choose **which kinds of notification** they want and a **quiet-hours** window. This spec covers **storage and the API only**.
 
-**Out of scope (explicitly):** sending anything. No FCM, no device tokens or registration, no scheduler, no delivery, no in-app inbox, no email or SMS. Nothing in the backend reads these preferences yet. A later sender spec will consume them, and it may add per-type settings such as reminder times. Until then, storing a preference has no visible effect besides `GET` returning it.
+**Out of scope (explicitly):** sending anything. No FCM, no device tokens or registration, no scheduler, no delivery, no in-app inbox, no email or SMS. Nothing in the backend reads these preferences yet. A later sending spec will consume them and will define per-type settings such as reminder times, the water interval and workout days (decision 3). Until then, storing a preference has no visible effect besides `GET` returning it.
 
 ## Types
 One opt-in flag per type, each tied to an existing feature:
@@ -29,7 +29,8 @@ One opt-in flag per type, each tied to an existing feature:
 - **Window:** `[start, end)`. If `start < end`, it's within one local day (13:00–15:00). If `start > end`, it **crosses midnight**: 22:00–07:00 covers 22:00–23:59 and 00:00–06:59. `start == end` is invalid (`VALIDATION_FAILED`); to turn quiet hours off, set `enabled: false`.
 - **The check is by wall clock:** a local time `t` is quiet when it falls within the window above. It's evaluated with the current local time in the profile zone, so it doesn't depend on the date.
 - **DST:** because the check uses local wall time, a window stays at the same wall-clock hours across a DST change, so its length in real time can be one hour longer or shorter that night. A wall time that is skipped (spring forward) just doesn't occur; an hour that repeats (fall back) is checked each time it occurs, so it is quiet or not by the same rule. `Asia/Kolkata` has no DST; the rule matters for other zones.
-- **What happens to a notification inside the window** (drop or defer to `end`) is for the sender spec. This spec only stores the window.
+- **Every type is subject to quiet hours**; nothing bypasses them, including badges and challenges (decision 4).
+- **What happens to a notification inside the window** (drop, or hold until `end`) is decided by the sending spec (decision 2).
 
 ## Defaults and storage
 - **No row means defaults.** A user who has never saved preferences reads the defaults above. `GET` never writes. New users get no row at sign-up.
@@ -72,8 +73,10 @@ Errors: 401 as usual, 409 for Idempotency-Key conflicts. There is no 404 (a miss
 - Quiet-hours helper (pure, for the sender): same-day window; a cross-midnight window at 21:59, 22:00, 06:59 and 07:00; zone change (a 22:00 Kolkata window evaluated after moving to New York uses New York wall time); DST spring-forward and fall-back nights in `America/New_York` (the repeated 01:xx hour is quiet in both occurrences for a 01:00–02:00 window).
 - Export includes `notificationPreferences`, defaults included; deleting the account removes the row; the schemas validate against openapi.
 
-## Decisions to confirm
-1. Default types: on for workout, streak, challenge, badge and progression; off for water and food.
-2. Default quiet hours: on, 22:00–07:00.
-3. Unknown type in PATCH: 400, not ignored.
-4. PATCH only, no PUT.
+## Decisions
+1. **Defaults approved:** on for workout, streak, challenge, badge and progression; off for water and food; master switch on; quiet hours on, 22:00–07:00.
+2. **Drop or hold in quiet hours:** deferred to the sending spec. This spec only stores the window.
+3. **Reminder times, the water interval and workout days** belong in the sending spec, not here.
+4. **Nothing bypasses quiet hours**, including badges and challenges: every type is subject to them.
+5. **Unknown type in PATCH:** `400 VALIDATION_FAILED`, not ignored.
+6. **PATCH only, no PUT.**
