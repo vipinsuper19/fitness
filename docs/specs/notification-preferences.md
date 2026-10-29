@@ -1,6 +1,6 @@
-# Notification preferences (contract)
+# Notification preferences
 
-Users choose **which kinds of notification** they want and a **quiet-hours** window. This spec covers **storage and the API only**.
+Users choose **which kinds of notification** they want and a **quiet-hours** window. This spec covers **storage and the API only**. Implemented in #116 (migration `20261029001300_notification_preferences`).
 
 **Out of scope (explicitly):** sending anything. No FCM, no device tokens or registration, no scheduler, no delivery, no in-app inbox, no email or SMS. Nothing in the backend reads these preferences yet. A later sending spec will consume them and will define per-type settings such as reminder times, the water interval and workout days (decision 3). Until then, storing a preference has no visible effect besides `GET` returning it.
 
@@ -34,7 +34,18 @@ One opt-in flag per type, each tied to an existing feature:
 
 ## Defaults and storage
 - **No row means defaults.** A user who has never saved preferences reads the defaults above. `GET` never writes. New users get no row at sign-up.
-- Table `notification_preferences` (planned, not in this PR): `user_id` uuid PK, FK → users `ON DELETE CASCADE`; `enabled` bool; `types` jsonb (`{type: bool}`, only for the types the user has set); `quiet_enabled` bool; `quiet_start`, `quiet_end` time; `updated_at` timestamptz.
+- Table `notification_preferences` (migration `20261029001300_notification_preferences`), one row per user, all columns NOT NULL:
+
+  | column | type | notes |
+  |---|---|---|
+  | `user_id` | uuid | primary key; FK → users `ON DELETE CASCADE` |
+  | `enabled` | boolean | master switch |
+  | `types` | jsonb, default `{}` | `{type: bool}` only for the types the user has set; CHECK it is a JSON object |
+  | `quiet_enabled` | boolean | |
+  | `quiet_start`, `quiet_end` | time(0) | local wall-clock times; CHECK `quiet_start <> quiet_end` |
+  | `updated_at` | timestamptz(3) | set on every write |
+- A row is created by the first PATCH that changes an effective value. A PATCH that changes nothing (including `{}`, or a type re-sent at its current value) writes nothing, so it creates no row and doesn't pin a type to its default.
+- PATCH reads, merges and writes inside one transaction holding a per-user advisory lock, so concurrent PATCHes for different fields both persist.
 - Reads merge the stored flags over the current defaults, so a type added later shows its default to everyone who hasn't set it.
 - **Export:** `GET /me/export` includes `notificationPreferences` (the same shape as `GET`, defaults included). It's required in the `DataExport` schema. **Deletion:** removed with the account (cascade).
 
@@ -65,13 +76,14 @@ One opt-in flag per type, each tied to an existing feature:
 
 Errors: 401 as usual, 409 for Idempotency-Key conflicts, and `429 RATE_LIMITED` on both GET and PATCH (per-user limit, counted separately for each route: `NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE`, default 60, like the other `/me` endpoints). There is no 404 (a missing row reads as defaults).
 
-## Tests (for the implementation PR)
+## Tests (`notification-prefs.rules.spec.ts`, `notification-prefs.int-spec.ts`)
 - GET with no row returns the defaults and writes nothing; a new user has no row.
 - PATCH partial merge: a single type, the master switch, `quietHours.start` only. Other values are unchanged; `updatedAt` is set; a no-op PATCH keeps `updatedAt`.
 - The response always lists every type; a stored flag for a removed type isn't returned. A type added later shows its default.
 - Validation: unknown type (`types.foo`), non-boolean, null, bad `HH:MM` (`24:00`, `7:00`, `07:60`), `start == end` (including when only one side is sent and the merge makes them equal), unknown property, read-only fields. Nothing is saved on a 400.
-- Quiet-hours helper (pure, for the sender): same-day window; a cross-midnight window at 21:59, 22:00, 06:59 and 07:00; zone change (a 22:00 Kolkata window evaluated after moving to New York uses New York wall time); DST spring-forward and fall-back nights in `America/New_York` (the repeated 01:xx hour is quiet in both occurrences for a 01:00–02:00 window).
+- Quiet-hours helper `isQuietAt` (pure, in `notification-prefs.rules.ts`; unused until the sending spec): same-day window; a cross-midnight window at 21:59, 22:00, 06:59 and 07:00; zone change (a 22:00 Kolkata window evaluated after moving to New York uses New York wall time); DST spring-forward and fall-back nights in `America/New_York` (the repeated 01:xx hour is quiet in both occurrences for a 01:00–02:00 window).
 - Export includes `notificationPreferences`, defaults included; deleting the account removes the row; the schemas validate against openapi.
+- Two concurrent PATCHes setting different types both persist (the advisory lock).
 
 ## Decisions
 1. **Defaults approved:** on for workout, streak, challenge, badge and progression; off for water and food; master switch on; quiet hours on, 22:00–07:00.

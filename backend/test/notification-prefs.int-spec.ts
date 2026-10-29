@@ -157,6 +157,34 @@ describeDb('notification preferences (HTTP + Postgres)', () => {
     expect(validUpdate({ types: { foo: true } })).toBe(false);
   });
 
+  it('two concurrent PATCHes for different types both persist (per-user advisory lock)', async () => {
+    const u = await signUp();
+    await patch(u.token, { types: { water_reminder: true } }).expect(200); // an existing row: both requests read-merge-write it
+    const lockKey = `notification-prefs:${u.id}`;
+    const waiters = async () =>
+      Number((await prisma.$queryRaw<Array<{ n: bigint }>>`
+        SELECT count(*) AS n FROM pg_locks
+        WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
+          AND ((classid::bigint << 32) | objid::bigint) = hashtextextended(${lockKey}, 0)`)[0]!.n);
+    // Hold the user's lock so both PATCHes are queued behind it before either reads the row;
+    // then release it. Deterministic: the test waits until both are blocked on the lock.
+    const results = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text`;
+      const a = patch(u.token, { types: { food_log_reminder: true } }).then((r) => r);
+      const b = patch(u.token, { types: { badge_earned: false } }).then((r) => r);
+      // Date is faked, so bound the wait by attempts (500 x 20 ms = 10 s), not by the clock.
+      for (let i = 0; (await waiters()) < 2; i += 1) {
+        if (i >= 500) throw new Error('both PATCHes never reached the lock');
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      return [a, b] as const;
+    }, { timeout: 20_000 });
+    const [ra, rb] = await Promise.all(results);
+    expect([ra.status, rb.status]).toEqual([200, 200]);
+    expect((await rowOf(u.id))!.types).toEqual({ water_reminder: true, food_log_reminder: true, badge_earned: false });
+    expect((await get(u.token)).types).toEqual({ ...DEFAULT_TYPES, water_reminder: true, food_log_reminder: true, badge_earned: false });
+  });
+
   it('Idempotency-Key: replay returns the stored response; reuse with a different body is 409', async () => {
     const u = await signUp();
     const key = randomUUID();
