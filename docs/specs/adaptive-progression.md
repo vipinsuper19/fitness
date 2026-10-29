@@ -74,6 +74,7 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
 - `harderVariations`: optional array of `exerciseId`s, present only with `REP_CEILING` and possibly empty. Derived **by rule** from the catalogue; v1 has **no curated progression links**: exercises with the same `primaryMuscle` and `trackingType`, `difficulty` exactly one level above this exercise's (`beginner → intermediate → advanced`), and equipment the original also uses (or none); at most 3. Ordering is **deterministic**: by exercise `name` ascending, then `id` ascending; the first 3 are returned. Empty when none match or the exercise is already `advanced`.
 - `cooldownUntil`: date-time or null
 - `basedOn`: up to 3 items `{ sessionId, completedAt, perceivedDifficulty|null, completedSets, plannedSets, metTarget, bestReps|null, bestWeightKg|null, bestDurationSeconds|null, bestDistanceM|null }`, newest first.
+- `inputs`: the machine-readable inputs behind `reason` (see "Reason inputs").
 
 ## Accepting suggestions
 `PATCH /workout-plans/{planId}` takes a **full** `WorkoutPlanDraft` (every workout and exercise) plus `baseVersion`, and creates one new version. So **one PATCH can carry every accepted suggestion**: the client takes the plan at `planVersion`, replaces `sets/repsMin/repsMax/targetWeightKg/durationSeconds` of each accepted exercise (matched by `plannedWorkoutId` + `exerciseId`) with `suggested`, and sends it with `baseVersion = planVersion`. A stale version gets the existing `409 VERSION_CONFLICT`; the client refetches the plan and suggestions. After a successful PATCH, suggestions computed for the old version are stale (accepted ones now enter cooldown); refetch before applying more. Dismissing needs no call (v1 keeps no dismiss state).
@@ -88,18 +89,29 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
 
 openapi has request and response examples for both calls (`mixed`, `noHistory`, `applySuggestions`, `staleVersion`, `keyReused`). test/contract.spec.ts checks that they validate, use the server's `reasonText` and agree with each other.
 
-## Reason inputs (contract only, not implemented)
-Android wants the inputs behind each reason in machine-readable form. Today they are only partly derivable: `basedOn` (sessions, `metTarget`, difficulty) and `cooldownUntil` (only while the cooldown is active). Nothing tells the client whether the cap, the minimum step, rounding or a schema limit shaped `suggested`. The planned **additive, optional** `ProgressionSuggestion.inputs` (`ProgressionInputs` in openapi) is:
-- `sessionsRequired` (3), `sessionsConsidered`, `sessionsMetTarget`, `maxPerceivedDifficulty`;
-- `cooldown {active, lastRaisedAt, until, days: 7}`. `lastRaisedAt` is reported even after the cooldown ends;
-- `step` (null for `hold`): `{field, rule, percent, capPercent, capApplied, minStepApplied, rounding, limitApplied}`.
-It isn't returned yet, so clients must treat it as optional. Implementing it needs `increase()` / `deload()` in progression.rules.ts to report how they derived the step. That's a follow-up.
+## Reason inputs (`inputs`, shipped)
+Every item has `inputs` (`ProgressionInputs` in openapi), the machine-readable inputs behind `reason`. Older servers omitted it, so a client that has to support them should treat it as optional.
+- `sessionsRequired` (3), `sessionsConsidered` (= `basedOn.length`), `sessionsMetTarget`, `maxPerceivedDifficulty` (null when none reported).
+- `cooldown {active, lastRaisedAt, until, days: 7}`:
+  - `lastRaisedAt` is the `createdAt` of the newest version that raised this entry's load, reported **even after the cooldown has ended** (null if never raised);
+  - `until` is set whenever a cooldown is active, even when an earlier rule (`MISSED_TARGET`, `HIGH_EFFORT`, a deload, `NOT_ENOUGH_HISTORY`) decided the reason. The item's `cooldownUntil` is still set only with `COOLDOWN`.
+- `step`: null for every `hold` (including `CAP_REACHED` and `REP_CEILING`). Otherwise `{field, rule, percent, capPercent, capApplied, minStepApplied, rounding, limitApplied}`, as reported by `increase()` / `deloadStep()` in progression.rules.ts:
+
+  | Path | field | rule | percent | capPercent | minStepApplied | rounding | limitApplied |
+  |---|---|---|---|---|---|---|---|
+  | weight increase | targetWeightKg | percent_increase | 2.5 / 5 | 10 | percent step < 1.0 kg (0.5 kg under 10 kg), or the off-grid round-up | down_0_5_kg, or up_0_5_kg off-grid | clamped to 1000 kg |
+  | `NO_TARGET_SET` | targetWeightKg | heaviest_used | null | null | false | down_0_5_kg | clamped to 1000 kg |
+  | reps | reps | rep_step | null | null | false | none | false |
+  | duration / distance_duration | durationSeconds | percent_increase | 10 | 10 | 10% rounded down < 5 s | down_5_s | clamped to 7200 s |
+  | deload | targetWeightKg / durationSeconds | deload | −10 | null | false | down_0_5_kg / down_5_s | false |
+
+  `capApplied` is computed honestly but is always `false` with v1's rules. Weight percentages (2.5%, 5%) are under the 10% cap, and duration's step is exactly 10%; when the minimum step is larger than 10%, `minStepApplied` is reported instead. `rounding` names the rule used, even when the value was already on the grid.
 
 ## Errors and edge cases
 - Plan status: `active`, `paused` and `inactive` plans all get suggestions; `archived` → `409 PLAN_ARCHIVED` (works again after unarchive).
 - `suggestions` is never empty (a plan always has at least one workout with at least one exercise).
 - A malformed `planId` → `404` (same as unknown).
-- The GET is **not rate-limited** today (no `429`); only the apply `PATCH` is.
+- The GET is rate-limited per user under the `plans` throttle (`PLANS_RATE_LIMIT_PER_MINUTE`, default 60; its own counter per route): `429 RATE_LIMITED` with `Retry-After`.
 - `reasonText` is a fixed sentence per `reason` (no numbers in it); build value copy from `current` / `suggested`.
 - Auth required (`401`); another user's plan or unknown id → `404`.
 - No history (or fewer than 3 qualifying sessions): `200` with every item `hold` / `NOT_ENOUGH_HISTORY`, `suggested: null`, `basedOn` listing what exists (possibly `[]`).

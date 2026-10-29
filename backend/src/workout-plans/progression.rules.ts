@@ -57,54 +57,108 @@ export function metPrescription(t: TrackingType, p: Prescription, sets: SetRow[]
   });
 }
 
-export type Step = { action: Action; reason: Reason; suggested: Prescription | null; harder?: true };
+/** How `suggested` was derived from `current` (ProgressionInputs.step in openapi). */
+export interface StepWorking {
+  field: 'targetWeightKg' | 'reps' | 'durationSeconds';
+  rule: 'percent_increase' | 'heaviest_used' | 'rep_step' | 'deload';
+  /** Rule percentage (2.5, 5, 10, -10); null for rep_step and heaviest_used. */
+  percent: number | null;
+  /** 10 for load increases; null when exempt (reps, deload, heaviest_used). */
+  capPercent: number | null;
+  capApplied: boolean;
+  minStepApplied: boolean;
+  /** The rounding rule used (reported even when the value already sat on the grid). */
+  rounding: 'down_0_5_kg' | 'up_0_5_kg' | 'down_5_s' | 'none';
+  limitApplied: boolean;
+}
+
+export type Step = { action: Action; reason: Reason; suggested: Prescription | null; harder?: true; working: StepWorking | null };
+
+const EPS = 1e-9;
 
 /** One increase step (trigger already met). Min step overrides the 10% load cap; rep steps are exempt. */
 export function increase(t: TrackingType, p: Prescription, primaryMuscle: string, heaviestKg: number | null): Step {
-  const hold = (reason: Reason): Step => ({ action: 'hold', reason, suggested: null });
+  const hold = (reason: Reason): Step => ({ action: 'hold', reason, suggested: null, working: null });
   if (t === 'reps_weight') {
     if (p.targetWeightKg == null) {
       if (heaviestKg == null || heaviestKg <= 0) return hold('NOT_ENOUGH_HISTORY');
-      return { action: 'increase', reason: 'NO_TARGET_SET', suggested: { ...p, targetWeightKg: Math.min(floorHalf(heaviestKg), LIMITS.weight) } };
+      const floored = floorHalf(heaviestKg);
+      return {
+        action: 'increase', reason: 'NO_TARGET_SET', suggested: { ...p, targetWeightKg: Math.min(floored, LIMITS.weight) },
+        working: { field: 'targetWeightKg', rule: 'heaviest_used', percent: null, capPercent: null, capApplied: false, minStepApplied: false, rounding: 'down_0_5_kg', limitApplied: floored > LIMITS.weight },
+      };
     }
     const w = p.targetWeightKg;
     if (w >= LIMITS.weight) return hold('CAP_REACHED');
     const pct = LOWER_BODY.has(primaryMuscle) ? 0.05 : 0.025;
     const minStep = w < 10 ? 0.5 : 1;
-    const step = Math.min(Math.max(w * pct, minStep), Math.max(w * 0.1, minStep)); // cap 10%, min step wins
+    const raw = w * pct;
+    const cap = w * 0.1;
+    const step = Math.min(Math.max(raw, minStep), Math.max(cap, minStep)); // cap 10%, min step wins
     // Round down to 0.5 kg, but never below current + min step (targets off the 0.5 grid, e.g. 40.3 -> 41.5).
     let next = floorHalf(w + step);
-    if (next < w + minStep - 1e-9) next = ceilHalf(w + minStep);
-    return { action: 'increase', reason: 'ALL_SETS_COMPLETED', suggested: { ...p, targetWeightKg: Math.min(next, LIMITS.weight) } };
+    let rounding: StepWorking['rounding'] = 'down_0_5_kg';
+    let minStepApplied = raw < minStep - EPS;
+    if (next < w + minStep - EPS) {
+      next = ceilHalf(w + minStep);
+      rounding = 'up_0_5_kg';
+      minStepApplied = true;
+    }
+    return {
+      action: 'increase', reason: 'ALL_SETS_COMPLETED', suggested: { ...p, targetWeightKg: Math.min(next, LIMITS.weight) },
+      working: {
+        field: 'targetWeightKg', rule: 'percent_increase', percent: pct * 100, capPercent: 10,
+        capApplied: Math.max(raw, minStep) > Math.max(cap, minStep) + EPS, minStepApplied, rounding, limitApplied: next > LIMITS.weight,
+      },
+    };
   }
   if (t === 'reps') {
     const top = p.repsMax ?? p.repsMin;
     if (top == null) return hold('NOT_ENOUGH_HISTORY');
     const step = top >= 15 ? 2 : 1;
-    if (top + step > LIMITS.repCeiling) return { action: 'hold', reason: 'REP_CEILING', suggested: null, harder: true };
+    if (top + step > LIMITS.repCeiling) return { action: 'hold', reason: 'REP_CEILING', suggested: null, harder: true, working: null };
     return {
       action: 'increase', reason: 'ALL_SETS_COMPLETED',
       suggested: { ...p, repsMin: p.repsMin == null ? null : p.repsMin + step, repsMax: p.repsMax == null ? null : p.repsMax + step },
+      working: { field: 'reps', rule: 'rep_step', percent: null, capPercent: null, capApplied: false, minStepApplied: false, rounding: 'none', limitApplied: false },
     };
   }
   const d = p.durationSeconds;
   if (d == null) return hold('NOT_ENOUGH_HISTORY');
   if (d >= LIMITS.duration) return hold('CAP_REACHED');
-  const step = Math.max(floor5(d * 0.1), 5);
-  return { action: 'increase', reason: 'ALL_SETS_COMPLETED', suggested: { ...p, durationSeconds: Math.min(d + step, LIMITS.duration) } };
+  const pctStep = floor5(d * 0.1);
+  const step = Math.max(pctStep, 5);
+  return {
+    action: 'increase', reason: 'ALL_SETS_COMPLETED', suggested: { ...p, durationSeconds: Math.min(d + step, LIMITS.duration) },
+    working: {
+      field: 'durationSeconds', rule: 'percent_increase', percent: 10, capPercent: 10, capApplied: false,
+      minStepApplied: pctStep < 5, rounding: 'down_5_s', limitApplied: d + step > LIMITS.duration,
+    },
+  };
+}
+
+/** −10% load with its working: weight down to 0.5 kg, duration down to 5 s. Null when there is no load to lower. */
+export function deloadStep(t: TrackingType, p: Prescription): { suggested: Prescription; working: StepWorking } | null {
+  const base = { rule: 'deload' as const, percent: -10, capPercent: null, capApplied: false, minStepApplied: false };
+  if (t === 'reps_weight' && p.targetWeightKg != null && p.targetWeightKg > 0) {
+    const next = floorHalf(p.targetWeightKg * 0.9);
+    return next < p.targetWeightKg
+      ? { suggested: { ...p, targetWeightKg: next }, working: { ...base, field: 'targetWeightKg', rounding: 'down_0_5_kg', limitApplied: false } }
+      : null;
+  }
+  if ((t === 'duration' || t === 'distance_duration') && p.durationSeconds != null) {
+    // The 5 s floor only matters at <= 5 s, where nothing is lowered (null), so a deload never reports a limit.
+    const next = Math.max(floor5(p.durationSeconds * 0.9), Math.min(5, p.durationSeconds));
+    return next < p.durationSeconds
+      ? { suggested: { ...p, durationSeconds: next }, working: { ...base, field: 'durationSeconds', rounding: 'down_5_s', limitApplied: false } }
+      : null;
+  }
+  return null;
 }
 
 /** −10% load: weight down to 0.5 kg, duration down to 5 s. Null when there is no load to lower. */
 export function deload(t: TrackingType, p: Prescription): Prescription | null {
-  if (t === 'reps_weight' && p.targetWeightKg != null && p.targetWeightKg > 0) {
-    const next = floorHalf(p.targetWeightKg * 0.9);
-    return next < p.targetWeightKg ? { ...p, targetWeightKg: next } : null;
-  }
-  if ((t === 'duration' || t === 'distance_duration') && p.durationSeconds != null) {
-    const next = Math.max(floor5(p.durationSeconds * 0.9), Math.min(5, p.durationSeconds));
-    return next < p.durationSeconds ? { ...p, durationSeconds: next } : null;
-  }
-  return null;
+  return deloadStep(t, p)?.suggested ?? null;
 }
 
 export const nextLevel = (l: Level): Level | null => LEVELS[LEVELS.indexOf(l) + 1] ?? null;
