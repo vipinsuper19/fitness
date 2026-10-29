@@ -90,7 +90,7 @@ Per user, per local date (profile timezone at send time):
 - `notification_sends`: `id`, `user_id` (FK → users `ON DELETE CASCADE`), `type`, `slot_key` (text), `send_key` = **unique** `(user_id, type, slot_key)`, `status` (`pending` | `held` | `sending` | `sent` | `dropped_quiet` | `capped` | `suppressed` | `coalesced` | `expired` | `failed` | `skipped_stale`), `due_at` timestamptz, `attempts` int, `claimed_at` timestamptz null, `last_error` (FCM error code only, never the token), `created_at`, `sent_at`. Index `(status, due_at)`.
 - Event producers insert `pending` rows (`ON CONFLICT DO NOTHING`) in the event's own transaction: the outbox pattern, so a crash can't lose or duplicate an event.
 - Reminder rows are materialized by the tick for slots whose `due_at` has passed (`ON CONFLICT DO NOTHING`).
-- Rows older than **30 days** are purged by the tick.
+- Rows older than **30 days** are purged by the tick. Only final states (`sent`, `failed`, and the other end states) may be purged; `pending`, `held` and `sending` never. The offline `purge:expired` script also removes `sent`/`failed` rows older than 90 days by default ([data-retention.md](data-retention.md)).
 
 ### Delivery semantics: at-most-once per send key
 - The tick **claims** due rows with `UPDATE … SET status='sending', attempts=attempts+1 … WHERE status IN ('pending','held') AND due_at <= now() … FOR UPDATE SKIP LOCKED`, so overlapping ticks (two wake-ups, a cold start during a tick) never pick the same row.
