@@ -16,7 +16,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class DeleteAccountError { WRONG_PASSWORD, OFFLINE, SERVER, RATE_LIMITED, FAILED }
+enum class DeleteAccountError {
+    WRONG_PASSWORD, OFFLINE, SERVER, RATE_LIMITED, FAILED,
+    /**
+     * 401 on a retry of an attempt whose outcome we never learned: the lost delete may have gone
+     * through (tokens revoked), or the session just expired. We can't tell, so offer sign-in.
+     */
+    MAYBE_DELETED,
+}
 
 data class DeleteAccountState(
     val password: String = "",
@@ -24,8 +31,11 @@ data class DeleteAccountState(
     val error: DeleteAccountError? = null,
     /** One-shot: the account is gone and we're signed out; go to sign-in. */
     val deleted: Boolean = false,
+    /** One-shot: the user chose "Sign in to check" and we're signed out; go to sign-in. */
+    val signedOutToCheck: Boolean = false,
 ) {
-    val canConfirm: Boolean get() = password.isNotEmpty() && !submitting && !deleted
+    val canConfirm: Boolean get() =
+        password.isNotEmpty() && !submitting && !deleted && !signedOutToCheck && error != DeleteAccountError.MAYBE_DELETED
 }
 
 @HiltViewModel
@@ -55,9 +65,14 @@ class DeleteAccountViewModel @Inject constructor(
             // same-key retry gets 401 UNAUTHENTICATED instead of a replayed 204. Only on such a
             // retry does 401 mean "it already went through"; a first attempt's 401 is a plain
             // expired session, and wiping local data then could lose unsynced work.
-            val alreadyDeleted = retryingUnknown && r is ApiResult.Failure && (r.error as? ApiError.Http)?.status == 401
+            val maybeDeleted = retryingUnknown && r is ApiResult.Failure && (r.error as? ApiError.Http)?.status == 401
             when {
-                r is ApiResult.Success || alreadyDeleted -> {
+                maybeDeleted -> {
+                    // Ambiguous: don't claim it's deleted (or wipe consent); let sign-in tell.
+                    pendingKey = null
+                    _state.update { it.copy(submitting = false, error = DeleteAccountError.MAYBE_DELETED) }
+                }
+                r is ApiResult.Success -> {
                     pendingKey = null
                     // The deleted account's consent record goes too (sign-out alone keeps it).
                     consent?.forgetActiveUser()
@@ -67,10 +82,20 @@ class DeleteAccountViewModel @Inject constructor(
                 }
                 r is ApiResult.Failure -> {
                     val error = r.error.toDeleteError()
-                    if (error != DeleteAccountError.OFFLINE && error != DeleteAccountError.SERVER) pendingKey = null
+                    // Keep the key while a retry could still replay this attempt (429: not processed yet).
+                    if (error != DeleteAccountError.OFFLINE && error != DeleteAccountError.SERVER && error != DeleteAccountError.RATE_LIMITED) pendingKey = null
                     _state.update { it.copy(submitting = false, error = error) }
                 }
             }
+        }
+    }
+
+    /** "Sign in to check": clear the session locally; signing in again shows whether the account still exists. */
+    fun signInToCheck() {
+        if (_state.value.error != DeleteAccountError.MAYBE_DELETED || _state.value.signedOutToCheck) return
+        viewModelScope.launch {
+            session.signOut()
+            _state.update { it.copy(signedOutToCheck = true, password = "") }
         }
     }
 }

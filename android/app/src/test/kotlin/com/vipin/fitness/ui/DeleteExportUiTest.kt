@@ -204,15 +204,18 @@ class DeleteExportUiTest {
         assertTrue(compose.onAllNodes(hasText("Sign out")).fetchSemanticsNodes().isEmpty())
     }
 
-    @Test fun delete_lostSuccess_retryGets401_treatedAsDeleted_signsOutToSignIn() {
+    @Test fun delete_lostSuccess_retryGets401_mayBeDeleted_signInToCheckGoesToSignIn() {
         account.deleteResult = AccountResults.OFFLINE // 204 lost in transit: outcome unknown
         openDelete()
         tag(DeleteAccountTags.PASSWORD).performTextInput("correct horse")
         tag(DeleteAccountTags.CONFIRM).performClick()
         waitTag(DeleteAccountTags.ERROR)
         assertEquals(0, session.signOuts)
-        account.deleteResult = AccountResults.UNAUTHENTICATED // server already deleted; tokens revoked
+        account.deleteResult = AccountResults.UNAUTHENTICATED // deleted (tokens revoked) or just expired: can't tell
         tag(DeleteAccountTags.CONFIRM).performClick()
+        waitText("Your account may already be deleted. Sign in to check.")
+        assertEquals(0, session.signOuts)
+        tag(DeleteAccountTags.SIGN_IN_TO_CHECK).performClick()
         waitText("New here? Create an account")
         assertEquals(2, account.deleteCalls.size)
         assertEquals(account.deleteCalls[0].second, account.deleteCalls[1].second)

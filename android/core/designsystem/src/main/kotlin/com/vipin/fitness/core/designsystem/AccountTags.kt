@@ -16,6 +16,8 @@ object DeleteAccountTags {
     const val CANCEL = "delete_account_cancel"
     const val PROGRESS = "delete_account_progress"
     const val ERROR = "delete_account_error"
+    /** Shown only with the "may already be deleted" error. */
+    const val SIGN_IN_TO_CHECK = "delete_account_sign_in_to_check"
 }
 
 object ExportTags {

@@ -31,12 +31,19 @@ import com.vipin.fitness.core.designsystem.DeleteAccountTags
 @Composable
 fun DeleteAccountRoute(onDeleted: () -> Unit, onCancel: () -> Unit, viewModel: DeleteAccountViewModel = hiltViewModel()) {
     val s by viewModel.state.collectAsStateWithLifecycle()
-    LaunchedEffect(s.deleted) { if (s.deleted) onDeleted() }
-    DeleteAccountContent(s, viewModel::onPassword, viewModel::delete, onCancel)
+    // Both end signed out on sign-in: after a delete, or to check whether one went through.
+    LaunchedEffect(s.deleted, s.signedOutToCheck) { if (s.deleted || s.signedOutToCheck) onDeleted() }
+    DeleteAccountContent(s, viewModel::onPassword, viewModel::delete, onCancel, viewModel::signInToCheck)
 }
 
 @Composable
-fun DeleteAccountContent(s: DeleteAccountState, onPassword: (String) -> Unit, onDelete: () -> Unit, onCancel: () -> Unit) {
+fun DeleteAccountContent(
+    s: DeleteAccountState,
+    onPassword: (String) -> Unit,
+    onDelete: () -> Unit,
+    onCancel: () -> Unit,
+    onSignInToCheck: () -> Unit = {},
+) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag(DeleteAccountTags.SCREEN),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -64,11 +71,17 @@ fun DeleteAccountContent(s: DeleteAccountState, onPassword: (String) -> Unit, on
                         DeleteAccountError.SERVER -> R.string.delete_account_server
                         DeleteAccountError.RATE_LIMITED -> R.string.auth_error_rate_limited
                         DeleteAccountError.FAILED -> R.string.auth_error_generic
+                        DeleteAccountError.MAYBE_DELETED -> R.string.delete_account_maybe_deleted
                     },
                 ),
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.testTag(DeleteAccountTags.ERROR),
             )
+            if (it == DeleteAccountError.MAYBE_DELETED) {
+                Button(onClick = onSignInToCheck, enabled = !s.signedOutToCheck, modifier = Modifier.fillMaxWidth().testTag(DeleteAccountTags.SIGN_IN_TO_CHECK)) {
+                    Text(stringResource(R.string.delete_account_sign_in_to_check))
+                }
+            }
         }
         Button(
             onClick = onDelete,
