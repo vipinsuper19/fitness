@@ -339,3 +339,14 @@ Robolectric through `MainActivity` with `FakeNotificationPreferencesRepository` 
 | NT14 | Save in flight across user switch | Previous user's result dropped, never shown | `aSaveInFlightForThePreviousUserIsDropped` |
 
 Prod check (`scripts/prod-check-p1.sh`, NP01–NP08): GET defaults shape, 401 unauthenticated, PATCH partial merge, idempotent replay, 409 on key reuse with another body, start == end 400, master off keeps types, no leak to user B.
+
+### Outbox sync worker and 429 (#133) — `android/core/data/src/test/.../session/OutboxSyncWorkerRateLimitTest.kt`
+`OutboxSyncWorker` via `TestListenableWorkerBuilder` (androidx.work:work-testing, test-only) with a real `OutboxProcessor` on a local MockWebServer; never prod.
+
+| ID | Case | Expected | Test |
+|---|---|---|---|
+| WK1 | 429 (Retry-After 40) on the last attempt (runAttemptCount 12) | `success`, not `failure`; one reschedule at 40 s; write still queued | `a429OnTheLastAttemptIsSuccessAndReschedulesAfterRetryAfter` |
+| WK2 | 429 on the first attempt | `success`, not `retry` (no attempt spent); reschedule at 5 s | `a429OnTheFirstAttemptIsSuccessNotRetry` |
+| WK3 | Run inside the window | Nothing sent; `success`; reschedules for the remaining 20 s | `aRunInsideTheWindowSendsNothingAndReschedulesForTheRest` |
+| WK4 | 503 | `retry`, and `failure` on the last attempt; no reschedule | `a503StillSpendsAttemptsAndFailsOnTheLast` |
+| WK5 | After the window | Queue drains, `success`, no wait left | `afterTheWindowTheQueueDrainsToSuccess` |
