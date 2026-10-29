@@ -67,7 +67,7 @@ Follow-up for Backend/contract: document the 401-after-delete retry in `openapi.
 
 Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 temp files, never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
 
-**Last prod run: 2026-10-29 ~11:00 IST — 59/59 PASS, both accounts deleted (login 401).**
+**Last prod run: 2026-10-29 11:06:52 IST (prod at 1437dfd) — 86/86 PASS (SC 20, PM 27, NS 12, ST 27), both accounts deleted (login 401).**
 
 ### Session corrections (#63)
 
@@ -148,6 +148,40 @@ Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Uses tw
 | NS10 | missing from -> 400 | PASS |
 | NS11 | other user sees none of A's logs | PASS |
 | NS12 | unauthenticated -> 401 | PASS |
+
+### Strength progress (#72)
+
+`GET /progress/exercises?from&to&cursor&limit` and `GET /progress/exercises/{exerciseId}?from&to&bucket` — read-only (no Idempotency-Key, no XP), counting sets only in completed sessions, `pr` all-time and recomputed (corrections lower it), 366 days max for every bucket, other users' sets never counted. Fixture: one session with 100 kg × 5 and 80 kg × 13 → volume 1540, reps 18, top 100, Epley 1RM 116.7 (the 13-rep set gives none).
+
+| # | Check | Prod 2026-10-29 |
+|---|---|---|
+| ST00 | setup: weighted session (100x5, 80x13) completed | PASS |
+| ST01 | list 200: both exercises performed today, timezone echoed | PASS |
+| ST02 | list order lastPerformedAt DESC (weighted session first) | PASS |
+| ST03 | list pr all-time: maxWeightKg 100, maxReps 13, best1RmKg 116.7 | PASS |
+| ST04 | limit=1 gives 1 item + nextCursor | PASS |
+| ST05 | page 2 = the other exercise, then no cursor | PASS |
+| ST06 | detail day: 3 points, default bucket day, name/trackingType present | PASS |
+| ST07 | today: sessions 1, sets 2, volume 1540, reps 18, top 100, 1RM 116.7 (13-rep set no 1RM) | PASS |
+| ST08 | empty day: sessions 0, sets 0, volume/reps null; duration/distance null for weighted | PASS |
+| ST09 | week bucket: Mondays after the first, first clipped to from | PASS |
+| ST10 | PR outside the range still shown (all-time) | PASS |
+| ST11 | never-performed exercise: 200, all-null pr | PASS |
+| ST12 | unknown exercise -> 404 | PASS |
+| ST13 | malformed exercise id -> 404 | PASS |
+| ST14 | list from > to -> 400 | PASS |
+| ST15 | list missing from -> 400 | PASS |
+| ST16 | list bad cursor -> 400 | PASS |
+| ST17 | detail 367 days with bucket=month -> 400 | PASS |
+| ST18 | detail 366 days with bucket=month -> 200 | PASS |
+| ST19 | detail bad bucket -> 400 | PASS |
+| ST20 | detail bad date -> 400 | PASS |
+| ST21 | correction 100->50 kg lowers the record to 80 (recomputed) | PASS |
+| ST22 | progress reads don't change XP | PASS |
+| ST23 | other user list: 200, no items | PASS |
+| ST24 | other user detail of same exercise: 0 sessions, null pr (no leak of A's sets) | PASS |
+| ST25 | list unauthenticated -> 401 | PASS |
+| ST26 | detail unauthenticated -> 401 | PASS |
 
 Notes:
 - Archiving the **active** plan pauses it first, so it gets `pausedAt` at archive time (contract: "same effect as pause"); a later pause on the archived plan leaves `pausedAt` unchanged (PM27).
