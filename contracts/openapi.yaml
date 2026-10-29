@@ -282,7 +282,8 @@ paths:
         Per-type opt-in, a master switch and quiet hours. With no saved row, returns the defaults and writes nothing.
         `types` always lists every current type; clients must ignore type keys they don't know. Quiet hours are local
         wall-clock times in the **current** profile timezone (`timezone`, echoed read-only); `start > end` crosses midnight.
-        Storage and API only: sending (FCM, device tokens, scheduling) is out of scope. See docs/specs/notification-preferences.md.
+        Sending (FCM delivery, device tokens, scheduler, reminder times) is specified in docs/specs/notification-sending.md;
+        `reminders` is optional until that is implemented. See docs/specs/notification-preferences.md.
       responses:
         '200':
           description: Current preferences (defaults merged in)
@@ -314,6 +315,54 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationPreferences' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /me/notification-devices:
+    post:
+      tags: [me]
+      operationId: registerNotificationDevice
+      summary: Register or refresh this device's FCM token
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      description: |
+        Upsert by token: the same user refreshes `lastSeenAt`/`appVersion`; a token registered to another user moves to the caller.
+        Call on every app start and on FCM token refresh. At most 10 devices per user (the least recently seen is removed).
+        The token is never returned or exported. Devices are deleted on sign-out (the registering session's refresh family),
+        account deletion, FCM UNREGISTERED/invalid responses and after 60 days unseen. Rate-limited per user
+        (`NOTIFICATION_DEVICES_RATE_LIMIT_PER_MINUTE`, default 30). Sending is off until enabled server-side.
+        See docs/specs/notification-sending.md.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationDeviceRegistration' }
+      responses:
+        '200':
+          description: The registered device (no token)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationDevice' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /me/notification-devices/{deviceId}:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [me]
+      operationId: unregisterNotificationDevice
+      summary: Unregister a device (idempotent)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      description: Always 204, including for an unknown id or another user's device (nothing is changed or revealed). Call before sign-out.
+      responses:
+        '204': { description: Unregistered (or never existed) }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -2108,6 +2157,8 @@ components:
         user: { $ref: '#/components/schemas/User' }
         profile: { $ref: '#/components/schemas/Profile' }
         notificationPreferences: { $ref: '#/components/schemas/NotificationPreferences', description: 'Same shape as GET /me/notification-preferences, defaults included.' }
+        notificationDevices: { type: array, items: { $ref: '#/components/schemas/NotificationDevice' }, description: 'Registered devices, never tokens. Planned (notification-sending.md); optional until implemented.' }
+        notificationSends: { type: array, items: { $ref: '#/components/schemas/NotificationSendRecord' }, description: 'Last 30 days of notification sends. Planned; optional until implemented.' }
         goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
         workoutPlans: { type: array, items: { $ref: '#/components/schemas/WorkoutPlan' } }
         workoutSessions: { type: array, items: { $ref: '#/components/schemas/WorkoutSession' } }
@@ -2163,6 +2214,7 @@ components:
             progression_suggestion: { type: boolean, default: true }
           additionalProperties: { type: boolean }
         quietHours: { $ref: '#/components/schemas/QuietHours' }
+        reminders: { $ref: '#/components/schemas/ReminderSettings' }
         timezone: { type: string, readOnly: true, description: Profile timezone that quiet hours use (read-only; change it via PUT /me/profile) }
         updatedAt: { type: [string, 'null'], format: date-time, description: Null until the first save }
     NotificationPreferencesUpdate:
@@ -2182,6 +2234,91 @@ components:
             enabled: { type: boolean }
             start: { $ref: '#/components/schemas/LocalTime' }
             end: { $ref: '#/components/schemas/LocalTime' }
+        reminders: { $ref: '#/components/schemas/ReminderSettingsUpdate' }
+    Weekday:
+      type: string
+      enum: [mon, tue, wed, thu, fri, sat, sun]
+    ReminderSettings:
+      type: object
+      description: When reminders fire, in local wall time of the current profile timezone (stored values merged over defaults). The type flags decide whether they fire. Reminders inside quiet hours are dropped. Planned (docs/specs/notification-sending.md); optional until implemented.
+      required: [workoutReminder, streakReminder, waterReminder, foodLogReminder]
+      properties:
+        workoutReminder:
+          type: object
+          required: [time, days]
+          properties:
+            time: { $ref: '#/components/schemas/LocalTime' }
+            days: { type: array, minItems: 1, maxItems: 7, uniqueItems: true, items: { $ref: '#/components/schemas/Weekday' } }
+        streakReminder:
+          type: object
+          required: [time]
+          properties:
+            time: { $ref: '#/components/schemas/LocalTime' }
+        waterReminder:
+          type: object
+          required: [intervalMinutes, start, end]
+          properties:
+            intervalMinutes: { type: integer, minimum: 60, maximum: 240, multipleOf: 30 }
+            start: { $ref: '#/components/schemas/LocalTime' }
+            end: { $ref: '#/components/schemas/LocalTime' }
+        foodLogReminder:
+          type: object
+          required: [times]
+          properties:
+            times: { type: array, minItems: 1, maxItems: 3, uniqueItems: true, items: { $ref: '#/components/schemas/LocalTime' } }
+    ReminderSettingsUpdate:
+      type: object
+      additionalProperties: false
+      description: Partial merge per field (arrays replace). Water `start < end` after the merge, else 400 on `reminders.waterReminder`.
+      properties:
+        workoutReminder:
+          type: object
+          additionalProperties: false
+          properties:
+            time: { $ref: '#/components/schemas/LocalTime' }
+            days: { type: array, minItems: 1, maxItems: 7, uniqueItems: true, items: { $ref: '#/components/schemas/Weekday' } }
+        streakReminder:
+          type: object
+          additionalProperties: false
+          properties:
+            time: { $ref: '#/components/schemas/LocalTime' }
+        waterReminder:
+          type: object
+          additionalProperties: false
+          properties:
+            intervalMinutes: { type: integer, minimum: 60, maximum: 240, multipleOf: 30 }
+            start: { $ref: '#/components/schemas/LocalTime' }
+            end: { $ref: '#/components/schemas/LocalTime' }
+        foodLogReminder:
+          type: object
+          additionalProperties: false
+          properties:
+            times: { type: array, minItems: 1, maxItems: 3, uniqueItems: true, items: { $ref: '#/components/schemas/LocalTime' } }
+    NotificationDeviceRegistration:
+      type: object
+      required: [token, platform]
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 1, maxLength: 4096, pattern: '^\S+$', writeOnly: true, description: FCM registration token. Never returned or exported. }
+        platform: { type: string, enum: [android] }
+        appVersion: { type: string, maxLength: 32 }
+    NotificationDevice:
+      type: object
+      required: [id, platform, appVersion, createdAt, lastSeenAt]
+      properties:
+        id: { type: string, format: uuid }
+        platform: { type: string, enum: [android] }
+        appVersion: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+    NotificationSendRecord:
+      type: object
+      required: [type, status, dueAt, sentAt]
+      properties:
+        type: { $ref: '#/components/schemas/NotificationType' }
+        status: { type: string, enum: [pending, held, sending, sent, dropped_quiet, capped, suppressed, coalesced, expired, failed, skipped_stale] }
+        dueAt: { type: string, format: date-time }
+        sentAt: { type: [string, 'null'], format: date-time }
     TargetHistoryEntry:
       type: object
       required: [effectiveFrom, kcal, waterMl, proteinG, carbsG, fatG]

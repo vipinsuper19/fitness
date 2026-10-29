@@ -61,6 +61,8 @@ describe('contracts/openapi.yaml', () => {
       'get /challenges/{challengeId}', 'post /challenges/{challengeId}/leave',
       // P1: notification preferences, storage only (docs/specs/notification-preferences.md)
       'get /me/notification-preferences', 'patch /me/notification-preferences',
+      // P1: notification sending, device tokens (docs/specs/notification-sending.md)
+      'post /me/notification-devices', 'delete /me/notification-devices/{deviceId}',
     ];
     const actual = new Set(operations().map(({ method, path }) => `${method} ${path}`));
     for (const route of expected) expect(actual).toContain(route);

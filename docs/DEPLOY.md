@@ -31,6 +31,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
    - `AUTH_RATE_LIMIT_PER_MINUTE` (10), `AUTH_REFRESH_RATE_LIMIT_PER_MINUTE` (30), `LOGIN_MAX_FAILURES_PER_ACCOUNT` (5)
    - `TARGET_HISTORY_RATE_LIMIT_PER_MINUTE` (60, per user)
    - `NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE` (60, per user, for each of GET and PATCH `/me/notification-preferences`)
+   - `NOTIFICATION_DEVICES_RATE_LIMIT_PER_MINUTE` (30, per user, for each of POST and DELETE `/me/notification-devices`), `NOTIFICATIONS_TICK_MAX_ROWS` (500)
    - `EXPORT_RATE_LIMIT_PER_HOUR` (5), `EXPORT_MAX_ROWS` (5000), `EXPORT_MAX_SESSIONS` (2000), `EXPORT_MAX_PLAN_VERSIONS` (200), `EXPORT_MAX_SETS_TOTAL` (20000), `EXPORT_MAX_PLAN_EXERCISES_TOTAL` (10000)
    - `PORT` is set by Render.
 3. Build: `npm ci --include=dev && npm run build` (`prisma generate` + `tsc`).
@@ -49,6 +50,16 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
      3. Run the reconcile once: Actions → **targets-backfill** → Run workflow (same `FITNESS_DATABASE_URL` secret as db-seed), or locally `cd backend && DATABASE_URL=... npm run targets:backfill`. It catches target changes the old instance accepted during the deploy window. Re-running is a no-op.
      - **After any redeploy that follows a rollback, run it again** (the old app doesn't write history).
    - **Badges:** `DATABASE_URL=... npm run badges:backfill`, locally.
+
+7. **Push notifications (planned, [notification-sending.md](specs/notification-sending.md); not implemented yet).** Secrets go in Render env vars only, never in the repo or logs:
+   | Key | Required | Value |
+   |---|---|---|
+   | `NOTIFICATIONS_SENDING_ENABLED` | optional | `false` (default) until Vipin turns sending on |
+   | `FCM_PROJECT_ID` | for sending | Firebase project id (free Spark plan) |
+   | `FCM_SERVICE_ACCOUNT_JSON` | for sending | service-account key JSON on one line (role: Firebase Cloud Messaging API Admin) |
+   | `NOTIFICATIONS_CRON_SECRET` | for the wake call | `openssl rand -base64 48`; unset = tick endpoint off (404) |
+
+   If the GitHub Actions wake is chosen, add repository secrets `NOTIFICATIONS_CRON_SECRET` (same value) and `FITNESS_API_BASE_URL`. The wake mechanism and creating the Firebase project and service account are Vipin's decisions.
 
 ## 3. Verify
 - `curl https://<service>.onrender.com/health` → `{"status":"ok",...}`
