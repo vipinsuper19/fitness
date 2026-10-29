@@ -139,12 +139,15 @@ export class TokenService {
     await db.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
-  /** Revokes one token (logout). Only the owner's token is touched. */
+  /**
+   * Logout: revokes every token in the presented token's family (this login on this device), current or already
+   * rotated. Other families of the same user (other devices/logins) are untouched. An unknown token, or one owned by
+   * another user, changes nothing; the caller still gets 204.
+   */
   async revoke(userId: string, presented: string): Promise<void> {
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, tokenHash: hashRefreshToken(presented), revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    const row = await this.prisma.refreshToken.findFirst({ where: { userId, tokenHash: hashRefreshToken(presented) }, select: { familyId: true } });
+    if (!row) return;
+    await this.prisma.refreshToken.updateMany({ where: { userId, familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
   async revokeFamily(familyId: string, at = new Date()): Promise<void> {
