@@ -53,7 +53,7 @@ class IndianNumberFormatTest {
 
     @Test fun integersAndExtremes() {
         assertEquals("1,250", integer(1250))
-        assertEquals("21,47,48,36,47", integer(Int.MAX_VALUE))
+        assertEquals("2,14,74,83,647", integer(Int.MAX_VALUE))
         assertEquals("-92,23,37,20,36,85,47,75,808", integer(Long.MIN_VALUE))
         assertEquals("\u2013", number(Double.NaN))
         assertEquals("\u2013", number(Double.POSITIVE_INFINITY))
