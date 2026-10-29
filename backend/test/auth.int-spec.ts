@@ -198,6 +198,57 @@ describeDb('auth (HTTP + Postgres)', () => {
       await refresh(me.refreshToken).expect(200);
     });
 
+    // Race: rotate inserts a successor; logout's family UPDATE must not miss it. Both take the family lock
+    // (pg_advisory_xact_lock(hashtext(family_id))). The test holds that lock, queues both requests behind it in a
+    // chosen order (advisory-lock waiters are granted in queue order), then releases. Deterministic: it waits on
+    // pg_locks until each request is blocked, bounded by attempts (Date may be faked), never by the clock.
+    it.each([
+      ['logout queued first', 'logout'],
+      ['refresh queued first', 'refresh'],
+    ] as const)('a logout racing a refresh leaves no live token in the family (%s)', async (_label, first) => {
+      const address = email();
+      await register(address);
+      const fam = await rotatedFamily(address);
+      const current = fam.tokens[2]!;
+      const familyId = await familyOf(current);
+      const waiters = async () =>
+        Number((await prisma.$queryRaw<Array<{ n: bigint }>>`
+          SELECT count(*) AS n FROM pg_locks
+          WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
+            AND ((classid::bigint << 32) | objid::bigint) = hashtext(${familyId})::bigint`)[0]!.n);
+      const waitFor = async (n: number) => {
+        for (let i = 0; (await waiters()) < n; i += 1) {
+          if (i >= 500) throw new Error(`only ${await waiters()} of ${n} requests reached the family lock`);
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      };
+      const fire = (which: 'logout' | 'refresh') =>
+        (which === 'logout' ? logout(fam.access, current) : refresh(current)).then((r) => r);
+      const pending = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${familyId}))::text`;
+        const a = fire(first);
+        await waitFor(1);
+        const b = fire(first === 'logout' ? 'refresh' : 'logout');
+        await waitFor(2);
+        return first === 'logout' ? { out: a, ref: b } : { out: b, ref: a };
+      }, { timeout: 20_000 });
+      const [out, ref] = await Promise.all([pending.out, pending.ref]);
+
+      expect(out.status).toBe(204);
+      expect(await prisma.refreshToken.count({ where: { familyId, revokedAt: null } })).toBe(0);
+      if (first === 'logout') {
+        expect(ref.status).toBe(401);
+        expect(ref.body.code).toBe('REFRESH_TOKEN_REUSED');
+      } else {
+        // The refresh won the lock: it rotated, then the logout revoked the successor too.
+        expect(ref.status).toBe(200);
+        const successor = await prisma.refreshToken.findUniqueOrThrow({ where: { tokenHash: hashRefreshToken(ref.body.refreshToken) } });
+        expect(successor.familyId).toBe(familyId);
+        expect(successor.revokedAt).not.toBeNull();
+        expect((await refresh(ref.body.refreshToken).expect(401)).body.code).toBe('REFRESH_TOKEN_REUSED');
+      }
+    });
+
     it('refresh answers revoked, reused and invalid tokens with 401 (never 400/403)', async () => {
       const address = email();
       await register(address);

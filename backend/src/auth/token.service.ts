@@ -26,6 +26,16 @@ export interface AccessClaims {
   typ: 'access';
 }
 
+/**
+ * Serialises every write to one refresh family (rotate, logout, reuse/family revoke) for the rest of the
+ * caller's transaction. The single key derivation for this lock: `pg_advisory_xact_lock(hashtext(family_id))`.
+ * Without it, a rotation could insert its successor after a concurrent logout's family UPDATE had already
+ * scanned the family (READ COMMITTED does not re-scan), leaving the successor live.
+ */
+export async function lockRefreshFamily(tx: Prisma.TransactionClient, familyId: string): Promise<void> {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${familyId}))::text`;
+}
+
 export function hashRefreshToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -106,26 +116,27 @@ export class TokenService {
     if (row.expiresAt <= now) {
       throw new ApiError(HttpStatus.UNAUTHORIZED, 'REFRESH_TOKEN_EXPIRED', 'Sign in again.');
     }
-    // Claim, issue and link in one transaction: either the old token is
-    // revoked AND its successor exists and is linked, or nothing changed.
-    // A concurrent rotation of the same token loses the claim and is treated
-    // as reuse. No grace window: clients serialise refreshes, and a window
-    // would let a stolen token be replayed undetected inside it.
+    // Under the family lock: re-read the presented token's revoked state (a logout or family revoke may have
+    // committed since the read above), then claim, issue and link in one transaction. Either the old token is
+    // revoked AND its successor exists and is linked, or nothing changed. A concurrent rotation of the same
+    // token, or a logout that won the lock, is treated as reuse. No grace window: clients serialise refreshes,
+    // and a window would let a stolen token be replayed undetected inside it.
     const outcome = await this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.refreshToken.updateMany({
-        where: { id: row.id, revokedAt: null },
-        data: { revokedAt: now },
-      });
-      if (claimed.count !== 1) return null;
+      await lockRefreshFamily(tx, row.familyId);
+      const current = await tx.refreshToken.findUnique({ where: { id: row.id }, select: { revokedAt: true } });
+      const claimed = current && !current.revokedAt
+        ? await tx.refreshToken.updateMany({ where: { id: row.id, revokedAt: null }, data: { revokedAt: now } })
+        : { count: 0 };
+      if (claimed.count !== 1) {
+        // Reuse: revoke the family while still holding its lock, so nothing can be inserted after it.
+        await tx.refreshToken.updateMany({ where: { familyId: row.familyId, revokedAt: null }, data: { revokedAt: now } });
+        return null;
+      }
       const next = await this.createRefresh(tx, row.userId, row.familyId);
       await tx.refreshToken.update({ where: { id: row.id }, data: { replacedById: next.id } });
       return next;
     });
-    if (!outcome) {
-      // Outside the transaction so the family revoke is not rolled back.
-      await this.revokeFamily(row.familyId, now);
-      throw new ApiError(HttpStatus.UNAUTHORIZED, 'REFRESH_TOKEN_REUSED', 'Sign in again.');
-    }
+    if (!outcome) throw new ApiError(HttpStatus.UNAUTHORIZED, 'REFRESH_TOKEN_REUSED', 'Sign in again.');
     return {
       accessToken: await this.signAccess(row.userId),
       refreshToken: outcome.refreshToken,
@@ -147,10 +158,16 @@ export class TokenService {
   async revoke(userId: string, presented: string): Promise<void> {
     const row = await this.prisma.refreshToken.findFirst({ where: { userId, tokenHash: hashRefreshToken(presented) }, select: { familyId: true } });
     if (!row) return;
-    await this.prisma.refreshToken.updateMany({ where: { userId, familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.prisma.$transaction(async (tx) => {
+      await lockRefreshFamily(tx, row.familyId);
+      await tx.refreshToken.updateMany({ where: { userId, familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+    });
   }
 
   async revokeFamily(familyId: string, at = new Date()): Promise<void> {
-    await this.prisma.refreshToken.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: at } });
+    await this.prisma.$transaction(async (tx) => {
+      await lockRefreshFamily(tx, familyId);
+      await tx.refreshToken.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: at } });
+    });
   }
 }
