@@ -266,3 +266,24 @@ Notes:
 | PG37 | unauthenticated -> 401 | PASS |
 
 Notes: a PATCH creates a new plan version with new planned-workout ids, so suggestions after an accepted change are matched by the new ids (PG21–25). Cooldown is per (workout, exercise position): setting a target on a no-target entry is not a raise (PG24).
+
+### Suggest macros — Android UI (#120)
+
+Robolectric, through the real MainActivity (Nutrition → Macro targets) with `FakeMacroSuggestionRepository` and `FakeProfileRepository` from core:testing: `android/app/src/test/kotlin/com/vipin/fitness/ui/MacroTargetsUiTest.kt` (14 tests).
+
+| # | Case | Expected | Test |
+|---|---|---|---|
+| SM1 | Open the screen | Current P/C/F (unset shows "Not set") and the calorie target; no suggestion request until asked | `showsCurrentTargetsWithNotSet` |
+| SM2 | Suggest | Review card: 112 / 262 / 56 g, total 2,000 kcal, note that it can be under the target, basis "70 kg" + goal; no veg hint; nothing saved | `suggestShowsReviewCardWithTotalNoteAndBasis` |
+| SM3 | Apply | One PUT with only the three gram targets (calorie and water unchanged); screen shows the new targets and "saved"; card gone | `applySavesOnlyTheThreeGramTargets` |
+| SM4 | Apply offline, then Retry | Offline error, Apply becomes Retry, targets unchanged; the retry reuses the same Idempotency-Key | `applyOfflineThenRetryReusesTheIdempotencyKey` |
+| SM5 | Apply again after a new suggestion | A new key; "saved" cleared when suggesting | `aNewSuggestionAfterApplyGetsANewKey` |
+| SM6 | Suggested 0 g | Sent as a clear; shows "Not set" | `zeroGramsIsSentAsClearAndShowsNotSet` |
+| SM7 | Missing inputs (2) | Plural title, each input listed, no Apply; Edit profile opens the profile screen | `missingInputsListThemAndEditProfileOpensTheProfile` |
+| SM8 | One unknown missing input | Singular title, "Other profile details" | `oneUnknownMissingInputUsesTheSingular` |
+| SM9 | Suggest offline, then Retry | Error then card; 2 calls | `suggestOfflineThenRetry` |
+| SM10 | Profile load fails, then Retry | Error, no Suggest button; Retry shows targets | `loadFailsThenRetry` |
+| SM11 | Not now | Card hidden, nothing saved; Suggest asks the server again (no cache) | `notNowHidesTheCardWithoutSavingAndAsksAgainNextTime` |
+| SM12 | Imperial units | Basis weight in lb, not kg | `basisWeightFollowsImperialUnits` |
+| SM13 | Vegetarian + no active goal | Veg protein hint; "no active goal, so maintain" | `vegetarianHintAndDefaultGoal` |
+| SM14 | Back | Returns to the diary | `backReturnsToTheDiary` |
