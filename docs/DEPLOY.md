@@ -30,7 +30,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
    - `JWT_ACCESS_TTL_SECONDS` (900), `JWT_REFRESH_TTL_DAYS` (30)
    - `AUTH_RATE_LIMIT_PER_MINUTE` (10), `AUTH_REFRESH_RATE_LIMIT_PER_MINUTE` (30), `LOGIN_MAX_FAILURES_PER_ACCOUNT` (5)
    - `TARGET_HISTORY_RATE_LIMIT_PER_MINUTE` (60, per user)
-   - `NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE` (60, per user, GET and PATCH `/me/notification-preferences` combined)
+   - `NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE` (60, per user, for each of GET and PATCH `/me/notification-preferences`)
    - `EXPORT_RATE_LIMIT_PER_HOUR` (5), `EXPORT_MAX_ROWS` (5000), `EXPORT_MAX_SESSIONS` (2000), `EXPORT_MAX_PLAN_VERSIONS` (200), `EXPORT_MAX_SETS_TOTAL` (20000), `EXPORT_MAX_PLAN_EXERCISES_TOTAL` (10000)
    - `PORT` is set by Render.
 3. Build: `npm ci --include=dev && npm run build` (`prisma generate` + `tsc`).

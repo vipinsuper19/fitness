@@ -63,7 +63,7 @@ One opt-in flag per type, each tied to an existing feature:
 - **Unknown top-level or `quietHours` property** (including the read-only `timezone` and `updatedAt`) → rejected as unknown, like other request bodies.
 - **Empty body `{}`** is valid and is a no-op.
 
-Errors: 401 as usual, 409 for Idempotency-Key conflicts, and `429 RATE_LIMITED` on both GET and PATCH (per-user limit, like the other `/me` endpoints). There is no 404 (a missing row reads as defaults).
+Errors: 401 as usual, 409 for Idempotency-Key conflicts, and `429 RATE_LIMITED` on both GET and PATCH (per-user limit, counted separately for each route: `NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE`, default 60, like the other `/me` endpoints). There is no 404 (a missing row reads as defaults).
 
 ## Tests (for the implementation PR)
 - GET with no row returns the defaults and writes nothing; a new user has no row.

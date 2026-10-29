@@ -172,15 +172,19 @@ describeDb('notification preferences (HTTP + Postgres)', () => {
     await http().patch(URL).send({}).expect(401);
   });
 
-  it('is rate-limited per user across GET and PATCH with 429', async () => {
+  it('is rate-limited per user and per route with 429', async () => {
     const limited = await createTestApp({ env: { NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE: '2' } });
     try {
       const reg = (await request(limited.getHttpServer()).post('/api/v1/auth/register').send({ email: `np-${randomUUID()}@example.in`, password: PASSWORD }).expect(201)).body;
       const auth = `Bearer ${reg.accessToken}`;
-      await request(limited.getHttpServer()).get(URL).set('Authorization', auth).expect(200);
-      await request(limited.getHttpServer()).patch(URL).set('Authorization', auth).send({}).expect(200);
-      const r = await request(limited.getHttpServer()).get(URL).set('Authorization', auth).expect(429);
-      expect(r.body.code).toBe('RATE_LIMITED');
+      const g = () => request(limited.getHttpServer()).get(URL).set('Authorization', auth);
+      const p = () => request(limited.getHttpServer()).patch(URL).set('Authorization', auth).send({});
+      await g().expect(200);
+      await g().expect(200);
+      expect((await g().expect(429)).body.code).toBe('RATE_LIMITED');
+      await p().expect(200);
+      await p().expect(200);
+      expect((await p().expect(429)).body.code).toBe('RATE_LIMITED');
       // Another user is unaffected.
       const other = (await request(limited.getHttpServer()).post('/api/v1/auth/register').send({ email: `np-${randomUUID()}@example.in`, password: PASSWORD }).expect(201)).body;
       await request(limited.getHttpServer()).get(URL).set('Authorization', `Bearer ${other.accessToken}`).expect(200);
