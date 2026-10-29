@@ -1,5 +1,7 @@
 package com.vipin.fitness.ui
 
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -194,6 +196,24 @@ class StrengthUiTest {
         until { strength.detailCalls.size == 3 }
         assertTrue(strength.detailCalls.last().startsWith("bp:"))
         waitTag(StrengthTags.PR)
+    }
+
+    @Test fun openingAnExerciseAlwaysStartsOnWeek() {
+        openStrength(); click(StrengthTags.row("sq")); waitTag(StrengthTags.PR)
+        click(StrengthTags.bucket(SummaryBucket.MONTH)); until { strength.detailCalls.size == 2 }
+        tag(StrengthTags.bucket(SummaryBucket.MONTH)).assertIsSelected()
+        click(StrengthTags.DETAIL_BACK); waitTag(StrengthTags.row("sq"))
+        // Same exercise: Week again.
+        click(StrengthTags.row("sq")); until { strength.detailCalls.size == 3 }; waitTag(StrengthTags.PR)
+        assertEquals("week", lastDetail().third)
+        tag(StrengthTags.bucket(SummaryBucket.WEEK)).assertIsSelected()
+        tag(StrengthTags.bucket(SummaryBucket.MONTH)).assertIsNotSelected()
+        // Another exercise after Month: Week too.
+        click(StrengthTags.bucket(SummaryBucket.MONTH)); until { strength.detailCalls.size == 4 }
+        click(StrengthTags.DETAIL_BACK); waitTag(StrengthTags.row("bp"))
+        click(StrengthTags.row("bp")); until { strength.detailCalls.size == 5 }; waitTag(StrengthTags.PR)
+        assertTrue(strength.detailCalls.last().startsWith("bp:")); assertEquals("week", lastDetail().third)
+        tag(StrengthTags.bucket(SummaryBucket.WEEK)).assertIsSelected()
     }
 
     @Test fun detailErrorThenRetry() {
