@@ -10,6 +10,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CatalogExercise, generatePlan, WorkoutPlanDraft } from './generator';
 import type { PlanGenerateDto, WorkoutPlanDraftDto, WorkoutPlanUpdateDto } from './plans.dto';
 
+type DraftBody = Omit<WorkoutPlanDraftDto, 'name'>;
+
 export interface PlanView {
   id: string;
   version: number;
@@ -205,9 +207,40 @@ export class PlansService {
           currentVersion: current.currentVersion,
         });
       }
-      await tx.workoutPlanVersion.create({ data: { planId, ...this.versionData(next, dto) } });
+      // `name` in the body is ignored: the new version keeps the latest version's name (rename is PUT .../name).
+      const latest = await tx.workoutPlanVersion.findUniqueOrThrow({ where: { planId_version: { planId, version: dto.baseVersion } }, select: { name: true } });
+      await tx.workoutPlanVersion.create({ data: { planId, ...this.versionData(next, { ...dto, name: latest.name }) } });
     });
     return this.get(userId, planId, next);
+  }
+
+  /**
+   * Rename in place: sets the latest version's name; no new version. Archived plans are
+   * read-only (409 PLAN_ARCHIVED, even for the same name). The same name is a no-op.
+   */
+  async rename(userId: string, planId: string, name: string): Promise<PlanView> {
+    await this.prisma.$transaction(async (tx) => {
+      const plan = await tx.workoutPlan.findFirst({ where: { id: planId, userId }, select: { currentVersion: true, archivedAt: true } });
+      if (!plan) throw notFound('Plan');
+      if (plan.archivedAt) throw planArchived();
+      const v = await tx.workoutPlanVersion.findUniqueOrThrow({ where: { planId_version: { planId, version: plan.currentVersion } }, select: { id: true, name: true } });
+      if (v.name === name) return;
+      await tx.workoutPlanVersion.update({ where: { id: v.id }, data: { name } });
+      await tx.workoutPlan.update({ where: { id: planId }, data: { updatedAt: new Date() } });
+    });
+    return this.get(userId, planId);
+  }
+
+  /**
+   * Unarchive: clears archivedAt and nothing else, so a plan paused (or active, which archive
+   * pauses first) when archived comes back paused, others inactive. Never activates.
+   * Not archived: idempotent no-op; both return the plan (200).
+   */
+  async unarchive(userId: string, planId: string): Promise<PlanView> {
+    const plan = await this.prisma.workoutPlan.findFirst({ where: { id: planId, userId }, select: { id: true } });
+    if (!plan) throw notFound('Plan');
+    await this.prisma.workoutPlan.updateMany({ where: { id: planId, userId, archivedAt: { not: null } }, data: { archivedAt: null } });
+    return this.get(userId, planId);
   }
 
   /**
@@ -330,7 +363,7 @@ export class PlansService {
   }
 
   /** Rules the JSON schema cannot express: real catalog ids, rep ranges, unique order per workout. */
-  private async check(dto: WorkoutPlanDraftDto): Promise<void> {
+  private async check(dto: DraftBody): Promise<void> {
     const fields: Record<string, string> = {};
     const ids = new Set<string>();
     dto.workouts.forEach((w, wi) => {

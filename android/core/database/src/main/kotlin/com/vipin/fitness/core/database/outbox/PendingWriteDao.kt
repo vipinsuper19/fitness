@@ -21,6 +21,10 @@ interface PendingWriteDao {
     @Query("UPDATE pending_writes SET attempts = attempts + 1, last_error = :error WHERE id = :id")
     suspend fun markFailed(id: String, error: String?)
 
+    /** Turns a queued write into a different request in place, keeping its position in the queue. */
+    @Query("UPDATE pending_writes SET method = :method, path = :path, idempotency_key = :key, attempts = 0, last_error = NULL WHERE id = :id")
+    suspend fun rewrite(id: String, method: String, path: String, key: String)
+
     @Query("DELETE FROM pending_writes WHERE id = :id")
     suspend fun delete(id: String)
 

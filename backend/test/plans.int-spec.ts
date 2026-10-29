@@ -246,8 +246,8 @@ describeDb('T10: profile, goals, exercises, workout plans (HTTP + Postgres)', ()
 
       const edited = { ...draft, generator: 'custom', name: 'My 3-day plan', workouts: draft.workouts.slice(0, 2), baseVersion: 1 };
       const v2 = (await as(alice).patch(`/api/v1/workout-plans/${plan.id}`).send(edited).expect(200)).body;
-      expect(v2).toMatchObject({ id: plan.id, version: 2, name: 'My 3-day plan', source: 'custom', isActive: true, activatedAt: active.activatedAt });
-      expect(v2.workouts).toHaveLength(2);
+      expect(v2).toMatchObject({ id: plan.id, version: 2, name: draft.name, source: 'custom', isActive: true, activatedAt: active.activatedAt });
+      expect(v2.workouts).toHaveLength(2); // PATCH ignores `name`; rename is PUT .../name
 
       const v1 = (await as(alice).get(`/api/v1/workout-plans/${plan.id}?version=1`).expect(200)).body;
       expect(v1.version).toBe(1);
