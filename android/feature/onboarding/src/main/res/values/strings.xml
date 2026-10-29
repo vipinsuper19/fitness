@@ -85,4 +85,51 @@
     <string name="settings_help">Help &amp; FAQ</string>
     <string name="settings_feedback">Send feedback</string>
     <string name="profile_export_data">Export my data</string>
+
+    <!-- Notification settings (GET/PATCH /me/notification-preferences). -->
+    <string name="notif_open">Notifications</string>
+    <string name="notif_title">Notifications</string>
+    <string name="notif_master">Allow notifications</string>
+    <string name="notif_master_off_note">Off silences everything. Your choices below are kept.</string>
+    <string name="notif_types_title">What to notify me about</string>
+    <plurals name="notif_types_on">
+        <item quantity="one">%1$d of %2$d on</item>
+        <item quantity="other">%1$d of %2$d on</item>
+    </plurals>
+    <string name="notif_type_workout_reminder">Workout reminders</string>
+    <string name="notif_type_streak_reminder">Streak about to break</string>
+    <string name="notif_type_water_reminder">Water reminders</string>
+    <string name="notif_type_food_log_reminder">Food log reminders</string>
+    <string name="notif_type_challenge_updates">Challenge updates</string>
+    <string name="notif_type_badge_earned">Badges earned</string>
+    <string name="notif_type_progression_suggestion">Progression suggestions</string>
+    <string name="notif_quiet_title">Quiet hours</string>
+    <string name="notif_quiet_enabled">Use quiet hours</string>
+    <string name="notif_quiet_start">Start</string>
+    <string name="notif_quiet_end">End</string>
+    <string name="notif_quiet_window">%1$s – %2$s (%3$s)</string>
+    <string name="notif_quiet_window_overnight">%1$s – %2$s next day (%3$s)</string>
+    <string name="notif_timezone">Time zone: %1$s</string>
+    <string name="notif_timezone_note">Quiet hours follow your profile time zone.</string>
+    <plurals name="notif_hours">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="notif_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <string name="notif_duration_hm">%1$s %2$s</string>
+    <string name="notif_save">Save</string>
+    <string name="notif_discard">Discard changes</string>
+    <string name="notif_saved">Saved</string>
+    <string name="notif_retry">Retry</string>
+    <string name="notif_back">Back</string>
+    <string name="notif_pick_ok">OK</string>
+    <string name="notif_pick_cancel">Cancel</string>
+    <string name="notif_error_offline">You\'re offline. Check your connection and try again.</string>
+    <string name="notif_error_failed">Couldn\'t reach the server. Try again.</string>
+    <string name="notif_error_invalid">Those settings weren\'t accepted. Showing what\'s saved.</string>
+    <string name="notif_error_same_times">Start and end must be different. To turn quiet hours off, use the switch.</string>
+    <string name="notif_loading">Loading notification settings…</string>
 </resources>
