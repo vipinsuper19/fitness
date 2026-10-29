@@ -331,7 +331,7 @@ paths:
         '204': { description: Deleted }
         '400': { $ref: '#/components/responses/ValidationError' }
         '401':
-          description: '`UNAUTHORIZED`, including any retry after a successful delete'
+          description: '`UNAUTHENTICATED` (missing or bad token), including any retry after a successful delete'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1511,7 +1511,7 @@ paths:
       tags: [workout-plans]
       operationId: updateWorkoutPlan
       summary: Edit a plan by creating a new version
-      description: The new version keeps the latest version's name (`name` in the body is ignored; rename with `PUT .../name`). Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
+      description: The new version keeps the latest version's name (`name` in the body is ignored; rename with `PUT .../name`). Each exercise's `restSeconds` is not carried over from the previous version: a missing or `null` value resets it to 90, so clients should always send it. Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -4227,7 +4227,7 @@ components:
                 message: A request with this Idempotency-Key is still running. Retry shortly.
                 requestId: req_7f3a9c1e2b4d
     RateLimited:
-      description: '`RATE_LIMITED`. Like every response it carries `X-Request-Id`, equal to `requestId` in the body.'
+      description: '`RATE_LIMITED` with `details.retryAfterSeconds` (equal to `Retry-After`). Like every response it carries `X-Request-Id`, equal to `requestId` in the body.'
       headers:
         Retry-After: { $ref: '#/components/headers/RetryAfter' }
         X-Request-Id: { $ref: '#/components/headers/XRequestId' }
@@ -4236,7 +4236,9 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
           example:
             code: RATE_LIMITED
-            message: "ThrottlerException: Too Many Requests"
+            message: Too many requests. Try again later.
+            details:
+              retryAfterSeconds: 42
             requestId: req_7f3a9c1e2b4d
 
   schemas:
@@ -4274,7 +4276,7 @@ components:
             - `VALIDATION_FAILED`: `fields`, a map of field path to message.
             - `VERSION_CONFLICT`: `currentVersion`, the plan's latest version (refetch it).
             - `NO_MATCHING_EXERCISES`: `experienceLevel` and `equipment`, echoed from the request.
-            - `RATE_LIMITED` from the sign-in failure limiter: `retryAfterSeconds` (same as `Retry-After`). Other 429s have no `details`.
+            - `RATE_LIMITED` (every 429, all limiters): `retryAfterSeconds` (same as `Retry-After`).
           properties:
             fields: { type: object, additionalProperties: { type: string } }
             currentVersion: { type: integer, minimum: 1 }
@@ -4484,7 +4486,7 @@ components:
     QuietHours:
       type: object
       required: [enabled, start, end]
-      description: '`[start, end)` in local wall time of the current profile timezone; `start > end` crosses midnight; `start` never equals `end`. DST: same wall-clock hours (a skipped time never occurs; a repeated hour is checked each time).'
+      description: '`[start, end)` in local wall time of the current profile timezone; `start > end` crosses midnight; `start` never equals `end` (OpenAPI cannot compare two properties, so this is enforced by the server: `400 VALIDATION_FAILED` with `details.fields.quietHours` = `start and end must differ`). DST: same wall-clock hours (a skipped time never occurs; a repeated hour is checked each time).'
       properties:
         enabled: { type: boolean, default: true }
         start: { $ref: '#/components/schemas/LocalTime' }
@@ -4717,7 +4719,7 @@ components:
         repsMax: { type: [integer, 'null'], minimum: 1, maximum: 100 }
         durationSeconds: { type: [integer, 'null'], minimum: 1, maximum: 7200 }
         targetWeightKg: { type: [number, 'null'], minimum: 0, maximum: 1000 }
-        restSeconds: { type: integer, minimum: 0, maximum: 600, default: 90, description: 'Optional on input; 90 when left out' }
+        restSeconds: { type: [integer, 'null'], minimum: 0, maximum: 600, default: 90, description: 'Optional on input; missing or null is stored as 90 (responses are always an integer)' }
         notes: { type: [string, 'null'], maxLength: 500, description: 'Optional on input; null when left out' }
     PlannedWorkout:
       type: object
