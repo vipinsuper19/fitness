@@ -6,12 +6,15 @@ import com.vipin.fitness.core.datastore.ProfileFlagsCache
 import com.vipin.fitness.core.network.ProfileApi
 import com.vipin.fitness.core.network.di.fitnessJson
 import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.ApiResult
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.ZoneId
@@ -69,8 +72,8 @@ class ProfileZoneTest {
     }
 
     @Test fun timezoneChangeFromAProfileUpdateAppliesAtOnce() = runTest {
-        server.enqueue(profile("Asia/Kolkata"))
-        assertEquals(APP_ZONE, zone.zone())
+        server.enqueue(profile("Europe/Berlin"))
+        assertEquals(ZoneId.of("Europe/Berlin"), zone.zone())
         server.enqueue(profile("Asia/Tokyo"))
         profiles.update(ProfileChanges(), "k1")
         assertEquals(ZoneId.of("Asia/Tokyo"), zone.zone())
@@ -79,5 +82,29 @@ class ProfileZoneTest {
         profiles.get()
         assertEquals(ZoneId.of("Europe/Paris"), zone.zone())
         assertEquals(3, server.requestCount)
+    }
+
+    @Test fun lateProfileResponseAfterAccountSwitchIsNotCached() = runTest {
+        // Hold the first account's response until after sign-out and the next sign-in.
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val seen = java.util.concurrent.atomic.AtomicInteger()
+        server.dispatcher = object : mockwebserver3.Dispatcher() {
+            override fun dispatch(request: mockwebserver3.RecordedRequest): MockResponse {
+                if (seen.incrementAndGet() == 1) {
+                    gate.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                    return profile("America/New_York")
+                }
+                return profile("Europe/London")
+            }
+        }
+        val late = async(kotlinx.coroutines.Dispatchers.IO) { profiles.get() }
+        while (seen.get() < 1) Thread.sleep(5)
+        zone.clearUserState()
+        zone.onSignedIn("u2")
+        gate.countDown()
+        assertTrue(late.await() is ApiResult.Success)
+        // New York must not stick: the next call fetches again and gets u2's zone.
+        assertEquals(ZoneId.of("Europe/London"), zone.zone())
+        assertEquals(2, seen.get())
     }
 }

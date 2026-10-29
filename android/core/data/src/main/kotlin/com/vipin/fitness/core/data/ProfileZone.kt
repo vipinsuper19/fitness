@@ -35,17 +35,21 @@ class ProfileZone @Inject constructor(private val profiles: Provider<ProfileRepo
         cached?.let { return it }
         val gen = generation
         return when (val r = profiles.get().get()) {
-            is ApiResult.Success -> r.value.zoneOrDefault().also { if (gen == generation) cached = it }
+            is ApiResult.Success -> r.value.zoneOrDefault().also { synchronized(this) { if (gen == generation) cached = it } }
             is ApiResult.Failure -> APP_ZONE
         }
     }
 
-    /** A fresh profile from the server (load or update). */
-    fun remember(profile: Profile) {
-        cached = profile.zoneOrDefault()
+    /** Take before a profile request; pass to [remember] with its response. */
+    fun token(): Int = generation
+
+    /** A fresh profile from the server (load or update), ignored if the user changed since [token]. */
+    @Synchronized
+    fun remember(profile: Profile, token: Int) {
+        if (token == generation) cached = profile.zoneOrDefault()
     }
 
-    override suspend fun clearUserState() {
+    override suspend fun clearUserState() = synchronized(this) {
         generation++
         cached = null
     }
