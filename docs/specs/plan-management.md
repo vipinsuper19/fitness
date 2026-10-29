@@ -27,9 +27,10 @@ Unknown or other users' plans → 404 (malformed ids too, as elsewhere). All wri
 - **Endpoint:** `PUT /workout-plans/{planId}/name`, body `{ "name": string }` (`PlanRename`, no other fields). This follows the existing sub-resource and action style (`/deactivate`, `/activate`). `PUT` is used because setting a name is naturally idempotent.
 - **Validation:** the server trims leading and trailing whitespace (as for other free-text fields). After trimming, the name must be 1–80 characters, the same limit as the draft `name` and `workout_plan_versions.name varchar(80)`. Blank or whitespace-only names, a missing `name`, a non-string `name` and extra fields all return `400 VALIDATION_FAILED`. Inner whitespace is kept as sent.
 - **Storage and versions:** the call updates `workout_plan_versions.name` of the **latest** version only (`version = current_version`). `currentVersion` does not change, no version is created, and earlier versions keep their saved names. It needs no migration. `workout_plans.updated_at` is bumped (it is `@updatedAt`; not exposed in the API). The version's `createdAt` does not change.
-- **Status:** active, paused and inactive plans can be renamed, and their status, `activatedAt`, `pausedAt`, `currentWeek` and `planEnded` are unchanged. Archived plans return `409 PLAN_ARCHIVED`, including a rename to the same name, which keeps them read-only and consistent with `PATCH`.
+- **Status:** active, paused and inactive plans can be renamed, and their status, `activatedAt`, `pausedAt`, `currentWeek` and `planEnded` are unchanged. **Archived plans are read-only, so any rename returns `409 PLAN_ARCHIVED`, even one to the same name.** The archived check comes before the same-name no-op.
 - **Idempotency:** renaming to the current name (after trimming) returns 200 with no write and no `updated_at` bump. Repeating the same call gives the same result. An optional `Idempotency-Key` behaves as on other writes: the same key with the same body replays, and the same key with a different body returns `409`.
-- **Concurrency:** there is no `baseVersion`, so the last write wins. A rename racing a `PATCH` either lands on the old latest version (and the new version keeps the draft's name) or on the new one. Both are acceptable for a display name.
+- **Later PATCH (actual behaviour):** `PATCH /workout-plans/{planId}` takes a full `WorkoutPlanDraft`, and `name` is **required** there (`minLength 1`, `maxLength 80`). The new version stores `dto.name` from that draft (`versionData`), so there is no case where the draft "doesn't override" the name and nothing is copied server-side. The renamed name carries into the next version because clients build the PATCH draft from the latest `GET /workout-plans/{planId}`, which returns the renamed name. A PATCH built from a copy fetched before the rename sends the old name, and the new version takes it. This is the same last-write-wins as below; `baseVersion` doesn't catch it, because rename doesn't change `version`.
+- **Concurrency (accepted):** there is no `baseVersion`, so the last write wins. A rename racing a `PATCH` either lands on the old latest version (and the new version keeps the draft's name) or on the new one. The Tech Lead has accepted this for a display name.
 - **Errors:** missing or invalid token → `401`. An unknown plan, another user's plan or a malformed id → `404`.
 - **Reads:** the new name shows immediately in `GET /workout-plans` (`WorkoutPlanSummary.name` = latest version's name), `GET /workout-plans/active` and `GET /workout-plans/{planId}` (latest). `?version=N` for an older version shows that version's name. List order is unchanged, because it is by `createdAt`, not `updated_at`. Session history keeps referring to the version id; anything that shows a plan name for a session on the latest version shows the new name.
 - **XP and badges:** none awarded.
@@ -41,10 +42,10 @@ Unknown or other users' plans → 404 (malformed ids too, as elsewhere). All wri
 - Rename paused and inactive plans: 200; status, `pausedAt`, `activatedAt` and `currentWeek` are unchanged (with a faked clock).
 - Validation: `""`, `"   "`, 81 characters after trim, a missing `name`, `name: 3` and an extra field each return 400 `VALIDATION_FAILED`. 80 characters with surrounding spaces is accepted.
 - Same name (including the same name with surrounding spaces): 200, and `updated_at` is unchanged.
-- Archived plan: 409 `PLAN_ARCHIVED`, with both a new name and the same name.
+- Archived plan: 409 `PLAN_ARCHIVED` for a new name and for the same name (no write, `updated_at` unchanged).
 - Idempotency-Key: a replay returns the same body; the same key with a different name returns 409.
 - 401 without a token. 404 for an unknown id, another user's plan and a malformed id.
-- A `PATCH` after a rename uses its draft's name for the new version.
+- A `PATCH` after a rename: a draft taken from `GET` after the rename creates v2 with the renamed name. A draft carrying the pre-rename name creates v2 with that old name. In both cases v1 keeps the renamed name.
 
 ## Pause and resume
 

@@ -583,11 +583,12 @@ paths:
         (blank or whitespace-only is rejected). Renaming to the current name (after
         trimming) is a no-op that returns 200. `PUT` is idempotent by itself; an
         `Idempotency-Key` is also accepted as on other writes. Works for active, paused
-        and inactive plans; archived plans are read-only (`409 PLAN_ARCHIVED`). Status,
+        and inactive plans; archived plans are read-only, so any rename, even to the same name, is `409 PLAN_ARCHIVED`. Status,
         `activatedAt`, `pausedAt` and `currentWeek` are unchanged. The new name shows in
         `GET /workout-plans` (`WorkoutPlanSummary.name`), `GET /workout-plans/active` and
-        `GET /workout-plans/{planId}` straight away. A later `PATCH` takes its name from its
-        own draft, as before.
+        `GET /workout-plans/{planId}` straight away. A later `PATCH` stores its draft's
+        (required) `name`, so a draft built from the renamed plan keeps the new name.
+        There is no version check; the last write wins.
       parameters:
         - $ref: '#/components/parameters/PlanId'
         - $ref: '#/components/parameters/IdempotencyKey'
