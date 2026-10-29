@@ -56,13 +56,6 @@ function collect(node: unknown, pointer: string, out: Found[], inSchema: boolean
 const found: Found[] = [];
 collect(spec, '', found, false);
 
-/**
- * Operations whose examples are owned by open PRs (#146 progression-suggestions, and the plan PATCH that applies
- * them). They already carry #141's examples, which are validated here; coverage for their other bodies follows
- * once those PRs land.
- */
-const COVERAGE_EXEMPT = new Set(['get /workout-plans/{planId}/progression-suggestions', 'patch /workout-plans/{planId}']);
-
 describe('contracts/openapi.yaml examples', () => {
   it('finds the examples', () => {
     expect(found.length).toBeGreaterThan(130);
@@ -82,7 +75,7 @@ describe('contracts/openapi.yaml examples', () => {
     const paths = spec.paths as Record<string, Record<string, Node>>;
     for (const [path, item] of Object.entries(paths)) {
       for (const [method, op] of Object.entries(item)) {
-        if (!isObj(op) || !isObj(op.responses) || COVERAGE_EXEMPT.has(`${method} ${path}`)) continue;
+        if (!isObj(op) || !isObj(op.responses)) continue;
         const body = (op.requestBody as Node | undefined)?.content as Record<string, Node> | undefined;
         check(`${method} ${path} request`, body?.['application/json']);
         for (const [status, res] of Object.entries(op.responses as Record<string, Node>)) {

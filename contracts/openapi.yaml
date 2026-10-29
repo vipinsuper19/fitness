@@ -118,12 +118,20 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/HealthDeep' }
+              example:
+                status: ok
+                db: up
+                migration: 20261029001500_drop_workout_sessions_user_id_status_idx
         '429': { $ref: '#/components/responses/RateLimited' }
         '503':
           description: Database down or timed out
           content:
             application/json:
               schema: { $ref: '#/components/schemas/HealthDeep' }
+              example:
+                status: degraded
+                db: down
+                migration: null
   /auth/register:
     post:
       tags: [auth]
@@ -1536,6 +1544,52 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
+              example:
+                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                version: 5
+                name: Push pull legs
+                weeks: 8
+                rationale: Push, pull and legs on separate days so each muscle group gets a full week to recover.
+                workouts:
+                  - id: 6aefc30c-d19c-419d-9d96-b91edd1c32aa
+                    dayOfWeek: 1
+                    name: Push
+                    exercises:
+                      - exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 10
+                        targetWeightKg: 41
+                        durationSeconds: null
+                        restSeconds: 90
+                        notes: null
+                      - exerciseId: 8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        targetWeightKg: null
+                        durationSeconds: 65
+                        restSeconds: 60
+                        notes: null
+                      - exerciseId: e4b6d8f0-2a4c-4e6a-9b1d-3f5a7c9e0b42
+                        order: 2
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 10
+                        targetWeightKg: 27
+                        durationSeconds: null
+                        restSeconds: 90
+                        notes: null
+                isActive: true
+                source: rule_based
+                createdAt: 2026-10-19T19:40:00+05:30
+                activatedAt: 2026-10-19T19:41:00+05:30
+                pausedAt: null
+                archivedAt: null
+                currentWeek: 4
+                planEnded: false
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
