@@ -120,6 +120,10 @@ describe('rate-limit audit: every write route has a named, env-configurable thro
     expect(missing).toEqual([]);
   });
 
+  it('GET progression-suggestions is under the per-user plans throttle', () => {
+    expect(routes.find((r) => r.route === 'get /workout-plans/{planId}/progression-suggestions')).toMatchObject({ guarded: true, perUser: true, throttles: ['plans'] });
+  });
+
   it('docs/DEPLOY.md lists every rate-limit env var', () => {
     const deploy = readFileSync(join(__dirname, '..', '..', 'docs', 'DEPLOY.md'), 'utf8');
     expect(THROTTLE_NAMES.map((n) => THROTTLES[n].env).filter((e) => !deploy.includes(`\`${e}\``))).toEqual([]);
@@ -142,6 +146,26 @@ const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
       expect(limited.body.code).toBe('RATE_LIMITED');
       expect(limited.headers['retry-after']).toBeDefined();
       await post(b).expect(201);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('GET progression-suggestions returns 429 RATE_LIMITED with Retry-After past PLANS_RATE_LIMIT_PER_MINUTE, per user', async () => {
+    const app = await createTestApp({ env: { PLANS_RATE_LIMIT_PER_MINUTE: '2' } });
+    try {
+      const http = () => request(app.getHttpServer());
+      const signUp = async () =>
+        (await http().post(`${API_PREFIX}/auth/register`).send({ email: `rl-${randomUUID()}@example.in`, password: 'correct horse battery' }).expect(201)).body.accessToken as string;
+      const [a, b] = [await signUp(), await signUp()];
+      const id = randomUUID(); // unknown plan: 404 still counts against the limit
+      const get = (t: string) => http().get(`${API_PREFIX}/workout-plans/${id}/progression-suggestions`).set('Authorization', `Bearer ${t}`);
+      await get(a).expect(404);
+      await get(a).expect(404);
+      const limited = await get(a).expect(429);
+      expect(limited.body.code).toBe('RATE_LIMITED');
+      expect(limited.headers['retry-after']).toBeDefined();
+      await get(b).expect(404);
     } finally {
       await app.close();
     }

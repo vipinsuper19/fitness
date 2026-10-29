@@ -5,7 +5,7 @@ import { num } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
 import { PrismaService } from '../prisma/prisma.service';
 import {
-  type Action, COOLDOWN_MS, deload, harderVariations, increase, type Level, metPrescription, type Prescription,
+  type Action, COOLDOWN_MS, deloadStep, harderVariations, increase, type Level, metPrescription, type Prescription, type StepWorking,
   raisedLoad, type Reason, REASON_TEXT, type SetRow, type TrackingType, WINDOW,
 } from './progression.rules';
 
@@ -16,7 +16,13 @@ export interface ProgressionBasis {
 export interface ProgressionSuggestion {
   plannedWorkoutId: string; exerciseId: string; order: number; trackingType: TrackingType; action: Action; reason: Reason;
   reasonText: string; current: Prescription; suggested: Prescription | null; harderVariations?: string[];
-  cooldownUntil: string | null; basedOn: ProgressionBasis[];
+  cooldownUntil: string | null; basedOn: ProgressionBasis[]; inputs: ProgressionInputs;
+}
+/** The machine-readable inputs behind `reason` (openapi ProgressionInputs). */
+export interface ProgressionInputs {
+  sessionsRequired: number; sessionsConsidered: number; sessionsMetTarget: number; maxPerceivedDifficulty: number | null;
+  cooldown: { active: boolean; lastRaisedAt: string | null; until: string | null; days: number };
+  step: StepWorking | null;
 }
 export interface ProgressionSuggestions {
   planId: string; planVersion: number; generatedAt: string; windowSessions: number; suggestions: ProgressionSuggestion[];
@@ -137,13 +143,16 @@ export class ProgressionService {
         let reason: Reason;
         let suggested: Prescription | null = null;
         let harder: string[] | undefined;
+        let working: StepWorking | null = null;
         const [a, b] = basedOn;
         const deloadReason: Reason | null =
           a && b && !a.metTarget && !b.metTarget ? 'REPEATED_MISSES'
             : a && b && a.perceivedDifficulty === 5 && b.perceivedDifficulty === 5 ? 'VERY_HARD' : null;
         if (deloadReason) {
           reason = deloadReason;
-          suggested = deload(t, current);
+          const d = deloadStep(t, current);
+          suggested = d?.suggested ?? null;
+          working = d?.working ?? null;
           action = suggested ? 'deload' : 'hold';
         } else if (basedOn.length < WINDOW) reason = 'NOT_ENOUGH_HISTORY';
         else if (basedOn.some((x) => !x.metTarget)) reason = 'MISSED_TARGET';
@@ -151,7 +160,7 @@ export class ProgressionService {
         else if (cooldownUntil) reason = 'COOLDOWN';
         else {
           const step = increase(t, current, ex.primaryMuscle, maxOf(basedOn.map((x) => x.bestWeightKg)));
-          ({ action, reason, suggested } = step);
+          ({ action, reason, suggested, working } = step);
           if (step.harder) {
             harder = harderVariations(
               { id: ex.id, primaryMuscle: ex.primaryMuscle, trackingType: ex.trackingType, difficulty: ex.difficulty as Level, equipment: ex.equipment },
@@ -163,6 +172,14 @@ export class ProgressionService {
           plannedWorkoutId: w.id, exerciseId: pe.exerciseId, order: pe.order, trackingType: t, action, reason,
           reasonText: REASON_TEXT[reason], current, suggested, ...(harder ? { harderVariations: harder } : {}),
           cooldownUntil: reason === 'COOLDOWN' && cooldownUntil ? cooldownUntil.toISOString() : null, basedOn,
+          inputs: {
+            sessionsRequired: WINDOW,
+            sessionsConsidered: basedOn.length,
+            sessionsMetTarget: basedOn.filter((x) => x.metTarget).length,
+            maxPerceivedDifficulty: maxOf(basedOn.map((x) => x.perceivedDifficulty)),
+            cooldown: { active: !!cooldownUntil, lastRaisedAt: raisedAt ? raisedAt.toISOString() : null, until: cooldownUntil ? cooldownUntil.toISOString() : null, days: COOLDOWN_MS / 86_400_000 },
+            step: working,
+          },
         });
       }
     }
