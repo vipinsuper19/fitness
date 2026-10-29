@@ -16,6 +16,8 @@
 - Never returned: secrets, connection strings, hostnames, Postgres/Node/app versions, error messages, stack traces. Errors are swallowed in the controller; the migration name is only returned if it matches `^[A-Za-z0-9_.-]{1,255}$`.
 - The 503 body is `HealthDeep`, not the usual `Error` shape (documented exception), so monitors read the same fields in both cases.
 
+Not written to the request log (docs/specs/request-log.md), like `/health`.
+
 ## Rate limit
 Per client IP, `HEALTH_DEEP_RATE_LIMIT_PER_MINUTE` (default 12). A 429 is the standard `RATE_LIMITED` `Error` with `Retry-After`.
 

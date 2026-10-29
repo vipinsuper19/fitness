@@ -83,6 +83,7 @@ Every request writes one JSON line to stdout (Render → Logs), for example:
 {"type":"request","requestId":"6f1c…","method":"GET","route":"/api/v1/goals/{goalId}","status":404,"durationMs":12.3,"userId":"9b2e…"}
 ```
 
+- `/health`, `/health?db=true` and `/health/deep` are not logged (health-check noise).
 - `route` is the route **template**, never the raw path or query string; unmatched paths log `route: null`.
 - `userId` is the opaque account UUID, only on authenticated requests.
 - **Never logged:** emails, request/response bodies, query strings, tokens, `Authorization`/cookie headers, IPs (not hashed either; rate-limit debugging uses the route, status and `requestId`), user agent.

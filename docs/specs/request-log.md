@@ -19,6 +19,8 @@
 | `durationMs` | wall time, 0.1 ms precision (`process.hrtime`, unaffected by fake timers) |
 | `userId` | opaque user UUID; only when JwtAuthGuard authenticated the request |
 
+`/health` requests (including `?db=true` and `/health/deep`) are not logged, so Render's health checks don't flood the log.
+
 No other field is ever added. Not logged: emails, bodies, query strings, raw paths, tokens, `Authorization` or cookie headers, IPs (not hashed — the route/status/requestId are enough to debug rate limiting), user agent.
 
 ## Config
