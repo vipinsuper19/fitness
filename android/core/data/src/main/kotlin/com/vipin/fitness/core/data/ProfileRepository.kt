@@ -20,15 +20,25 @@ class DefaultProfileRepository @Inject constructor(
     private val api: ProfileApi,
     private val json: Json,
     private val cache: ProfileFlagsCache,
+    private val zone: ProfileZone? = null,
 ) : ProfileRepository {
-    override suspend fun get() = apiCall(json) { api.get().toDomain() }.cached()
+    override suspend fun get(): ApiResult<Profile> {
+        val token = zone?.token()
+        return apiCall(json) { api.get().toDomain() }.cached(token)
+    }
 
-    override suspend fun update(changes: ProfileChanges, idempotencyKey: String): ApiResult<Profile> =
-        apiCall(json) { api.update(changes.toJson(), idempotencyKey).toDomain() }.cached()
+    override suspend fun update(changes: ProfileChanges, idempotencyKey: String): ApiResult<Profile> {
+        val token = zone?.token()
+        return apiCall(json) { api.update(changes.toJson(), idempotencyKey).toDomain() }.cached(token)
+    }
 
-    /** Every profile the server returns refreshes the launch cache. */
-    private suspend fun ApiResult<Profile>.cached(): ApiResult<Profile> = also {
+    /**
+     * Every profile the server returns refreshes the launch cache. [zoneToken] is taken before the
+     * request, so a response that lands after a sign-out/sign-in can't write the old user's zone.
+     */
+    private suspend fun ApiResult<Profile>.cached(zoneToken: Int?): ApiResult<Profile> = also {
         if (it is ApiResult.Success) cache.save(it.value.onboardingCompleted, it.value.unitSystem)
+        if (it is ApiResult.Success && zoneToken != null) zone?.remember(it.value, zoneToken)
     }
 }
 
