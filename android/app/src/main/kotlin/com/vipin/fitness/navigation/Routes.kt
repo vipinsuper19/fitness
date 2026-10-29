@@ -33,6 +33,7 @@ sealed interface Route : NavKey {
 
     @Serializable data object DeleteAccount : Route
     @Serializable data object ExportData : Route
+    @Serializable data object NotificationSettings : Route
 }
 
 /** Back-stack moves, kept pure so they can be unit tested. */

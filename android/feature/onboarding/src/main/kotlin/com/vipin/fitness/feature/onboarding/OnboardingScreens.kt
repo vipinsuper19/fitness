@@ -20,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.testTag
 import com.vipin.fitness.core.designsystem.AccountEntryTags
+import com.vipin.fitness.core.designsystem.NotificationSettingsTags
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.LaunchedEffect
@@ -84,6 +85,7 @@ fun ProfileEditRoute(
     viewModel: ProfileEditViewModel = hiltViewModel(),
     onDeleteAccount: (() -> Unit)? = null,
     onExportData: (() -> Unit)? = null,
+    onNotifications: (() -> Unit)? = null,
 ) {
     val s by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.signedOut) { if (s.signedOut) onSignedOut() }
@@ -103,6 +105,11 @@ fun ProfileEditRoute(
             }
             OutlinedButton(onClick = viewModel::signOut, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.profile_sign_out))
+            }
+            if (onNotifications != null) {
+                OutlinedButton(onClick = onNotifications, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth().testTag(NotificationSettingsTags.OPEN)) {
+                    Text(stringResource(R.string.notif_open))
+                }
             }
             if (onExportData != null) {
                 OutlinedButton(onClick = onExportData, enabled = !s.signingOut, modifier = Modifier.fillMaxWidth().testTag(AccountEntryTags.OPEN_EXPORT)) {
