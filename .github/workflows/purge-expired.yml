@@ -2,9 +2,11 @@ name: purge-expired
 
 # Manually purges expired rows in the database behind secrets.FITNESS_DATABASE_URL: `npm run purge:expired`
 # (src/maintenance/purge-expired.ts): idempotency_keys past their 24 h TTL, and refresh_tokens revoked or expired
-# more than 7 days ago in families with no live token. DRY RUN unless the `execute` input is true. Never runs
+# more than 7 days ago in families with no live token, and notification_sends in a final state (sent/failed) older than
+# 90 days (skipped while the table doesn't exist). Windows: repository variables PURGE_REFRESH_TOKEN_MARGIN_DAYS
+# (min 1) and PURGE_NOTIFICATION_SENDS_DAYS (min 30); see docs/specs/data-retention.md. DRY RUN unless the `execute` input is true. Never runs
 # automatically (no schedule). Prints counts and cutoffs only; never token values, hashes or the URL.
-# Running it with execute=true against production needs Vipin's OK.
+# Running it against production (especially execute=true) needs Vipin's explicit OK, in his own words.
 on:
   workflow_dispatch:
     inputs:
@@ -47,6 +49,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.FITNESS_DATABASE_URL }}
           EXECUTE: ${{ inputs.execute }}
+          PURGE_REFRESH_TOKEN_MARGIN_DAYS: ${{ vars.PURGE_REFRESH_TOKEN_MARGIN_DAYS }}
+          PURGE_NOTIFICATION_SENDS_DAYS: ${{ vars.PURGE_NOTIFICATION_SENDS_DAYS }}
         run: |
           args=()
           if [ "$EXECUTE" = "true" ]; then args+=(-- --execute); fi

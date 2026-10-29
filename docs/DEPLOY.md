@@ -53,9 +53,10 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
      - **After any redeploy that follows a rollback, run it again** (the old app doesn't write history).
    - **Badges:** `DATABASE_URL=... npm run badges:backfill`, locally.
 7. **Purge expired rows (manual; dry run by default).** Actions → **purge-expired** → Run workflow (same `FITNESS_DATABASE_URL` secret), or locally `cd backend && DATABASE_URL=... npm run purge:expired` (add `-- --execute` to delete).
-   - Deletes `idempotency_keys` past their 24 h TTL, and `refresh_tokens` revoked or expired more than 7 days ago **only in families with no live token**. A revoked token in a family that still has a live one is kept, because presenting it is how token reuse (theft) is detected and the family revoked.
-   - Without `execute` (the default) it only prints per-table counts and cutoffs. It never prints tokens, hashes or the URL. Deletes run in batches of 1000, and it is idempotent.
-   - No schedule; it never runs automatically. **Running it with `execute: true` against production needs Vipin's OK.** Do a dry run first.
+   - Deletes `idempotency_keys` past their 24 h TTL; `refresh_tokens` revoked or expired more than 7 days ago **only in families with no live token** (a revoked token in a family that still has a live one is kept, because presenting it is how token reuse (theft) is detected and the family revoked); and `notification_sends` rows in a final state (`sent` or `failed`) older than 90 days. `pending`, `held` and `sending` rows are never touched. Until push sending ships, that table doesn't exist and is skipped.
+   - Windows via repository variables / env: `PURGE_REFRESH_TOKEN_MARGIN_DAYS` (default 7, min 1), `PURGE_NOTIFICATION_SENDS_DAYS` (default 90, min 30). Below the minimum, the run fails. Spec: [data-retention.md](specs/data-retention.md); runbook: [runbooks/data-retention.md](runbooks/data-retention.md).
+   - Without `execute` (the default) it only prints per-table counts and cutoffs. It never prints ids, tokens, hashes or the URL. Deletes run in batches of 1000, and it is idempotent.
+   - No schedule; it never runs automatically. **Running it against production (and certainly with `execute: true`) needs Vipin's explicit OK, in his own words.** Do a dry run first.
 
 8. **Push notifications (planned, [notification-sending.md](specs/notification-sending.md); not implemented yet).** Secrets go in Render env vars only, never in the repo or logs:
    | Key | Required | Value |

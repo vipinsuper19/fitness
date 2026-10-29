@@ -23,13 +23,31 @@ describeDb('purge:expired', () => {
   let prisma: PrismaService;
   const http = () => request(app.getHttpServer());
 
+  // notification_sends ships with push sending (not built yet). Until its migration exists, stand up a minimal
+  // table with the spec's columns for this file only, and drop it afterwards (jest runs in band).
+  let createdNs = false;
   beforeAll(async () => {
     app = await createTestApp();
     prisma = app.get(PrismaService);
+    const exists = (await prisma.$queryRaw<Array<{ t: string | null }>>`SELECT to_regclass('notification_sends')::text AS t`)[0]!.t;
+    if (exists === null) {
+      await prisma.$executeRawUnsafe(`CREATE TABLE notification_sends (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type text NOT NULL DEFAULT 'water_reminder', slot_key text NOT NULL, status text NOT NULL,
+        due_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now(), sent_at timestamptz)`);
+      createdNs = true;
+    }
   });
   afterAll(async () => {
+    if (createdNs) await prisma.$executeRawUnsafe('DROP TABLE IF EXISTS notification_sends');
     await app.close();
   });
+
+  const send = async (userId: string, status: string, createdAt: Date) =>
+    (await prisma.$queryRaw<Array<{ id: string }>>`INSERT INTO notification_sends (user_id, slot_key, status, created_at)
+      VALUES (${userId}::uuid, ${randomUUID()}, ${status}, ${createdAt}) RETURNING id::text AS id`)[0]!.id;
+  const sendIds = async (ids: string[]) =>
+    (await prisma.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM notification_sends WHERE id = ANY(${ids}::uuid[])`)[0]!.n;
 
   const signUp = async () => {
     const b = (await http().post('/api/v1/auth/register').send({ email: `pg-${randomUUID()}@example.in`, password: PASSWORD }).expect(201)).body;
@@ -128,8 +146,84 @@ describeDb('purge:expired', () => {
     expect(await prisma.refreshToken.count({ where: { familyId } })).toBe(0);
   });
 
-  it('rejects a bad batch size or margin', async () => {
+  describe('notification_sends', () => {
+    const NOW = new Date('2026-10-29T12:00:00.000Z');
+    const daysBefore = (d: number, ms = 0) => new Date(NOW.getTime() - d * DAY + ms);
+    async function nsFixture(days = 90) {
+      const u = await signUp();
+      const doomed = [
+        await send(u.id, 'sent', daysBefore(days, -1)), // 1 ms past the cutoff
+        await send(u.id, 'failed', daysBefore(days + 30)),
+      ];
+      const kept = [
+        await send(u.id, 'sent', daysBefore(days)), // exactly at the cutoff: not older, stays
+        await send(u.id, 'failed', daysBefore(days - 1)),
+        // Non-final states stay at any age.
+        await send(u.id, 'pending', daysBefore(400)),
+        await send(u.id, 'sending', daysBefore(400)),
+        await send(u.id, 'held', daysBefore(400)),
+        // Other end states are out of scope for this purge.
+        await send(u.id, 'expired', daysBefore(400)),
+      ];
+      return { u, doomed, kept };
+    }
+
+    it('dry run counts but deletes nothing', async () => {
+      const f = await nsFixture();
+      const r = await purgeExpired(prisma, { now: NOW, onlyUserIds: [f.u.id] });
+      expect(r.notificationSends).toEqual({ present: true, eligible: 2, deleted: 0 });
+      expect(Number(await sendIds([...f.doomed, ...f.kept]))).toBe(8);
+      expect(formatResult(r)).toContain('notification_sends: 2 eligible, 0 deleted');
+      expect(formatResult(r)).toContain(daysBefore(90).toISOString());
+    });
+
+    it('execute deletes only sent/failed rows older than the window, never pending/sending/held', async () => {
+      const f = await nsFixture();
+      const r = await purgeExpired(prisma, { now: NOW, execute: true, batchSize: 1, onlyUserIds: [f.u.id] });
+      expect(r.notificationSends).toEqual({ present: true, eligible: 2, deleted: 2 });
+      expect(Number(await sendIds(f.doomed))).toBe(0);
+      expect(Number(await sendIds(f.kept))).toBe(f.kept.length);
+      const again = await purgeExpired(prisma, { now: NOW, execute: true, onlyUserIds: [f.u.id] });
+      expect(again.notificationSends.deleted).toBe(0);
+    });
+
+    it('honours a custom window at its boundary', async () => {
+      const f = await nsFixture(45);
+      const r = await purgeExpired(prisma, { now: NOW, execute: true, notificationSendsDays: 45, onlyUserIds: [f.u.id] });
+      expect(r.notificationSends.deleted).toBe(2);
+      expect(Number(await sendIds(f.kept))).toBe(f.kept.length);
+    });
+
+    it('reports "table not present" and deletes nothing when the table does not exist', async () => {
+      if (!createdNs) return; // a real table exists; nothing to simulate
+      await prisma.$executeRawUnsafe('ALTER TABLE notification_sends RENAME TO notification_sends_hidden');
+      try {
+        const r = await purgeExpired(prisma, { execute: true, onlyUserIds: [randomUUID()] });
+        expect(r.notificationSends).toEqual({ present: false, eligible: 0, deleted: 0 });
+        expect(formatResult(r)).toContain('notification_sends: table not present, skipped');
+      } finally {
+        await prisma.$executeRawUnsafe('ALTER TABLE notification_sends_hidden RENAME TO notification_sends');
+      }
+    });
+  });
+
+  it('idempotency keys: expired exactly now goes, 1 ms in the future stays', async () => {
+    const u = await signUp();
+    const now = new Date();
+    const mk = (expiresAt: Date) => prisma.idempotencyKey.create({
+      data: { createdAt: new Date(expiresAt.getTime() - DAY), scope: `user:${u.id}`, key: randomUUID(), userId: u.id,
+        method: 'POST', path: '/api/v1/goals', requestHash: '0'.repeat(64), expiresAt }, select: { id: true } });
+    const at = await mk(now);
+    const after = await mk(new Date(now.getTime() + 1));
+    const r = await purgeExpired(prisma, { now, execute: true, onlyUserIds: [u.id] });
+    expect(r.idempotencyKeys.deleted).toBe(1);
+    expect(await prisma.idempotencyKey.count({ where: { id: at.id } })).toBe(0);
+    expect(await prisma.idempotencyKey.count({ where: { id: after.id } })).toBe(1);
+  });
+
+  it('rejects a bad batch size or window', async () => {
     await expect(purgeExpired(prisma, { batchSize: 0 })).rejects.toThrow(/batchSize/);
     await expect(purgeExpired(prisma, { marginDays: 0 })).rejects.toThrow(/marginDays/);
+    await expect(purgeExpired(prisma, { notificationSendsDays: 29 })).rejects.toThrow(/notificationSendsDays/);
   });
 });
