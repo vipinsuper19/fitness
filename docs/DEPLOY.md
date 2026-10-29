@@ -37,7 +37,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
    - `EXPORT_RATE_LIMIT_PER_HOUR` (5), `EXPORT_MAX_ROWS` (5000), `EXPORT_MAX_SESSIONS` (2000), `EXPORT_MAX_PLAN_VERSIONS` (200), `EXPORT_MAX_SETS_TOTAL` (20000), `EXPORT_MAX_PLAN_EXERCISES_TOTAL` (10000)
    - `PORT` is set by Render.
 3. Build: `npm ci --include=dev && npm run build` (`prisma generate` + `tsc`).
-   Start: `npm run migrate:deploy && npm start`. Migrations are idempotent, and the Free plan has no pre-deploy step.
+   Start: `npm run migrate:deploy && exec node dist/main.js` (run from root dir `backend`; same as `npm start`, but `exec` makes node the process that receives `SIGTERM`). Migrations are idempotent, and the Free plan has no pre-deploy step.
 4. `autoDeploy` is on: **every merge to main that touches `backend/**` or `render.yaml` deploys to Render automatically.** Android-only and docs-only merges don't (Render `buildFilter`).
    - The `post-deploy-smoke` workflow then runs automatically on the same pushes. It waits up to ~6 min for the service to restart (`/health` uptime lower than the time since the push), then runs the smoke test (health + DB, register → generate a plan with ≥ 1 workout → delete account → login fails, test user always cleaned up). The generate step fails until the exercise catalog is seeded (step 5), so seed before relying on it.
    - If no restart is seen in time, the workflow **fails** rather than smoke-testing the old build: check the deploy in the Render dashboard. A free instance waking from spin-down also resets uptime, which can let the wait pass early; the smoke then still checks the live service.
@@ -101,7 +101,7 @@ Render sends `SIGTERM` to the old instance (60 s after switching traffic to the 
 
 Nest's `enableShutdownHooks()` is deliberately not used: it disconnects Prisma while requests are still running and re-raises the signal (exit 143). `/health` doesn't report "shutting down": once `SIGTERM` arrives Render has already moved traffic and health checks to the new instance, and the closed listener refuses new connections, so a status would never be seen; `/health`'s contract stays unchanged.
 
-**Signal delivery caveat:** `startCommand` is `npm run migrate:deploy && npm start`, so `node` runs under `sh` and `npm`. If logs show `SIGKILL` / exit 137 instead of `shutdown complete`, change the start command to `npm run migrate:deploy && exec node dist/main.js` so Node receives `SIGTERM` directly (not changed here: it's a production deploy setting, Vipin's call).
+**Signal delivery:** `startCommand` is `npm run migrate:deploy && exec node dist/main.js`. `exec` replaces the `sh` that Render starts with `node` itself, so node is the process that receives Render's `SIGTERM` and the handler above runs. With the old `... && npm start`, `sh` (and `npm`) stayed as the parent and the signal might never reach node, ending in `SIGKILL` / exit 137. After a deploy, the old instance's logs should show `shutdown complete`, not exit 137. If the Render service's start command is set in the dashboard rather than synced from this Blueprint, it must be changed there to match.
 
 ## Free-tier notes
 - **Cold starts (accepted):** Render Free spins down after ~15 min idle, so the first request after that takes **about 50 s**. **No keep-alive pinger is used**, by choice, to stay within the free plan; the app should show a loading state and retry.
