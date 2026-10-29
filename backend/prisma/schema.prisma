@@ -178,22 +178,23 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  profile            UserProfile?
-  targetHistory      ProfileTargetHistory[]
-  refreshTokens      RefreshToken[]
-  goals              FitnessGoal[]
-  workoutPlans       WorkoutPlan[]
-  workoutSessions    WorkoutSession[]
-  setLogs            ExerciseSetLog[]
-  customFoods        FoodItem[]
-  foodLogs           FoodLog[]
-  waterLogs          WaterLog[]
-  bodyMeasurements   BodyMeasurement[]
-  xpTransactions     XPTransaction[]
-  sessionCorrections SessionCorrection[]
-  badges             UserBadge[]
-  challenges         UserChallenge[]
-  idempotencyKeys    IdempotencyKey[]
+  profile                UserProfile?
+  targetHistory          ProfileTargetHistory[]
+  notificationPreference NotificationPreference?
+  refreshTokens          RefreshToken[]
+  goals                  FitnessGoal[]
+  workoutPlans           WorkoutPlan[]
+  workoutSessions        WorkoutSession[]
+  setLogs                ExerciseSetLog[]
+  customFoods            FoodItem[]
+  foodLogs               FoodLog[]
+  waterLogs              WaterLog[]
+  bodyMeasurements       BodyMeasurement[]
+  xpTransactions         XPTransaction[]
+  sessionCorrections     SessionCorrection[]
+  badges                 UserBadge[]
+  challenges             UserChallenge[]
+  idempotencyKeys        IdempotencyKey[]
 
   @@map("users")
 }
@@ -691,4 +692,20 @@ model ProfileTargetHistory {
 
   @@id([userId, effectiveFrom])
   @@map("profile_target_history")
+}
+
+/// Notification preferences (docs/specs/notification-preferences.md). Storage only: nothing sends
+/// or reads these yet. No row = defaults. `types` holds only the flags the user has set.
+model NotificationPreference {
+  userId       String   @id @map("user_id") @db.Uuid
+  enabled      Boolean
+  types        Json     @default("{}")
+  quietEnabled Boolean  @map("quiet_enabled")
+  quietStart   DateTime @map("quiet_start") @db.Time(0)
+  quietEnd     DateTime @map("quiet_end") @db.Time(0)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
 }

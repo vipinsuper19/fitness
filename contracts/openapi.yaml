@@ -2102,12 +2102,12 @@ components:
         onboardingCompleted: { type: boolean }
     DataExport:
       type: object
-      required: [exportedAt, user, targetHistory]
+      required: [exportedAt, user, targetHistory, notificationPreferences]
       properties:
         exportedAt: { type: string, format: date-time }
         user: { $ref: '#/components/schemas/User' }
         profile: { $ref: '#/components/schemas/Profile' }
-        notificationPreferences: { $ref: '#/components/schemas/NotificationPreferences', description: 'Same shape as GET /me/notification-preferences, defaults included. Optional until implemented.' }
+        notificationPreferences: { $ref: '#/components/schemas/NotificationPreferences', description: 'Same shape as GET /me/notification-preferences, defaults included.' }
         goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
         workoutPlans: { type: array, items: { $ref: '#/components/schemas/WorkoutPlan' } }
         workoutSessions: { type: array, items: { $ref: '#/components/schemas/WorkoutSession' } }

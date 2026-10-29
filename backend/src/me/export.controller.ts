@@ -18,7 +18,7 @@ export class UserThrottlerGuard extends ThrottlerGuard {
 @ApiBearerAuth()
 @Controller('me')
 @UseGuards(UserThrottlerGuard)
-@SkipThrottle({ auth: true, refresh: true, export: false, targetHistory: true })
+@SkipThrottle({ auth: true, refresh: true, export: false, targetHistory: true, notificationPrefs: true })
 export class ExportController {
   constructor(private readonly exporter: ExportService) {}
 
