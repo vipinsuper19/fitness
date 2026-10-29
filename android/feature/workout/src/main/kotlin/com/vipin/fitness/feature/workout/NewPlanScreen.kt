@@ -100,7 +100,7 @@ private fun GenerateForm(s: NewPlanState, vm: NewPlanViewModel) {
 }
 
 @Composable
-private fun CustomForm(plan: CustomPlan, errors: Set<CustomPlanError>, vm: NewPlanViewModel, onAddExercise: (DayOfWeek) -> Unit) {
+internal fun CustomForm(plan: CustomPlan, errors: Set<CustomPlanError>, vm: NewPlanViewModel, onAddExercise: (DayOfWeek) -> Unit) {
     OutlinedTextField(
         value = plan.name,
         onValueChange = vm::setCustomName,
@@ -129,20 +129,34 @@ private fun CustomForm(plan: CustomPlan, errors: Set<CustomPlanError>, vm: NewPl
         }
     }
     errors.forEach { Text(stringResource(it.message()), color = MaterialTheme.colorScheme.error) }
-    Button(onClick = vm::previewCustom, modifier = Modifier.fillMaxWidth().testTag("preview_custom")) { Text(stringResource(R.string.preview)) }
+    // Out-of-range numbers are shown inline per field; the server would reject them, so no Preview/Save.
+    Button(onClick = vm::previewCustom, enabled = !plan.hasFieldErrors(), modifier = Modifier.fillMaxWidth().testTag(PlanBuilderTags.PREVIEW)) {
+        Text(stringResource(R.string.preview))
+    }
 }
 
 @Composable
 private fun CustomExerciseRow(day: DayOfWeek, index: Int, e: CustomExercise, count: Int, vm: NewPlanViewModel) {
     Column {
         Text(e.exercise.name, style = MaterialTheme.typography.titleSmall)
+        val errs = e.fieldErrors()
+        fun tag(f: ExerciseField) = PlanBuilderTags.field(day, index, f)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            NumberField(R.string.sets, e.sets, Modifier.weight(1f)) { v -> vm.updateExercise(day, index) { it.copy(sets = v ?: 0) } }
+            // 0 sets is shown as empty (cleared field), with the range error.
+            NumberField(R.string.sets, e.sets.takeIf { it > 0 }, errs[ExerciseField.SETS], tag(ExerciseField.SETS), Modifier.weight(1f)) { v ->
+                vm.updateExercise(day, index) { it.copy(sets = v ?: 0) }
+            }
             if (e.exercise.trackingType.usesDuration) {
-                NumberField(R.string.duration_s, e.durationSeconds, Modifier.weight(2f)) { v -> vm.updateExercise(day, index) { it.copy(durationSeconds = v) } }
+                NumberField(R.string.duration_s, e.durationSeconds, errs[ExerciseField.DURATION], tag(ExerciseField.DURATION), Modifier.weight(2f)) { v ->
+                    vm.updateExercise(day, index) { it.copy(durationSeconds = v) }
+                }
             } else {
-                NumberField(R.string.reps_min, e.repsMin, Modifier.weight(1f)) { v -> vm.updateExercise(day, index) { it.copy(repsMin = v) } }
-                NumberField(R.string.reps_max, e.repsMax, Modifier.weight(1f)) { v -> vm.updateExercise(day, index) { it.copy(repsMax = v) } }
+                NumberField(R.string.reps_min, e.repsMin, errs[ExerciseField.REPS_MIN], tag(ExerciseField.REPS_MIN), Modifier.weight(1f)) { v ->
+                    vm.updateExercise(day, index) { it.copy(repsMin = v) }
+                }
+                NumberField(R.string.reps_max, e.repsMax, errs[ExerciseField.REPS_MAX], tag(ExerciseField.REPS_MAX), Modifier.weight(1f)) { v ->
+                    vm.updateExercise(day, index) { it.copy(repsMax = v) }
+                }
             }
         }
         Row {
@@ -154,13 +168,21 @@ private fun CustomExerciseRow(day: DayOfWeek, index: Int, e: CustomExercise, cou
 }
 
 @Composable
-private fun NumberField(label: Int, value: Int?, modifier: Modifier = Modifier, onChange: (Int?) -> Unit) {
+private fun NumberField(label: Int, value: Int?, error: ExerciseFieldError?, tag: String, modifier: Modifier = Modifier, onChange: (Int?) -> Unit) {
     OutlinedTextField(
         value = value?.toString().orEmpty(),
         onValueChange = { t -> onChange(t.filter(Char::isDigit).take(4).toIntOrNull()) },
         label = { Text(stringResource(label)) },
+        isError = error != null,
+        supportingText = error?.let { { Text(stringResource(it.message()), Modifier.testTag(PlanBuilderTags.error(tag))) } },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = modifier,
+        modifier = modifier.testTag(tag),
     )
+}
+
+object PlanBuilderTags {
+    const val PREVIEW = "preview_custom"
+    fun field(day: DayOfWeek, index: Int, f: ExerciseField) = "custom_${day.name.lowercase()}_${index}_${f.name.lowercase()}"
+    fun error(fieldTag: String) = "${fieldTag}_error"
 }
