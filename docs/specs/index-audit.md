@@ -13,7 +13,7 @@ The seeded rows are deleted afterwards.
 | XP ledger | first page `ORDER BY created_at DESC, id DESC` | was `(user_id, created_at)` + sort; now `(user_id, created_at, id)` | sort removed |
 | XP balance / achievements sum | `sum(amount)` per user | was a bitmap heap scan (one heap page per row, 400 for 400 rows); now an index-only scan (~10 pages) | **changed** |
 | Target history | newest, resolver, list | `profile_target_history_pkey (user_id, effective_from)` | fine; no change |
-| Strength points / list / records | sets JOIN completed sessions | `workout_sessions_user_id_status_completed_at_idx` or `workout_sessions_user_id_completed_at_idx` → `exercise_set_logs_session_id_idx` | fine (~1 ms for 150 sessions); no change |
+| Strength points / list / records | sets JOIN completed sessions | `workout_sessions_user_id_status_completed_at_idx` (the `(user_id, completed_at)` alternative was dropped in the [index review](../perf/index-review.md)) → `exercise_set_logs_session_id_idx` | fine (~1 ms for 150 sessions); no change |
 | Session lookups by (user, status) | active (`in_progress`) session; completed sessions for badges, summary/streak ranges, history pages | `workout_sessions_user_id_status_completed_at_idx` | fine (0.01–0.25 ms); duplicate prefix index dropped |
 
 ## Change
