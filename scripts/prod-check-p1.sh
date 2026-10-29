@@ -56,21 +56,22 @@ PY
   # 1) A's register times out (account created server-side): login + delete, run stops, 0 left.
   python3 "$STUB" "$PORT" 1 & SP=$!; sleep 1
   API="$LOCAL" P1_SELFTEST=1 REGISTER_MAX_TIME=2 bash "$0" > /tmp/p1-selftest-1.log 2>&1
-  n="$(left)"; grep -q "register timed out" /tmp/p1-selftest-1.log && [ "$n" = 0 ] && echo "SELFTEST register-timeout: PASS (0 accounts left)" || { echo "SELFTEST register-timeout: FAIL ($n left)"; rc=1; }
+  n="$(left)"; grep -q "register timed out" /tmp/p1-selftest-1.log && [ "$n" = 0 ] && echo "SELFTEST 1 register-timeout: PASS (0 accounts left)" || { echo "SELFTEST 1 register-timeout: FAIL ($n left)"; rc=1; }
   kill "$SP"; wait "$SP" 2>/dev/null
-  # 2) TERM and INT after both signups: both accounts deleted.
+  # 2) TERM and 3) INT after both signups: both accounts deleted.
   for sig in TERM INT; do
+    [ "$sig" = TERM ] && n_sig=2 || n_sig=3
     python3 "$STUB" "$PORT" 0 & SP=$!; sleep 1
     # Background jobs of a script start with SIGINT ignored (and an ignored signal can't be trapped),
     # so restore the default disposition before exec to test INT the way a terminal Ctrl-C sends it.
     API="$LOCAL" P1_SELFTEST=1 P1_SELFTEST_HOLD=1 python3 -c 'import os,signal,sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp("bash", ["bash", sys.argv[1]])' "$0" > "/tmp/p1-selftest-$sig.log" 2>&1 & RP=$!
     for _ in $(seq 50); do grep -q HOLDING "/tmp/p1-selftest-$sig.log" && break; sleep 0.2; done
     kill -s "$sig" "$RP"; wait "$RP" 2>/dev/null
-    n="$(left)"; [ "$(grep -c 'deleted (login 401)' "/tmp/p1-selftest-$sig.log")" = 2 ] && [ "$n" = 0 ] && echo "SELFTEST $sig cleanup: PASS (0 accounts left)" || { echo "SELFTEST $sig cleanup: FAIL ($n left)"; rc=1; }
+    n="$(left)"; [ "$(grep -c 'deleted (login 401)' "/tmp/p1-selftest-$sig.log")" = 2 ] && [ "$n" = 0 ] && echo "SELFTEST $n_sig $sig cleanup: PASS (0 accounts left)" || { echo "SELFTEST $n_sig $sig cleanup: FAIL ($n left)"; rc=1; }
     kill "$SP"; wait "$SP" 2>/dev/null
   done
-  # 3) Stale state: one leftover account that still exists, one already gone. --cleanup-stale
-  #    deletes the first (login then 401), removes both files; a normal run sweeps at start too.
+  # 4) Stale state, --cleanup-stale: one leftover account that still exists, one already gone;
+  #    deletes the first (login then 401) and removes both files.
   python3 "$STUB" "$PORT" 0 & SP=$!; sleep 1
   mk() { local f; f="$(mktemp -p "$P1_STATE_DIR" p1.state.XXXXXXXX)"; printf '%s\n%s\n' "$1" "$2" > "$f"; }
   curl -s -o /dev/null -X POST "$LOCAL/auth/register" -d '{"email":"stale1@example.invalid","password":"pw-stale-1"}'
@@ -78,16 +79,17 @@ PY
   API="$LOCAL" P1_SELFTEST=1 bash "$0" --cleanup-stale > /tmp/p1-selftest-stale.log 2>&1; s1=$?
   n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
   [ "$s1" = 0 ] && [ "$n" = 0 ] && [ "$f" = 0 ] && grep -q "account deleted (login 401)" /tmp/p1-selftest-stale.log && grep -q "already gone (login 401)" /tmp/p1-selftest-stale.log \
-    && echo "SELFTEST stale-state --cleanup-stale: PASS (1 deleted, 1 already gone, 0 files left)" || { echo "SELFTEST stale-state --cleanup-stale: FAIL (rc=$s1, $n accounts, $f files left)"; rc=1; }
+    && echo "SELFTEST 4 stale-state --cleanup-stale: PASS (1 deleted, 1 already gone, 0 files left)" || { echo "SELFTEST 4 stale-state --cleanup-stale: FAIL (rc=$s1, $n accounts, $f files left)"; rc=1; }
+  # 5) Stale state at run start: a normal run sweeps a leftover account before signing up.
   curl -s -o /dev/null -X POST "$LOCAL/auth/register" -d '{"email":"stale2@example.invalid","password":"pw-stale-2"}'; mk stale2@example.invalid pw-stale-2
   API="$LOCAL" P1_SELFTEST=1 P1_SELFTEST_HOLD=1 bash "$0" > /tmp/p1-selftest-stale2.log 2>&1 & RP=$!
   for _ in $(seq 50); do grep -q HOLDING /tmp/p1-selftest-stale2.log && break; sleep 0.2; done
   kill -s TERM "$RP"; wait "$RP" 2>/dev/null
   n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
   [ "$n" = 0 ] && [ "$f" = 0 ] && grep -q "STALE .*account deleted (login 401)" /tmp/p1-selftest-stale2.log \
-    && echo "SELFTEST stale-state at run start: PASS (swept before signup, 0 left)" || { echo "SELFTEST stale-state at run start: FAIL ($n accounts, $f files left)"; rc=1; }
+    && echo "SELFTEST 5 stale-state at run start: PASS (swept before signup, 0 left)" || { echo "SELFTEST 5 stale-state at run start: FAIL ($n accounts, $f files left)"; rc=1; }
   kill "$SP"; wait "$SP" 2>/dev/null
-  # 5) Concurrent runs: a second run on the same state dir exits 3 with a clear message, without
+  # 6) Concurrent runs: a second run on the same state dir exits 3 with a clear message, without
   #    sweeping the first run's live accounts (both still exist, both files kept); the first then cleans up.
   python3 "$STUB" "$PORT" 0 & SP=$!; sleep 1
   API="$LOCAL" P1_SELFTEST=1 P1_SELFTEST_HOLD=1 bash "$0" > /tmp/p1-selftest-lock1.log 2>&1 & RP=$!
@@ -99,12 +101,12 @@ PY
   n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
   [ "$s2" = 3 ] && [ "$s3" = 3 ] && grep -q "another prod-check run holds" /tmp/p1-selftest-lock2.log && grep -q "another prod-check run holds" /tmp/p1-selftest-lock3.log \
     && ! grep -q STALE /tmp/p1-selftest-lock2.log /tmp/p1-selftest-lock3.log && [ "$n2" = 2 ] && [ "$f2" = 2 ] && [ "$n" = 0 ] && [ "$f" = 0 ] \
-    && echo "SELFTEST concurrent-run lock: PASS (2nd run and --cleanup-stale exit 3, first run's 2 accounts untouched, then 0 left)" \
-    || { echo "SELFTEST concurrent-run lock: FAIL (rc=$s2/$s3, during: $n2 accounts $f2 files, after: $n accounts $f files)"; rc=1; }
+    && echo "SELFTEST 6 concurrent-run lock: PASS (2nd run and --cleanup-stale exit 3, first run's 2 accounts untouched, then 0 left)" \
+    || { echo "SELFTEST 6 concurrent-run lock: FAIL (rc=$s2/$s3, during: $n2 accounts $f2 files, after: $n accounts $f files)"; rc=1; }
   kill "$SP"; wait "$SP" 2>/dev/null
-  # 4) Allowlist: any other host is refused before any request.
+  # 7) Allowlist: any other host is refused before any request.
   API="https://example.com/api/v1" bash "$0" > /tmp/p1-selftest-host.log 2>&1; h=$?
-  [ "$h" = 2 ] && grep -q "refusing" /tmp/p1-selftest-host.log && echo "SELFTEST allowlist: PASS" || { echo "SELFTEST allowlist: FAIL"; rc=1; }
+  [ "$h" = 2 ] && grep -q "refusing" /tmp/p1-selftest-host.log && echo "SELFTEST 7 allowlist: PASS" || { echo "SELFTEST 7 allowlist: FAIL"; rc=1; }
   rm -rf "$STUB" "$P1_STATE_DIR"; exit $rc
 fi
 API="${API:-$ALLOWED_API}"; API="${API%/}"
