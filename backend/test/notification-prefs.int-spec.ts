@@ -152,6 +152,12 @@ describeDb('notification preferences (HTTP + Postgres)', () => {
     expect(await rowOf(u.id)).toEqual(before);
   });
 
+  it('quietHours start == end (not expressible in OpenAPI) is rejected with 400 VALIDATION_FAILED on quietHours', async () => {
+    const u = await signUp();
+    const r = await patch(u.token, { quietHours: { enabled: true, start: '06:30', end: '06:30' } }).expect(400);
+    expect(r.body).toEqual(expect.objectContaining({ code: 'VALIDATION_FAILED', details: { fields: { quietHours: 'start and end must differ' } } }));
+  });
+
   it('request bodies that pass are valid NotificationPreferencesUpdate; rejected unknown types are not', () => {
     valid(validUpdate, { enabled: false, types: { water_reminder: true }, quietHours: { start: '23:30' } });
     expect(validUpdate({ types: { foo: true } })).toBe(false);

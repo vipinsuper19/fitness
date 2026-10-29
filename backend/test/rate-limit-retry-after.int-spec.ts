@@ -10,6 +10,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 
 import { THROTTLES, THROTTLE_NAMES, type ThrottleName } from '../src/common/rate-limit';
+import { RATE_LIMITED_MESSAGE } from '../src/common/http-exception.filter';
 import { createTestApp } from './helpers';
 
 const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
@@ -37,6 +38,10 @@ function expectRateLimited(res: request.Response) {
   expect(res.status).toBe(429);
   expect(res.headers['retry-after']).toMatch(/^[1-9][0-9]*$/);
   expect(res.body).toEqual(expect.objectContaining({ code: 'RATE_LIMITED', requestId: expect.any(String) }));
+  // Standard Error: clean message, details.retryAfterSeconds equal to the Retry-After header, nothing else.
+  expect(Object.keys(res.body).sort()).toEqual(['code', 'details', 'message', 'requestId']);
+  expect(res.body.details).toEqual({ retryAfterSeconds: Number(res.headers['retry-after']) });
+  expect(res.body.message).not.toMatch(/Throttler|Exception/i);
   // Documented on components/responses/RateLimited: X-Request-Id is set on 429s too and equals the body's requestId.
   expect(res.headers['x-request-id']).toMatch(/^[A-Za-z0-9._-]{8,64}$/);
   expect(res.headers['x-request-id']).toBe(res.body.requestId);
@@ -66,6 +71,7 @@ describeDb('every 429 carries Retry-After', () => {
       expect(first.status).not.toBe(429);
       const second = await call();
       expectRateLimited(second);
+      expect(second.body.message).toBe(RATE_LIMITED_MESSAGE);
       // The longest window is the hour-long export limit; nothing should exceed its TTL.
       expect(Number(second.headers['retry-after'])).toBeLessThanOrEqual(THROTTLES[name].ttl / 1000);
     } finally {

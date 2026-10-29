@@ -1,7 +1,11 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import type { Response } from 'express';
 
 import type { RequestWithId } from './request-id';
+
+/** Client-facing message for the general throttler's 429. */
+export const RATE_LIMITED_MESSAGE = 'Too many requests. Try again later.';
 
 const DEFAULT_CODES: Record<number, string> = {
   400: 'VALIDATION_FAILED',
@@ -70,7 +74,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const name = exception instanceof Error ? exception.name : typeof exception;
       this.logger.error(`unhandled error requestId=${requestId} type=${name}`);
     }
-    if (status === 429) res.setHeader('Retry-After', String(retryAfterSeconds(res, body.details?.retryAfterSeconds)));
+    if (status === 429) {
+      // Every 429 is the standard RATE_LIMITED Error with details.retryAfterSeconds equal to Retry-After. The general
+      // throttler's own text ("ThrottlerException: Too Many Requests") never reaches clients.
+      const seconds = retryAfterSeconds(res, body.details?.retryAfterSeconds);
+      res.setHeader('Retry-After', String(seconds));
+      if (exception instanceof ThrottlerException) body.message = RATE_LIMITED_MESSAGE;
+      body = { ...body, code: 'RATE_LIMITED', details: { ...body.details, retryAfterSeconds: seconds } };
+    }
     res.status(status).json(body);
   }
 }

@@ -44,7 +44,7 @@ describeDb('PATCH /workout-plans/{planId}: optional exercise fields', () => {
       exerciseId: ex, order: 0, sets: 2, repsMin: null, repsMax: null, targetWeightKg: null, durationSeconds: null, restSeconds: 90, notes: null,
     });
 
-    // Explicit nulls behave the same (restSeconds: null is accepted too, although the contract types it as integer).
+    // Explicit nulls behave the same (restSeconds: null is accepted; the contract types it as nullable).
     const nulls = (await http().patch(`/api/v1/workout-plans/${plan.id}`).set(auth).set('Idempotency-Key', randomUUID())
       .send({ ...draft([{ ...full, repsMin: null, repsMax: null, targetWeightKg: null, restSeconds: null, notes: null }]), baseVersion: 2 }).expect(200)).body;
     expect(nulls.workouts[0].exercises[0]).toMatchObject({ repsMin: null, repsMax: null, targetWeightKg: null, restSeconds: 90, notes: null });
