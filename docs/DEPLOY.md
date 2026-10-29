@@ -51,8 +51,12 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
      3. Run the reconcile once: Actions → **targets-backfill** → Run workflow (same `FITNESS_DATABASE_URL` secret as db-seed), or locally `cd backend && DATABASE_URL=... npm run targets:backfill`. It catches target changes the old instance accepted during the deploy window. Re-running is a no-op.
      - **After any redeploy that follows a rollback, run it again** (the old app doesn't write history).
    - **Badges:** `DATABASE_URL=... npm run badges:backfill`, locally.
+7. **Purge expired rows (manual; dry run by default).** Actions → **purge-expired** → Run workflow (same `FITNESS_DATABASE_URL` secret), or locally `cd backend && DATABASE_URL=... npm run purge:expired` (add `-- --execute` to delete).
+   - Deletes `idempotency_keys` past their 24 h TTL, and `refresh_tokens` revoked or expired more than 7 days ago **only in families with no live token**. A revoked token in a family that still has a live one is kept, because presenting it is how token reuse (theft) is detected and the family revoked.
+   - Without `execute` (the default) it only prints per-table counts and cutoffs. It never prints tokens, hashes or the URL. Deletes run in batches of 1000, and it is idempotent.
+   - No schedule; it never runs automatically. **Running it with `execute: true` against production needs Vipin's OK.** Do a dry run first.
 
-7. **Push notifications (planned, [notification-sending.md](specs/notification-sending.md); not implemented yet).** Secrets go in Render env vars only, never in the repo or logs:
+8. **Push notifications (planned, [notification-sending.md](specs/notification-sending.md); not implemented yet).** Secrets go in Render env vars only, never in the repo or logs:
    | Key | Required | Value |
    |---|---|---|
    | `NOTIFICATIONS_SENDING_ENABLED` | optional | `false` (default) until Vipin turns sending on |

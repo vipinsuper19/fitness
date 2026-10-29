@@ -20,6 +20,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "badges:backfill": "tsx src/achievements/backfill.ts",
     "targets:backfill": "tsx src/targets/backfill.ts",
+    "purge:expired": "tsx src/maintenance/purge-expired.ts",
     "migrate:check": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code"
   },
   "dependencies": {
