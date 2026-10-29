@@ -10,6 +10,7 @@ import { IdempotentWriteService } from '../idempotency/idempotent-write.service'
 import type { WorkoutPlanDraft } from './generator';
 import { PlanActivateDto, PlanGenerateDto, PlanListQuery, PlanVersionQuery, WorkoutPlanDraftDto, WorkoutPlanUpdateDto } from './plans.dto';
 import { PlansService, PlanSummary, PlanView } from './plans.service';
+import { ProgressionService, ProgressionSuggestions } from './progression.service';
 
 @ApiTags('workout-plans')
 @ApiBearerAuth()
@@ -18,6 +19,7 @@ export class PlansController {
   constructor(
     private readonly plans: PlansService,
     private readonly idem: IdempotentWriteService,
+    private readonly progression: ProgressionService,
   ) {}
 
   /** Read-only (never persists), so no Idempotency-Key; throttled per IP like auth. */
@@ -59,6 +61,12 @@ export class PlansController {
   @Get(':planId')
   get(@CurrentUserId() userId: string, @Param('planId', IdParamPipe) id: string, @Query() q: PlanVersionQuery): Promise<PlanView> {
     return this.plans.get(userId, id, q.version);
+  }
+
+  /** Read-only, rule-based progression suggestions (docs/specs/adaptive-progression.md). */
+  @Get(':planId/progression-suggestions')
+  progressionSuggestions(@CurrentUserId() userId: string, @Param('planId', IdParamPipe) id: string): Promise<ProgressionSuggestions> {
+    return this.progression.suggestions(userId, id);
   }
 
   @Patch(':planId')
