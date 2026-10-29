@@ -2057,7 +2057,7 @@ components:
         onboardingCompleted: { type: boolean }
     DataExport:
       type: object
-      required: [exportedAt, user]
+      required: [exportedAt, user, targetHistory]
       properties:
         exportedAt: { type: string, format: date-time }
         user: { $ref: '#/components/schemas/User' }
@@ -2075,7 +2075,7 @@ components:
         xpLedger: { type: array, items: { $ref: '#/components/schemas/XpTransaction' } }
         badges: { type: array, items: { $ref: '#/components/schemas/ExportedBadge' }, description: Earned badges }
         challenges: { type: array, items: { $ref: '#/components/schemas/Challenge' }, description: 'All challenges, any status' }
-        targetHistory: { type: array, items: { $ref: '#/components/schemas/TargetHistoryEntry' }, description: 'Dated daily-target history, newest first. Always present once implemented.' }
+        targetHistory: { type: array, items: { $ref: '#/components/schemas/TargetHistoryEntry' }, description: 'Dated daily-target history, newest first.' }
         truncated:
           type: array
           items: { type: string }
@@ -2645,7 +2645,7 @@ components:
         waterPct: { type: [number, 'null'], minimum: 0, description: 'avgWaterMlPerLoggedDay / targets.waterMl × 100' }
     NutritionSummaryPoint:
       type: object
-      required: [period, daysInPeriod, daysLogged, totals, avgPerLoggedDay, waterMl, waterDaysLogged, avgWaterMlPerLoggedDay, adherence, entryCount, entriesMissing]
+      required: [period, daysInPeriod, daysLogged, totals, avgPerLoggedDay, waterMl, waterDaysLogged, avgWaterMlPerLoggedDay, adherence, entryCount, entriesMissing, targets, targetsChanged]
       properties:
         period: { type: string, format: date, description: 'ISO date (YYYY-MM-DD): first date of the period, clipped to `from`' }
         daysInPeriod: { type: integer, minimum: 1, description: Days of the period inside from..to }
@@ -2670,11 +2670,11 @@ components:
             - $ref: '#/components/schemas/NutritionAdherence'
         entryCount: { type: integer, minimum: 0, description: Food log entries counted in `totals` }
         targets:
-          description: 'Targets in effect on the last date of the period (docs/specs/target-history.md); null when none are set that day. Always present once implemented.'
+          description: 'Targets in effect on the last date of the period (docs/specs/target-history.md); null when none are set that day.'
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/NutritionTargets'
-        targetsChanged: { type: boolean, description: 'True when the target in effect (any of the five) differs between any two calendar dates in the period (bucket); false for a single day. Always present once implemented.' }
+        targetsChanged: { type: boolean, description: 'True when the target in effect (any of the five) differs between any two calendar dates in the period (bucket); false for a single day.' }
         entriesMissing:
           type: object
           description: As in `DailyNutrition`, over the period's entries

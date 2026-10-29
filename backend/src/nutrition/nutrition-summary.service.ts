@@ -5,6 +5,7 @@ import { isoDate, parseIsoDate } from '../common/decimal';
 import { dateRange, daySpan } from '../common/time';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NO_TARGETS, isEmpty, loadResolver, sameTargets, type TargetSnapshot } from '../targets/target-history';
 import type { NutritionSummaryQuery, SummaryBucket } from './nutrition.dto';
 
 /**
@@ -37,6 +38,8 @@ export interface NutritionSummaryPoint {
   adherence: NutritionAdherence | null;
   entryCount: number;
   entriesMissing: { fiberG: number; sugarG: number; sodiumMg: number };
+  targets: NutritionTargets | null;
+  targetsChanged: boolean;
 }
 export interface NutritionSummary {
   from: string; to: string; bucket: SummaryBucket; timezone: string;
@@ -56,7 +59,17 @@ interface Acc {
   known: Record<(typeof OPTIONAL)[number], number>;
   water: number;
   waterDays: number;
+  /** Per value: Σ intake and Σ own target over counted days (logged days whose own target is set). */
+  counted: Record<TargetKey, { intake: Dec; target: number; days: number }>;
+  lastTargets: TargetSnapshot;
+  firstTargets: TargetSnapshot | null;
+  targetsChanged: boolean;
 }
+
+type TargetKey = 'kcal' | 'proteinG' | 'carbsG' | 'fatG' | 'waterMl';
+const FOOD_TARGETS: Array<[TargetKey, (typeof MACROS)[number]]> = [['kcal', 'energyKcal'], ['proteinG', 'proteinG'], ['carbsG', 'carbsG'], ['fatG', 'fatG']];
+const toTargets = (s: TargetSnapshot): NutritionTargets | null =>
+  isEmpty(s) ? null : { kcal: s.kcal, proteinG: s.proteinG, carbsG: s.carbsG, fatG: s.fatG, waterMl: s.waterMl };
 
 const invalid = (fields: Record<string, string>) =>
   new ApiError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED', 'Some fields are invalid.', { fields });
@@ -76,8 +89,10 @@ export function periodStart(date: string, bucket: SummaryBucket, from: string): 
 
 /** A target of 0 (or none) counts as no target. */
 const target = (v: number | null | undefined): number | null => (v == null || v <= 0 ? null : v);
+const c0 = () => ({ intake: new D(0), target: 0, days: 0 });
 const r1 = (v: Dec) => v.toDecimalPlaces(1, HALF_UP).toNumber();
-const pct = (avg: Dec | null, t: number | null) => (avg == null || t == null ? null : r1(avg.div(t).times(100)));
+/** Ratio of sums over the counted days (docs/specs/target-history.md); null when no day counted. */
+const ratioPct = (c: { intake: Dec; target: number; days: number }) => (c.days === 0 || c.target <= 0 ? null : r1(c.intake.div(c.target).times(100)));
 
 @Injectable()
 export class NutritionSummaryService {
@@ -99,19 +114,11 @@ export class NutritionSummaryService {
         _count: { _all: true, fiberG: true, sugarG: true, sodiumMg: true },
       }),
       this.prisma.waterLog.groupBy({ by: ['date'], where: { userId, date: range }, _sum: { amountMl: true } }),
-      this.prisma.userProfile.findUnique({ where: { userId }, select: { timezone: true, dailyCalorieTargetKcal: true, dailyWaterTargetMl: true, dailyProteinTargetG: true, dailyCarbsTargetG: true, dailyFatTargetG: true } }),
+      this.prisma.userProfile.findUnique({ where: { userId }, select: { timezone: true } }),
     ]);
-
-    const kcal = target(profile?.dailyCalorieTargetKcal);
-    const waterTarget = target(profile?.dailyWaterTargetMl);
-    // Current targets apply to every period (no target history). Each macro is independent.
-    const proteinT = target(profile?.dailyProteinTargetG);
-    const carbsT = target(profile?.dailyCarbsTargetG);
-    const fatT = target(profile?.dailyFatTargetG);
-    const targets: NutritionTargets | null =
-      [kcal, waterTarget, proteinT, carbsT, fatT].every((t) => t == null)
-        ? null
-        : { kcal, proteinG: proteinT, carbsG: carbsT, fatG: fatT, waterMl: waterTarget };
+    // Each day uses the targets in effect that day (dated history); none before the first row.
+    const targetsOn = await loadResolver(this.prisma, userId, q.to);
+    const targets = toTargets(targetsOn(q.to));
 
     const accs = new Map<string, Acc>();
     const byDay = new Map<string, Acc>();
@@ -124,10 +131,16 @@ export class NutritionSummaryService {
           period: key, days: 0, foodDays: 0, entries: 0, water: 0, waterDays: 0,
           sums: { energyKcal: zero(), proteinG: zero(), carbsG: zero(), fatG: zero(), fiberG: zero(), sugarG: zero(), sodiumMg: zero() },
           known: { fiberG: 0, sugarG: 0, sodiumMg: 0 },
+          counted: { kcal: c0(), proteinG: c0(), carbsG: c0(), fatG: c0(), waterMl: c0() },
+          lastTargets: NO_TARGETS, firstTargets: null, targetsChanged: false,
         };
         accs.set(key, a);
       }
       a.days += 1;
+      const on = targetsOn(day);
+      if (a.firstTargets && !sameTargets(a.lastTargets, on)) a.targetsChanged = true;
+      a.firstTargets ??= on;
+      a.lastTargets = on;
       byDay.set(day, a);
     }
     for (const f of food) {
@@ -140,6 +153,15 @@ export class NutritionSummaryService {
         if (v != null) a.sums[k] = a.sums[k].plus(v);
       }
       for (const k of OPTIONAL) a.known[k] += f._count[k];
+      const on = targetsOn(isoDate(f.date)!);
+      for (const [tk, nk] of FOOD_TARGETS) {
+        const tv = target(on[tk]);
+        if (tv == null) continue;
+        const c = a.counted[tk];
+        c.intake = c.intake.plus(f._sum[nk] ?? 0);
+        c.target += tv;
+        c.days += 1;
+      }
     }
     for (const w of water) {
       const a = byDay.get(isoDate(w.date)!);
@@ -147,6 +169,13 @@ export class NutritionSummaryService {
       if (!a || ml <= 0) continue;
       a.water += ml;
       a.waterDays += 1;
+      const wt = target(targetsOn(isoDate(w.date)!).waterMl);
+      if (wt != null) {
+        const c = a.counted.waterMl;
+        c.intake = c.intake.plus(ml);
+        c.target += wt;
+        c.days += 1;
+      }
     }
 
     const points = [...accs.values()].map((a): NutritionSummaryPoint => {
@@ -156,15 +185,14 @@ export class NutritionSummaryService {
         energyKcal: v(a.sums.energyKcal), proteinG: v(a.sums.proteinG), carbsG: v(a.sums.carbsG), fatG: v(a.sums.fatG),
         fiberG: opt('fiberG', v), sugarG: opt('sugarG', v), sodiumMg: opt('sodiumMg', v),
       });
-      const avgKcal = hasFood ? a.sums.energyKcal.div(a.foodDays) : null;
       const avgWater = a.waterDays ? new D(a.water).div(a.waterDays) : null;
+      // Σ intake ÷ Σ each counted day's own target × 100; with a constant target this is avg ÷ target.
       const adherence: NutritionAdherence = {
-        kcalPct: pct(avgKcal, kcal),
-        // From the unrounded per-logged-day average, HALF_UP to one decimal.
-        proteinPct: pct(hasFood ? a.sums.proteinG.div(a.foodDays) : null, proteinT),
-        carbsPct: pct(hasFood ? a.sums.carbsG.div(a.foodDays) : null, carbsT),
-        fatPct: pct(hasFood ? a.sums.fatG.div(a.foodDays) : null, fatT),
-        waterPct: pct(avgWater, waterTarget),
+        kcalPct: ratioPct(a.counted.kcal),
+        proteinPct: ratioPct(a.counted.proteinG),
+        carbsPct: ratioPct(a.counted.carbsG),
+        fatPct: ratioPct(a.counted.fatG),
+        waterPct: ratioPct(a.counted.waterMl),
       };
       const anyPct = Object.values(adherence).some((v) => v != null);
       return {
@@ -179,6 +207,8 @@ export class NutritionSummaryService {
         adherence: anyPct ? adherence : null,
         entryCount: a.entries,
         entriesMissing: { fiberG: a.entries - a.known.fiberG, sugarG: a.entries - a.known.sugarG, sodiumMg: a.entries - a.known.sodiumMg },
+        targets: toTargets(a.lastTargets),
+        targetsChanged: a.targetsChanged,
       };
     });
 

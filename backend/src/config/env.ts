@@ -22,6 +22,8 @@ export const envSchema = z.object({
   AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
   /** GET /me/export requests allowed per user per hour. */
   EXPORT_RATE_LIMIT_PER_HOUR: z.coerce.number().int().positive().default(5),
+  /** GET /me/target-history requests allowed per user per minute. */
+  TARGET_HISTORY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   /** GET /me/export caps (newest rows kept; cut collections are listed in `truncated`). */
   EXPORT_MAX_ROWS: z.coerce.number().int().positive().max(50_000).default(5000),
   EXPORT_MAX_SESSIONS: z.coerce.number().int().positive().max(50_000).default(2000),

@@ -9,6 +9,7 @@ import { toGoalView } from '../goals/goals.service';
 import { toFoodView, toLogView, toWaterView, withFood } from '../nutrition/nutrition.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toProfileView } from '../profile/profile.service';
+import { toEntry } from '../targets/target-history';
 import { toMeasurementView } from '../progress/progress.service';
 import { toPlanView } from '../workout-plans/plans.service';
 import { toSessionView } from '../workout-sessions/sessions.service';
@@ -109,6 +110,7 @@ export class ExportService {
     const measurements = cap('bodyMeasurements', await db.bodyMeasurement.findMany({ where: { userId }, orderBy: [{ date: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const xp = cap('xpLedger', await db.xPTransaction.findMany({ where: { userId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const badges = cap('badges', await db.userBadge.findMany({ where: { userId }, orderBy: [{ earnedAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
+    const history = cap('targetHistory', await db.profileTargetHistory.findMany({ where: { userId }, orderBy: { effectiveFrom: 'desc' }, take: rows + 1 }), rows);
     const challenges = cap('challenges', await db.userChallenge.findMany({ where: { userId }, orderBy: [{ joinedAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
 
     return {
@@ -127,6 +129,8 @@ export class ExportService {
       xpLedger: xp.map(toXpView),
       badges: badges.map(toExportedBadge),
       challenges: challenges.map(toChallengeView),
+      // Dated daily-target history, newest first (docs/specs/target-history.md).
+      targetHistory: history.map(toEntry),
       truncated,
     };
   }

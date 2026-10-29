@@ -10,7 +10,7 @@ import request from 'supertest';
 import { seed } from '../prisma/seed';
 import { seedId } from '../prisma/seed-data/ids';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createTestApp } from './helpers';
+import { backdateTargets, createTestApp } from './helpers';
 
 const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
 const describeDb = run ? describe : describe.skip;
@@ -309,6 +309,8 @@ describeDb('T14: nutrition (HTTP + Postgres)', () => {
       expect(empty).toMatchObject({ date: DAY, waterMl: 0, calorieTargetKcal: null, waterTargetMl: null, totals: { energyKcal: 0, fiberG: null } });
 
       await http().put('/api/v1/me/profile').set('Authorization', `Bearer ${t}`).send({ dailyCalorieTargetKcal: 1800, dailyWaterTargetMl: 2500 }).expect(200);
+      // Targets are dated "today"; DAY is earlier, so date them as set long ago.
+      await backdateTargets(prisma, (await api(t).get('/api/v1/me/profile').expect(200)).body.userId);
       await api(t).post('/api/v1/food-logs').send({ foodId: ROTI, date: DAY, mealType: 'lunch', servings: 2 }).expect(201);
       await api(t).post('/api/v1/food-logs').send({ foodId: ROTI, date: DAY, mealType: 'dinner', servings: 1, nutrientsOverride: { energyKcal: 150, proteinG: 4, carbsG: 22, fatG: 5 } }).expect(201);
       await api(t).post('/api/v1/food-logs').send({ foodId: ROTI, date: '2026-10-21', mealType: 'lunch', servings: 5 }).expect(201);

@@ -1,0 +1,42 @@
+name: targets-backfill
+
+# Manually reconciles the dated target history (docs/specs/target-history.md) in the database
+# behind secrets.FITNESS_DATABASE_URL: `npm run targets:backfill`. Idempotent (re-running writes
+# nothing). Run once after the target-history deploy is live (post-deploy-smoke green), and again
+# after any redeploy that follows a rollback. Never runs automatically. The URL is never printed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: targets-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: ${{ secrets.FITNESS_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.FITNESS_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Check secret
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::Repository secret FITNESS_DATABASE_URL is not set."; exit 1; fi
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+      - name: Reconcile target history
+        run: npm run targets:backfill 2>&1 | sed -E 's#postgres(ql)?://[^[:space:]]*#[REDACTED]#g'; exit "${PIPESTATUS[0]}"
+        shell: bash
