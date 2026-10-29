@@ -37,7 +37,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,7 +49,6 @@ import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 
 /** Strength progress (#114): Progress → Strength tab, list and exercise detail, through the real MainActivity. */
-@Ignore("Pending #114")
 @HiltAndroidTest
 @RunWith(RobolectricTestRunner::class)
 @Config(application = HiltTestApplication::class)
@@ -195,6 +193,8 @@ class StrengthUiTest {
         click(StrengthTags.row("bp"))
         until { strength.detailCalls.size == 3 }
         assertTrue(strength.detailCalls.last().startsWith("bp:"))
+        // The new exercise opens on Week, not the Month picked before Back.
+        assertEquals("week", lastDetail().third)
         waitTag(StrengthTags.PR)
     }
 
