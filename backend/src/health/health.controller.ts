@@ -75,7 +75,8 @@ export class HealthController {
   }
 }
 
-const FAILED = Symbol('failed');
+const FAILED: unique symbol = Symbol('failed');
+type Failed = typeof FAILED;
 
 /** Resolves to the value, or FAILED on any error or after DEEP_TIMEOUT_MS. Never rejects. */
 async function withTimeout<T>(p: PromiseLike<T>): Promise<T | typeof FAILED> {
@@ -84,7 +85,11 @@ async function withTimeout<T>(p: PromiseLike<T>): Promise<T | typeof FAILED> {
     timer = setTimeout(() => resolve(FAILED), DEEP_TIMEOUT_MS);
   });
   try {
-    return await Promise.race([Promise.resolve(p).then((v) => v, () => FAILED), timeout]);
+    const settled = Promise.resolve(p).then(
+      (v): T | Failed => v,
+      (): T | Failed => FAILED,
+    );
+    return await Promise.race<T | Failed>([settled, timeout]);
   } finally {
     clearTimeout(timer);
   }
