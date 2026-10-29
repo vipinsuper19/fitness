@@ -59,4 +59,24 @@
     <string name="macros_per_serving">Nutrients per serving</string>
     <string name="portion_grams">≈ %1$s</string>
     <string name="portion_total">Total</string>
+    <string name="summary_open">Weekly &amp; monthly summary</string>
+    <string name="summary_back">Back to diary</string>
+    <string name="summary_title">Nutrition summary</string>
+    <string name="summary_day">Day</string>
+    <string name="summary_week">Week</string>
+    <string name="summary_month">Month</string>
+    <string name="summary_week_of">Week of %1$s</string>
+    <string name="summary_days_logged">Food logged %1$d of %2$d days</string>
+    <string name="summary_water_days_logged">Water logged %1$d of %2$d days</string>
+    <string name="summary_avg_per_day">Average per logged day</string>
+    <string name="summary_avg_water">Water: %1$s per logged day</string>
+    <string name="summary_adherence">Of target</string>
+    <string name="summary_kcal_pct">Calories %1$s</string>
+    <string name="summary_protein_pct">Protein %1$s</string>
+    <string name="summary_carbs_pct">Carbs %1$s</string>
+    <string name="summary_fat_pct">Fat %1$s</string>
+    <string name="summary_water_pct">Water %1$s</string>
+    <string name="summary_nothing_logged">Nothing logged</string>
+    <string name="summary_offline">You\'re offline. Connect to see your summary.</string>
+    <string name="summary_failed">Couldn\'t load your summary.</string>
 </resources>
