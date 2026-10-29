@@ -125,4 +125,35 @@ class GoalsViewModelTest {
         val lb = validate(GoalForm(GoalType.MAINTAIN, target = "154.32"), UnitSystem.IMPERIAL, today).first!!
         assertEquals(70.0, lb.targetValue!!, 0.01)
     }
+
+    private val rateLimited = com.vipin.fitness.core.network.ApiResult.Failure(
+        com.vipin.fitness.core.network.ApiError.Http(429, "RATE_LIMITED", "x", null, retryAfterMs = 5_000),
+    )
+
+    private fun retryReusesKey(failure: com.vipin.fitness.core.network.ApiResult.Failure, op: String, act: (GoalsViewModel) -> Unit) {
+        goals.goals += Goal("g1", GoalType.WORKOUTS_PER_WEEK, GoalStatus.ACTIVE, 4.0, null, null)
+        val vm = vm()
+        goals.failNext = failure
+        act(vm)
+        assertTrue(vm.state.value.writeError != null)
+        act(vm) // retry succeeds
+        assertNull(vm.state.value.writeError)
+        val sent = goals.writes.filter { it.first == op }
+        assertEquals(2, sent.size)
+        assertEquals(sent[0].second, sent[1].second)
+        act(vm) // a settled action gets a fresh key next time
+        assertTrue(goals.writes.last().second != sent[0].second)
+    }
+
+    @Test fun statusChangeReusesItsKeyAfterRateLimit() =
+        retryReusesKey(rateLimited, "update:g1") { it.setStatus("g1", GoalStatus.ABANDONED) }
+
+    @Test fun statusChangeReusesItsKeyWhenOffline() =
+        retryReusesKey(FAKE_NETWORK_FAILURE, "update:g1") { it.setStatus("g1", GoalStatus.ABANDONED) }
+
+    @Test fun deleteReusesItsKeyAfterRateLimit() =
+        retryReusesKey(rateLimited, "delete:g1") { it.delete("g1") }
+
+    @Test fun deleteReusesItsKeyWhenOffline() =
+        retryReusesKey(FAKE_NETWORK_FAILURE, "delete:g1") { it.delete("g1") }
 }
