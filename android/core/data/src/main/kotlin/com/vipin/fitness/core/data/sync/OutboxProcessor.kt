@@ -235,7 +235,7 @@ class OutboxProcessor @Inject constructor(
     }
 
     companion object {
-        const val DEFAULT_RATE_LIMIT_WAIT_MS = 30_000L
+        const val DEFAULT_RATE_LIMIT_WAIT_MS = com.vipin.fitness.core.network.DEFAULT_RETRY_AFTER_MS
         const val MIN_RATE_LIMIT_WAIT_MS = 1_000L
         /** Cap so a bad header can't park the queue for days. */
         const val MAX_RATE_LIMIT_WAIT_MS = 60 * 60_000L

@@ -13,6 +13,20 @@ import type { Env } from './config/env';
 
 /** JSON bodies above this are rejected with 413 PAYLOAD_TOO_LARGE. */
 export const BODY_LIMIT = '100kb';
+/**
+ * Plan create and PATCH carry a whole plan: 7 workouts × 30 exercises with 500-character notes is about 145 KB,
+ * so `/api/v1/workout-plans` (and its sub-routes) get a larger cap. Everything else stays at BODY_LIMIT.
+ */
+export const PLAN_BODY_LIMIT = '256kb';
+const BODY_LIMIT_BYTES = 100 * 1024;
+const PLAN_ROUTE = /^\/api\/v1\/workout-plans(\/|\?|$)/;
+
+/** Rejects non-plan JSON bodies over BODY_LIMIT with the same 413 the parser gives (filter maps it). */
+function enforceBodyLimit(req: { originalUrl?: string; url?: string }, _res: unknown, buf: Buffer): void {
+  if (buf.length > BODY_LIMIT_BYTES && !PLAN_ROUTE.test(req.originalUrl ?? req.url ?? '')) {
+    throw Object.assign(new Error('request entity too large'), { status: 413, type: 'entity.too.large' });
+  }
+}
 
 /**
  * Shared by main.ts and tests. Create the app with `{ bodyParser: false }`
@@ -24,7 +38,8 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   app.use(requestIdMiddleware);
   if (env.REQUEST_LOG === 'on') app.use(requestLogMiddleware);
   app.use(helmet());
-  app.useBodyParser('json', { limit: BODY_LIMIT });
+  // The parser reads up to PLAN_BODY_LIMIT; enforceBodyLimit holds every other route to BODY_LIMIT.
+  app.useBodyParser('json', { limit: PLAN_BODY_LIMIT, verify: enforceBodyLimit });
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: false });
   app.useGlobalPipes(globalValidationPipe());
   app.useGlobalFilters(new HttpExceptionFilter());

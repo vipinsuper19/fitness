@@ -17,7 +17,7 @@ import com.vipin.fitness.core.network.model.ProgressionSuggestionDto
 import com.vipin.fitness.core.network.model.ProgressionSuggestionsDto
 import com.vipin.fitness.core.network.model.WorkoutPlanDto
 import com.vipin.fitness.core.network.model.WorkoutPlanUpdateDto
-import com.vipin.fitness.core.network.parseRetryAfter
+import com.vipin.fitness.core.network.retryAfterFor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -267,7 +267,7 @@ class DefaultProgressionRepository @Inject constructor(
             status == 409 && code == "PLAN_ARCHIVED" -> ApplyOutcome.PlanArchived
             status == 409 && code == "IDEMPOTENCY_KEY_REUSED" -> ApplyOutcome.KeyReused
             status == 409 && code == "IDEMPOTENCY_IN_PROGRESS" -> ApplyOutcome.InProgress
-            status == 429 -> ApplyOutcome.RateLimited(parseRetryAfter(response()?.headers()?.get("Retry-After"), clock.millis()))
+            status == 429 -> ApplyOutcome.RateLimited(retryAfterFor(429, response()?.headers()?.get("Retry-After"), clock.millis()))
             else -> ApplyOutcome.Failed(
                 ApiError.Http(status, code, dto?.message ?: message(), dto?.requestId ?: response()?.headers()?.get("X-Request-Id")),
             )

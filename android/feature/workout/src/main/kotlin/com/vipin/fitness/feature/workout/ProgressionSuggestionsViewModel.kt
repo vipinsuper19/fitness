@@ -11,6 +11,7 @@ import com.vipin.fitness.core.data.progression.ProgressionRepository
 import com.vipin.fitness.core.data.progression.SuggestionRow
 import com.vipin.fitness.core.data.workout.WorkoutRepository
 import com.vipin.fitness.core.network.ApiError
+import com.vipin.fitness.core.network.DEFAULT_RETRY_AFTER_MS
 import com.vipin.fitness.core.network.ApiResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -164,7 +165,7 @@ class ProgressionSuggestionsViewModel @Inject constructor(
                 // Same body may still succeed: keep the key so a retry replays it.
                 ApplyOutcome.InProgress -> _state.update { it.copy(status = ApplyStatus.InProgress) }
                 is ApplyOutcome.RateLimited -> {
-                    rateLimitedUntilMs = clock.millis() + (outcome.retryAfterMs ?: 0)
+                    rateLimitedUntilMs = clock.millis() + (outcome.retryAfterMs ?: DEFAULT_RETRY_AFTER_MS)
                     _state.update { it.copy(status = ApplyStatus.RateLimited(outcome.retryAfterMs)) }
                 }
                 ApplyOutcome.Offline -> _state.update { it.copy(status = ApplyStatus.Offline) }

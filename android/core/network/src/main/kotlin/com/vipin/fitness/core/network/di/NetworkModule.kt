@@ -61,11 +61,11 @@ object NetworkModule {
 
     @Provides @Singleton
     fun retrofit(@Named(BASE_URL) baseUrl: String, client: OkHttpClient, json: Json): Retrofit =
-        retrofit(baseUrl, client, json)
+        buildRetrofit(baseUrl, client, json)
 
     @Provides @Singleton
     fun refreshApi(@Named(BASE_URL) baseUrl: String, @Named("base") base: OkHttpClient, json: Json): RefreshApi =
-        retrofit(baseUrl, base, json).create(RefreshApi::class.java)
+        buildRetrofit(baseUrl, base, json).create(RefreshApi::class.java)
 
     @Provides @Singleton
     fun clock(): Clock = Clock.systemUTC()
@@ -93,7 +93,7 @@ fun fitnessJson(): Json = Json {
     encodeDefaults = false
 }
 
-fun retrofit(baseUrl: String, client: OkHttpClient, json: Json): Retrofit = Retrofit.Builder()
+fun buildRetrofit(baseUrl: String, client: OkHttpClient, json: Json): Retrofit = Retrofit.Builder()
     .baseUrl(baseUrl)
     .client(client)
     .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))

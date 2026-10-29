@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import com.vipin.fitness.MainActivity
@@ -15,7 +16,9 @@ import com.vipin.fitness.core.data.Field
 import com.vipin.fitness.core.data.MacroInput
 import com.vipin.fitness.core.data.Profile
 import com.vipin.fitness.core.data.workout.ActivePlan
+import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
+import com.vipin.fitness.feature.nutrition.MacroField
 import com.vipin.fitness.core.testing.FAKE_NETWORK_FAILURE
 import com.vipin.fitness.core.testing.FakeMacroSuggestionRepository
 import com.vipin.fitness.core.testing.FakeProfileFlagsCache
@@ -245,5 +248,78 @@ class MacroTargetsUiTest {
         open(); click(T.BACK)
         waitTag(T.OPEN)
         assertFalse(present(T.SCREEN))
+    }
+
+    // --- Manual P/C/F editing ---
+
+    private fun type(t: String, v: String) { waitTag(t); scrollTo(t); tag(t).performTextReplacement(v); compose.waitForIdle() }
+    private fun editing() { open(); waitTag(T.PROTEIN); click(T.EDIT); waitTag(T.EDITOR) }
+
+    @Test fun editShowsCurrentValuesAndTheFromTodayNote() {
+        editing()
+        assertTrue(showsIn(T.EDIT_PROTEIN, "90"))
+        assertTrue(showsIn(T.EDIT_FAT, "50"))
+        assertTrue(showsIn(T.EDIT_NOTE, "New targets apply from today onward"))
+        assertFalse(present(T.SUGGEST)) // one flow at a time
+    }
+
+    @Test fun saveSendsOnlyChangedFieldsAndShowsThem() {
+        editing()
+        type(T.EDIT_CARBS, "240"); type(T.EDIT_FAT, "0")
+        click(T.SAVE); waitTag(T.SAVED)
+        val (c, _) = profiles.updates.single()
+        assertEquals(Field.Unchanged, c.dailyProteinTargetG)
+        assertEquals(Field.Set(240), c.dailyCarbsTargetG)
+        assertEquals(Field.Clear, c.dailyFatTargetG)
+        assertEquals(Field.Unchanged, c.dailyCalorieTargetKcal)
+        assertFalse(present(T.EDITOR))
+        assertTrue(showsIn(T.CARBS, "240 g")); assertTrue(showsIn(T.FAT, "Not set"))
+        assertTrue(shows("They apply from today"))
+    }
+
+    @Test fun invalidGramsShowAnErrorAndDoNotSave() {
+        editing()
+        type(T.EDIT_PROTEIN, "12.5")
+        waitTag(T.editError(MacroField.PROTEIN))
+        assertTrue(shows("Enter a whole number of grams"))
+        type(T.EDIT_CARBS, "5000")
+        assertTrue(shows("At most 1,000 g"))
+        click(T.SAVE)
+        assertTrue(profiles.updates.isEmpty())
+    }
+
+    @Test fun offlineSaveThenRetryReusesTheKey() {
+        profiles.failUpdates = FAKE_NETWORK_FAILURE
+        editing(); type(T.EDIT_FAT, "55"); click(T.SAVE)
+        waitTag(T.SAVE_ERROR)
+        assertTrue(shows("You're offline"))
+        assertTrue(showsIn(T.PROTEIN, "90 g"))
+        profiles.failUpdates = null
+        click(T.SAVE); waitTag(T.SAVED)
+        assertEquals(2, profiles.updates.size)
+        assertEquals(profiles.updates[0].second, profiles.updates[1].second)
+    }
+
+    @Test fun rateLimitedSaveShowsTheWait() {
+        profiles.failUpdates = ApiResult.Failure(ApiError.Http(429, "RATE_LIMITED", "x", null, retryAfterMs = 30_000))
+        editing(); type(T.EDIT_FAT, "55"); click(T.SAVE)
+        waitTag(T.SAVE_ERROR)
+        assertTrue(shows("Too many changes. Try again in 30 s."))
+        assertTrue(present(T.EDITOR))
+    }
+
+    @Test fun rejectedSaveShowsInvalid() {
+        profiles.failUpdates = ApiResult.Failure(ApiError.Http(400, "VALIDATION_ERROR", "x", null))
+        editing(); type(T.EDIT_FAT, "55"); click(T.SAVE)
+        waitTag(T.SAVE_ERROR)
+        assertTrue(shows("didn't accept these values"))
+    }
+
+    @Test fun cancelLeavesTargetsUnchanged() {
+        editing(); type(T.EDIT_FAT, "55"); click(T.CANCEL_EDIT)
+        until { !present(T.EDITOR) }
+        assertTrue(showsIn(T.FAT, "50 g"))
+        assertTrue(profiles.updates.isEmpty())
+        assertTrue(present(T.SUGGEST))
     }
 }

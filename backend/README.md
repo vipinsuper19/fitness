@@ -37,7 +37,7 @@ Secrets are set in the Render and Supabase dashboards only, never in the repo. T
 ### Render (native Node 22, per `render.yaml`)
 The Blueprint in `render.yaml` defines the `fitness-api` web service: Free plan, Singapore region, root directory `backend`, health check `/health`. `autoDeploy` is on: every merge to main that touches `backend/**` or `render.yaml` deploys to Render automatically, and the `post-deploy-smoke` workflow then waits for the restart and smoke-tests the live API (it fails if no restart is seen within ~6 min). The step-by-step guide is in `docs/DEPLOY.md`.
 - **Build:** `npm ci --include=dev --no-audit --no-fund && npm run build`, which runs `prisma generate` and `tsc`.
-- **Start:** `npm run migrate:deploy && npm start`. The Free plan has no pre-deploy step, so pending migrations are applied on every start. This is safe to repeat.
+- **Start:** `npm run migrate:deploy && exec node dist/main.js` (`exec` makes node receive Render's `SIGTERM` for graceful shutdown; see `docs/DEPLOY.md`). The Free plan has no pre-deploy step, so pending migrations are applied on every start. This is safe to repeat.
 - **Preset env:** `NODE_VERSION=22`, `NODE_ENV=production`, `TRUST_PROXY_HOPS=3` (Express counts the 127.0.0.1 socket and Render's internal 10.x proxy as the first two hops, and Cloudflare's edge as the third (confirmed in production logs on Oct 21). Do not set it higher: extra hops make forged left-hand X-Forwarded-For entries trusted, so clients could spoof their IP and dodge per-IP rate limits.), `SWAGGER_ENABLED=false`.
 - **Entered in the dashboard (`sync: false`):**
   - `DATABASE_URL` and `DIRECT_URL`: both the Supabase session pooler URI, port 5432 (IPv4).

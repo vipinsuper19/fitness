@@ -18,7 +18,7 @@ import com.vipin.fitness.core.database.FitnessDatabase
 import com.vipin.fitness.core.database.outbox.PendingWriteEntity
 import com.vipin.fitness.core.network.OutboxApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -78,7 +78,7 @@ class OutboxSyncWorkerRateLimitTest {
 
     @Before fun setUp() {
         server.start()
-        outbox = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
+        outbox = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
     }
     @After fun tearDown() { db.close(); server.close() }
 
