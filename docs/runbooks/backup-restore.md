@@ -87,8 +87,11 @@ Never restore straight into prod. First prove the dump on a scratch database, th
 ```bash
 read -rs SCRATCH_DB_URL && export SCRATCH_DB_URL   # the scratch session-pooler URI, or postgresql://postgres:scratch@localhost:54329/postgres
 
-# Safety check: refuse to continue if this is the prod project ref.
-case "$SCRATCH_DB_URL" in *"$PROD_PROJECT_REF"*) echo "This is PROD. Stop." ; unset SCRATCH_DB_URL ;; esac
+# Safety check: stop if the ref is unset or this is the prod project. Run these steps as a script (`bash restore.sh`);
+# when pasting into an interactive shell, wrap them in a function and use `return 1` instead of `exit 1`
+# (`exit` would close your terminal).
+[ -n "$PROD_PROJECT_REF" ] || { echo "PROD_PROJECT_REF is not set. Stop." >&2; exit 1; }
+case "$SCRATCH_DB_URL" in *"$PROD_PROJECT_REF"*) echo "This is PROD. Stop." >&2; exit 1 ;; esac
 
 sha256sum -c "fitness-$STAMP.dump.sha256"
 pg_restore --dbname "$SCRATCH_DB_URL" --no-owner --no-privileges --clean --if-exists \
