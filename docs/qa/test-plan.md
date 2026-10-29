@@ -65,9 +65,9 @@ Follow-up for Backend/contract: document the 401-after-delete retry in `openapi.
 
 ## P1 API checks — prod (`scripts/prod-check-p1.sh`)
 
-Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 temp files, never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
+Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Only runs against `https://fitness-api-6pcc.onrender.com/api/v1` (host allowlist; the only Fitness API server, used as prod). `--self-test` checks the register-timeout recovery, INT/TERM cleanup and the allowlist against a local stub. Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 temp files, never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
 
-**Last prod run: 2026-10-29 11:06:52 IST (prod at 1437dfd) — 86/86 PASS (SC 20, PM 27, NS 12, ST 27), both accounts deleted (login 401).**
+**Last prod run: 2026-10-29 11:31:27 IST — 107/107 PASS (SC 20, PM 27, NS 12, ST 27, MT 21), both accounts deleted (login 401).**
 
 ### Session corrections (#63)
 
@@ -182,6 +182,34 @@ Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Uses tw
 | ST24 | other user detail of same exercise: 0 sessions, null pr (no leak of A's sets) | PASS |
 | ST25 | list unauthenticated -> 401 | PASS |
 | ST26 | detail unauthenticated -> 401 | PASS |
+
+### Macro targets (#85)
+
+`dailyProteinTargetG` / `dailyCarbsTargetG` / `dailyFatTargetG` on `PUT/GET /me/profile` (integer 0–1000 or null; omitted keeps, null clears, 0 stored as null; no derivation from kcal) and wired into `/nutrition/summary` (`targets.*G`, independent `*Pct`, HALF_UP from the unrounded average, current targets for every period) and `/me/export`.
+
+| # | Check | Prod 2026-10-29 |
+|---|---|---|
+| MT01 | new profile: macro targets null | PASS |
+| MT02 | PUT sets all three (200, echoed) | PASS |
+| MT03 | GET returns them | PASS |
+| MT04 | explicit null clears carbs, others kept | PASS |
+| MT05 | PUT 0 -> 200, returned as null | PASS |
+| MT06 | GET after 0: null, protein kept | PASS |
+| MT07 | protein -1 -> 400 | PASS |
+| MT07 | protein 1001 -> 400 | PASS |
+| MT07 | protein 12.5 -> 400 | PASS |
+| MT07 | protein "50" -> 400 | PASS |
+| MT08 | 1000 accepted | PASS |
+| MT09 | invalid PUTs changed nothing (protein 120) | PASS |
+| MT10 | setting kcal target doesn't derive macros | PASS |
+| MT11 | summary targets: protein 120, carbs/fat null, non-null with only a macro set | PASS |
+| MT12 | today: proteinPct = protein/120*100 (1 dp), carbs/fat pct null | PASS |
+| MT13 | yesterday (no food): adherence null | PASS |
+| MT14 | current targets apply to the whole range (month bucket echoes protein 120) | PASS |
+| MT15 | export includes macro targets | PASS |
+| MT16 | other user unaffected (null targets) | PASS |
+| MT17 | other user summary targets null | PASS |
+| MT18 | unauthenticated PUT -> 401 | PASS |
 
 Notes:
 - Archiving the **active** plan pauses it first, so it gets `pausedAt` at archive time (contract: "same effect as pause"); a later pause on the archived plan leaves `pausedAt` unchanged (PM27).

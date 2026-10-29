@@ -31,7 +31,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,7 +75,7 @@ class WorkoutHistoryUiTest {
         profiles.profile = Profile(displayName = "Asha", onboardingCompleted = true)
         workouts.catalog["e1"] = testExercise("e1", "Squat")
         workouts.catalog["e2"] = testExercise("e2", "Bench press")
-        // With an active plan: the no-plan Workout tab is affected by bug #87 (see the @Ignore test below).
+        // With an active plan (the no-plan case is covered below; it was bug #87).
         workouts.refreshResult = { ApiResult.Success(ActivePlan.Some(plan)) }
     }
     private val plan = PlanDraft(
@@ -104,7 +103,6 @@ class WorkoutHistoryUiTest {
         waitTag("open_history"); tag("open_history").performScrollTo().performClick(); compose.waitForIdle()
     }
 
-    @Ignore("Known bug #87")
     @Test fun noActivePlan_userCanStillOpenHistory() {
         workouts.refreshResult = { ApiResult.Success(ActivePlan.None) }
         openHistory()

@@ -76,7 +76,9 @@ class WorkoutHomeViewModel @Inject constructor(
         _state.update { it.copy(loading = it.plan == null, error = null, stale = false) }
         viewModelScope.launch {
             when (val r = repo.refreshActivePlan()) {
-                is ApiResult.Success -> Unit // collected above
+                // Show the result directly: activePlan is a StateFlow, so an unchanged plan (e.g. None
+                // again) emits nothing and would leave loading = true forever (#87).
+                is ApiResult.Success -> show(r.value)
                 is ApiResult.Failure -> _state.update {
                     if (it.plan != null) it.copy(loading = false, stale = true) else it.copy(loading = false, error = r.error.userMessage())
                 }

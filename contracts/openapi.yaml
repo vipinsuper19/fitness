@@ -650,7 +650,10 @@ paths:
         misses or two sessions at difficulty 5. The minimum step overrides the cap; weights are multiples of 0.5 kg.
         Nothing is written: PATCH takes the full plan draft, so one `PATCH /workout-plans/{planId}` with
         `baseVersion = planVersion` can apply every accepted suggestion (stale → `409 VERSION_CONFLICT`; refetch after a PATCH).
-        Fewer than 3 sessions → every item `hold` / `NOT_ENOUGH_HISTORY`.
+        Fewer than 3 sessions → `hold` / `NOT_ENOUGH_HISTORY` (also used when there is no value to progress);
+        a deload is checked first and can fire after only 2 sessions; with no load to lower it is `hold` with the
+        deload reason and `suggested: null`. Setting a first target (null → value) does not start a cooldown.
+        An exercise in several workouts gets one suggestion per entry, sharing the same history.
       responses:
         '200':
           description: Suggestions in plan order
@@ -2065,7 +2068,7 @@ components:
         bestDistanceM: { type: [number, 'null'] }
     ProgressionSuggestion:
       type: object
-      required: [plannedWorkoutId, exerciseId, order, trackingType, action, reason, current, suggested, cooldownUntil, basedOn]
+      required: [plannedWorkoutId, exerciseId, order, trackingType, action, reason, reasonText, current, suggested, cooldownUntil, basedOn]
       properties:
         plannedWorkoutId: { $ref: '#/components/schemas/Id' }
         exerciseId: { $ref: '#/components/schemas/Id' }
@@ -2076,7 +2079,7 @@ components:
           type: string
           enum: [ALL_SETS_COMPLETED, NO_TARGET_SET, NOT_ENOUGH_HISTORY, MISSED_TARGET, HIGH_EFFORT, COOLDOWN, CAP_REACHED, REP_CEILING, REPEATED_MISSES, VERY_HARD]
           description: Stable code; meanings in docs/specs/adaptive-progression.md
-        reasonText: { type: [string, 'null'], maxLength: 300, description: Optional English display text; clients may localise from `reason` }
+        reasonText: { type: string, maxLength: 300, description: 'English display text, always present in v1; clients may localise from `reason`' }
         harderVariations:
           type: array
           maxItems: 3
