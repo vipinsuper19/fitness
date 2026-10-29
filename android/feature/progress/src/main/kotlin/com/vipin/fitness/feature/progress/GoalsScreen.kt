@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -97,7 +98,7 @@ fun goalProgressText(p: GoalProgress, units: UnitSystem): String? {
     val current = p.current
     return when {
         g.type == GoalType.WORKOUTS_PER_WEEK && target != null ->
-            stringResource(R.string.goal_workouts_progress, p.current?.toInt() ?: 0, target.toInt())
+            pluralStringResource(R.plurals.goal_workouts_progress, target.toInt(), p.current?.toInt() ?: 0, target.toInt())
         g.type == GoalType.MAINTAIN && target != null && current != null ->
             stringResource(if (p.onTrack == true) R.string.goal_maintain_on_track else R.string.goal_maintain_off, weight(current, units), weight(target, units))
         g.type.isWeight && target != null && current != null -> stringResource(R.string.goal_weight_progress, weight(current, units), weight(target, units))

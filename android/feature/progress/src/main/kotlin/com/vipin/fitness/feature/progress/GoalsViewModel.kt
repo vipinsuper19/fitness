@@ -21,9 +21,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.vipin.fitness.core.common.time.today
 import com.vipin.fitness.core.data.UnitPreference
 import java.time.Clock
+import java.time.ZoneId
+import com.vipin.fitness.core.common.time.APP_ZONE
+import com.vipin.fitness.core.data.ProfileZone
+import com.vipin.fitness.core.data.today
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -59,7 +62,10 @@ class GoalsViewModel @Inject constructor(
     private val service: GoalProgressService,
     private val unitPref: UnitPreference,
     private val clock: Clock,
+    private val profileZone: ProfileZone,
 ) : ViewModel() {
+    /** Day boundary for "not in the past": profile timezone, APP_ZONE until the profile loads. */
+    private var zone: ZoneId = APP_ZONE
     private val _state = MutableStateFlow(GoalsState())
     val state: StateFlow<GoalsState> = _state.asStateFlow()
     /** Same key while retrying the same create. */
@@ -67,6 +73,7 @@ class GoalsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { unitPref.units.collect { u -> _state.update { it.copy(units = u) } } }
+        viewModelScope.launch { zone = profileZone.zone() }
         load()
     }
 
@@ -95,7 +102,7 @@ class GoalsViewModel @Inject constructor(
         val s = _state.value
         val f = s.form ?: return
         if (s.saving) return
-        val (goal, errors) = validate(f, s.units, clock.today())
+        val (goal, errors) = validate(f, s.units, clock.today(zone))
         if (goal == null) {
             _state.update { it.copy(form = f.copy(errors = errors)) }
             return

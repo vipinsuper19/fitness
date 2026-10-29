@@ -7,7 +7,10 @@ import com.vipin.fitness.core.data.GoalStatus
 import com.vipin.fitness.core.data.GoalType
 import com.vipin.fitness.core.data.NewGoal
 import com.vipin.fitness.core.data.ProgressPoint
+import com.vipin.fitness.core.data.Profile
+import com.vipin.fitness.core.data.ProfileZone
 import com.vipin.fitness.core.testing.FAKE_NETWORK_FAILURE
+import com.vipin.fitness.core.testing.FakeProfileRepository
 import com.vipin.fitness.core.testing.FakeGoalsRepository
 import com.vipin.fitness.core.testing.FakeProgressRepository
 import com.vipin.fitness.core.testing.FakeUnitPreference
@@ -27,7 +30,41 @@ class GoalsViewModelTest {
     // Wed 21 Oct 2026, 23:50 IST.
     private val clock = MutableClock(Instant.parse("2026-10-21T18:20:00Z"))
     private val oct21 = LocalDate.of(2026, 10, 21)
-    private fun vm() = GoalsViewModel(goals, GoalProgressService(goals, progress, clock), FakeUnitPreference(), clock)
+    private var profile = Profile()
+    private fun vm(): GoalsViewModel {
+        val zone = ProfileZone(FakeProfileRepository(profile))
+        return GoalsViewModel(goals, GoalProgressService(goals, progress, clock, zone), FakeUnitPreference(), clock, zone)
+    }
+
+    @Test fun weekBoundaryFollowsTheProfileZone() {
+        // Sun 25 Oct 20:00 UTC: already Mon 26 Oct (new ISO week) in IST, still Sunday in London.
+        clock.instant = Instant.parse("2026-10-25T20:00:00Z")
+        goals.goals += Goal("g1", GoalType.WORKOUTS_PER_WEEK, GoalStatus.ACTIVE, 4.0, null, null)
+        val oct19 = LocalDate.of(2026, 10, 19)
+        progress.points = mapOf(oct19 to ProgressPoint(oct19, workoutsCompleted = 1), oct21 to ProgressPoint(oct21, workoutsCompleted = 2))
+        profile = Profile(timezone = "Europe/London")
+        assertEquals(0.75, vm().state.value.active.single().fraction!!, 1e-9)
+        assertEquals(LocalDate.of(2026, 10, 25), progress.summaryCalls.last().second)
+        assertEquals(LocalDate.of(2026, 10, 25).minusDays(89), progress.summaryCalls.last().first)
+        // Same instant, no zone on the profile: APP_ZONE says the week just began.
+        profile = Profile()
+        assertEquals(0.0, vm().state.value.active.single().fraction!!, 1e-9)
+        assertEquals(LocalDate.of(2026, 10, 26), progress.summaryCalls.last().second)
+    }
+
+    @Test fun pastDateCheckUsesTheProfileDay() {
+        // 21 Oct 20:00 UTC: 22 Oct in IST, still 21 Oct in New York.
+        clock.instant = Instant.parse("2026-10-21T20:00:00Z")
+        val form = GoalForm(type = GoalType.WORKOUTS_PER_WEEK, target = "3", date = "2026-10-21")
+        profile = Profile(timezone = "America/New_York")
+        vm().apply { openNew(); onForm { form }; save() }
+        assertEquals(form.copy(date = "2026-10-21").type, goals.goals.single().type)
+        goals.goals.clear()
+        profile = Profile(timezone = "Not/AZone") // falls back to APP_ZONE
+        val vm = vm().apply { openNew(); onForm { form }; save() }
+        assertEquals(setOf(GoalFormError.DATE), vm.state.value.form!!.errors)
+        assertTrue(goals.goals.isEmpty())
+    }
 
     @Test fun progressUsesLatestWeightAndThisWeeksWorkouts() {
         goals.goals += Goal("g1", GoalType.LOSE_WEIGHT, GoalStatus.ACTIVE, 70.0, 80.0, null)

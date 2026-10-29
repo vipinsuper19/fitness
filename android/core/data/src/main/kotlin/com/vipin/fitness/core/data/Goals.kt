@@ -1,6 +1,5 @@
 package com.vipin.fitness.core.data
 
-import com.vipin.fitness.core.common.time.today
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.GoalDto
 import com.vipin.fitness.core.network.GoalsApi
@@ -144,6 +143,7 @@ class GoalProgressService @Inject constructor(
     private val goals: GoalsRepository,
     private val progress: ProgressRepository,
     private val clock: Clock,
+    private val zone: ProfileZone,
 ) {
     /** Goal failures fail the call; a failed summary still returns the goals, without progress. */
     suspend fun load(status: GoalStatus? = GoalStatus.ACTIVE): ApiResult<List<GoalProgress>> {
@@ -152,7 +152,8 @@ class GoalProgressService @Inject constructor(
             is ApiResult.Success -> r.value
         }
         if (list.none { it.status == GoalStatus.ACTIVE }) return ApiResult.Success(list.map { GoalProgress(it, null, null) })
-        val today = clock.today()
+        // The user's day and ISO week (Monday start) in the profile timezone, not the device or IST.
+        val today = clock.today(zone.zone())
         val points = (progress.summary(today.minusDays(WEIGHT_LOOKBACK_DAYS - 1), today) as? ApiResult.Success)?.value?.points.orEmpty()
         val weight = points.lastOrNull { it.weightKg != null }?.weightKg
         val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
