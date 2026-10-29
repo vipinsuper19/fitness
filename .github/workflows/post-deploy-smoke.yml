@@ -4,8 +4,13 @@ name: post-deploy-smoke
 # is registered, generates a workout plan (must contain >= 1 workout, i.e. the
 # exercise catalog is seeded), reads GET /badges (200, non-empty catalog), is
 # deleted, and login is confirmed to fail.
-# On push to main (backend or render.yaml changes) it first waits for Render's
-# auto-deploy to restart the service; see scripts/wait-for-deploy.sh.
+# On push to main it first checks whether the pushed range (before..after, so
+# multi-commit pushes count) touches a path in render.yaml's buildFilter
+# (.github/scripts/deploy-changed.cjs reads the filter from render.yaml). If so it
+# waits for Render's auto-deploy to restart the service (scripts/wait-for-deploy.sh)
+# and smoke-tests it. If not, Render does not deploy, so the run passes with a
+# "no deployable changes, skipped" summary. workflow_dispatch always runs the
+# full check (the wait is controlled by skip_wait).
 on:
   push:
     branches: [main]
@@ -15,6 +20,7 @@ on:
       - ".github/workflows/post-deploy-smoke.yml"
       - "scripts/post-deploy-smoke.sh"
       - "scripts/wait-for-deploy.sh"
+      - ".github/scripts/deploy-changed.cjs"
   workflow_dispatch:
     inputs:
       base_url:
@@ -44,8 +50,32 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # needed to diff before..after for multi-commit pushes
+      - name: Did this push change anything Render deploys?
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" != "push" ]; then
+            echo "deployable=true" >> "$GITHUB_OUTPUT"
+            echo "$EVENT: running the full check"
+          else
+            node .github/scripts/deploy-changed.cjs "$BEFORE" "$AFTER"
+          fi
+      - name: No deployable changes, skipped
+        if: steps.changes.outputs.deployable != 'true'
+        env:
+          REASON: ${{ steps.changes.outputs.reason }}
+          RANGE: ${{ github.event.before }}..${{ github.sha }}
+        run: |
+          msg="No deployable changes, skipped: Render's buildFilter (render.yaml) matched nothing in $RANGE, so no deploy happens and there is nothing new to smoke-test. ($REASON)"
+          echo "$msg"
+          { echo "### post-deploy-smoke: no deployable changes, skipped"; echo; echo "$msg"; } >> "$GITHUB_STEP_SUMMARY"
       - name: Wait for the new Render deploy
-        if: github.event_name == 'push' || !inputs.skip_wait
+        if: steps.changes.outputs.deployable == 'true' && (github.event_name == 'push' || !inputs.skip_wait)
         env:
           HEAD_COMMIT_TS: ${{ github.event.head_commit.timestamp }}
           WAIT_SECONDS: "360"
@@ -54,11 +84,12 @@ jobs:
           export SINCE_EPOCH
           scripts/wait-for-deploy.sh
       - name: Smoke test (always cleans up its user on exit)
+        if: steps.changes.outputs.deployable == 'true'
         env:
           SMOKE_STATE: ${{ runner.temp }}/smoke-user
         run: scripts/post-deploy-smoke.sh
       - name: Cleanup leftover smoke user
-        if: always()
+        if: always() && steps.changes.outputs.deployable == 'true'
         env:
           SMOKE_STATE: ${{ runner.temp }}/smoke-user
         run: scripts/post-deploy-smoke.sh cleanup

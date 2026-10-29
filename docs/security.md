@@ -32,8 +32,7 @@ To add an entry, key it by the GHSA id and give it the `package`, `severity`, `r
 
 | Advisory | Package | Reachable? | Plan |
 |---|---|---|---|
-| GHSA-27r3-jxmh-p828 (high): DoS via trailing bytes after a compressed body | body-parser 2.x (through @nestjs/platform-express) | **Yes**: the API parses JSON bodies with body-parser | A lockfile bump (`npm audit fix`, non-breaking) in a separate dependency PR |
-| GHSA-q7qp-rjg7-q26m (high): DoS via a pending async fileFilter | multer (through @nestjs/platform-express) | No: no route accepts file uploads | Fixed by the same bump |
+| GHSA-q7qp-rjg7-q26m (high): DoS via a pending async fileFilter | multer (through @nestjs/platform-express) | No: no route accepts file uploads | Needs a Nest release that bumps multer, or an npm override (platform-express pins multer to exactly 2.4.0) |
 
 ## Pinned GitHub Actions
 
@@ -52,3 +51,16 @@ It runs on every pull request, on pushes to `main` and weekly (Mondays 09:00 IST
 Results appear under the repository's Security → Code scanning tab. The job has only `security-events: write`, plus read access to contents and actions.
 
 The init and analyze actions are pinned to a SHA, like every other action.
+
+
+History: GHSA-27r3-jxmh-p828 (body-parser, high, reachable) was fixed by a lockfile-only bump of body-parser from 2.3.0 to 2.4.0, then removed from the allowlist. The multer entry stays: @nestjs/platform-express pins multer to exactly 2.4.0, so a lockfile-only update can't reach the fixed 2.5.0.
+
+### Audit gate checks
+
+`.github/scripts/npm-audit-prod.cjs` fails CI when:
+- a high or critical advisory is not allowlisted (NOT ALLOWED);
+- an entry's `package` differs from the package npm reports for that GHSA (PACKAGE MISMATCH);
+- an entry's `reviewBy` is in the past (EXPIRED) or isn't a YYYY-MM-DD date (INVALID);
+- an entry is no longer reported (STALE).
+
+Unit tests: `node --test .github/scripts/*.test.cjs`. These run in the backend workflow.

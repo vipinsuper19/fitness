@@ -2,10 +2,10 @@ name: backend
 
 on:
   pull_request:
-    paths: ["backend/**", "contracts/**", ".github/workflows/backend.yml", ".github/npm-audit-allowlist.json", ".github/scripts/npm-audit-prod.cjs"]
+    paths: ["backend/**", "contracts/**", ".github/workflows/backend.yml", ".github/npm-audit-allowlist.json", ".github/scripts/**", "render.yaml", ".github/workflows/post-deploy-smoke.yml"]
   push:
     branches: [main]
-    paths: ["backend/**", "contracts/**", ".github/workflows/backend.yml", ".github/npm-audit-allowlist.json", ".github/scripts/npm-audit-prod.cjs"]
+    paths: ["backend/**", "contracts/**", ".github/workflows/backend.yml", ".github/npm-audit-allowlist.json", ".github/scripts/**", "render.yaml", ".github/workflows/post-deploy-smoke.yml"]
 
 permissions:
   contents: read
@@ -54,6 +54,9 @@ jobs:
       - name: Install
         if: steps.guard.outputs.present == 'true'
         run: npm ci
+      - name: CI script tests (audit gate, deploy-path detection)
+        working-directory: .
+        run: node --test .github/scripts/*.test.cjs
       - name: npm audit (production deps, high/critical; allowlist in .github/npm-audit-allowlist.json)
         if: steps.guard.outputs.present == 'true'
         run: node ../.github/scripts/npm-audit-prod.cjs
