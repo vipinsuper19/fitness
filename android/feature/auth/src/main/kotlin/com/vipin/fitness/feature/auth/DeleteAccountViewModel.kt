@@ -3,6 +3,7 @@ package com.vipin.fitness.feature.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.data.AccountRepository
+import com.vipin.fitness.core.data.ConsentRepository
 import com.vipin.fitness.core.data.SessionRepository
 import com.vipin.fitness.core.data.newIdempotencyKey
 import com.vipin.fitness.core.network.ApiError
@@ -31,6 +32,7 @@ data class DeleteAccountState(
 class DeleteAccountViewModel @Inject constructor(
     private val account: AccountRepository,
     private val session: SessionRepository,
+    private val consent: ConsentRepository? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(DeleteAccountState())
     val state: StateFlow<DeleteAccountState> = _state.asStateFlow()
@@ -57,6 +59,8 @@ class DeleteAccountViewModel @Inject constructor(
             when {
                 r is ApiResult.Success || alreadyDeleted -> {
                     pendingKey = null
+                    // The deleted account's consent record goes too (sign-out alone keeps it).
+                    consent?.forgetActiveUser()
                     // Local wipe: tokens, cached flags, every UserScopedState (outbox, sessions...).
                     session.signOut()
                     _state.update { it.copy(submitting = false, deleted = true, password = "") }
