@@ -52,8 +52,9 @@ describeDb('QA #109: dated water goals in challenges and HYDRATED_7 (HTTP + Post
     const u = {
       email,
       get id() { return id; },
+      /** A local date (noon IST) or an exact instant. */
       on: async (date: string) => {
-        jest.setSystemTime(new Date(`${date}T06:30:00Z`));
+        jest.setSystemTime(new Date(date.includes('T') ? date : `${date}T06:30:00Z`));
         if (!token) {
           const b = (await http().post('/api/v1/auth/register').send({ email, password: PASSWORD }).expect(201)).body;
           id = b.user.id;
@@ -68,8 +69,8 @@ describeDb('QA #109: dated water goals in challenges and HYDRATED_7 (HTTP + Post
         await auth(http().post('/api/v1/water-logs')).set('Idempotency-Key', randomUUID()).send({ date, amountMl }).expect(201);
         await engine.idle();
       },
-      join: async (target: number) =>
-        (await auth(http().post('/api/v1/challenges')).set('Idempotency-Key', randomUUID()).send({ templateCode: 'WEEKLY_WATER_DAYS', target }).expect(201)).body,
+      join: async (target: number, templateCode = 'WEEKLY_WATER_DAYS', status = 201) =>
+        (await auth(http().post('/api/v1/challenges')).set('Idempotency-Key', randomUUID()).send({ templateCode, target }).expect(status)).body,
       challenge: async (cid: string) => {
         const b = (await auth(http().get(`/api/v1/challenges/${cid}`)).expect(200)).body;
         expect(validChallenge(b)).toBe(true);
@@ -213,5 +214,89 @@ describeDb('QA #109: dated water goals in challenges and HYDRATED_7 (HTTP + Post
     const c = await u.join(3);
     await u.drink(THU, 2500); // tomorrow+ in the same week
     expect((await u.challenge(c.id)).progress).toBe(0);
+  });
+
+  describe('DW8: IST Monday week boundary', () => {
+    const SUN_2330_IST = '2026-10-25T18:00:00Z';
+    const MON_0030_IST = '2026-10-26T00:30:00+05:30';
+    const SUN_1900_UTC = '2026-10-25T19:00:00Z'; // the same instant as Monday 00:30 IST
+
+    it('Sunday 23:30 IST counts for the old week; Monday 00:30 IST (= Sunday 19:00 UTC) is the new week; UTC date is never used', async () => {
+      const u = await person();
+      await u.on(SUN_2330_IST);
+      await u.goal(2000);
+      const a = await u.join(3);
+      expect(a).toMatchObject({ windowStart: MON, windowEnd: '2026-10-25' });
+      await u.drink('2026-10-25', 2000); // Sunday, today in IST
+      await u.drink('2026-10-26', 1000); // Monday is still the future at 23:30 IST
+      expect((await u.challenge(a.id)).progress).toBe(1);
+
+      await u.on(MON_0030_IST);
+      const b = await u.join(3);
+      expect(b).toMatchObject({ windowStart: '2026-10-26', windowEnd: '2026-11-01', progress: 0 });
+      await u.drink('2026-10-26', 1000); // Monday: 1000 now + the 1000 logged as future on Sunday night
+      expect((await u.challenge(b.id)).progress).toBe(0); // the future-dated 1000 never counts (AB1)
+      await u.drink('2026-10-26', 1000);
+      expect((await u.challenge(b.id)).progress).toBe(1);
+      expect(await u.challenge(a.id)).toMatchObject({ status: 'expired', progress: 1 });
+
+      await u.on(SUN_1900_UTC); // UTC says Sunday 25th, IST says Monday 26th
+      await u.drink('2026-10-27', 2000); // Tuesday: future in IST, so no count
+      expect((await u.challenge(b.id)).progress).toBe(1);
+      expect(await u.challenge(a.id)).toMatchObject({ status: 'expired', progress: 1 });
+      // A weekly join at 19:00 UTC Sunday is the IST week starting Monday 26th: already joined.
+      expect((await u.join(3, 'WEEKLY_WATER_DAYS', 409)).code).toBe('CHALLENGE_ALREADY_JOINED');
+    });
+  });
+
+  describe('DW9: weekly challenge XP cap with dated water goals', () => {
+    it('cap reached first: the water challenge completes with xpAwarded 0, no ledger row, never paid on re-evaluation', async () => {
+      const u = await person();
+      const workouts = async (n: number, at: string) => {
+        const completedAt = new Date(at);
+        for (let i = 0; i < n; i += 1) {
+          await prisma.workoutSession.create({ data: { userId: u.id, status: 'completed', startedAt: new Date(completedAt.getTime() - 1_800_000), completedAt, activeSeconds: 1800 } });
+        }
+      };
+      await u.on(`${MON}T04:30:00Z`); // 10:00 IST
+      await u.goal(2000);
+      const water = await u.join(3);
+      const ww = await u.join(2, 'WEEKLY_WORKOUTS'); // 30
+      const am = await u.join(60, 'WEEKLY_ACTIVE_MINUTES'); // 30
+      const p1 = await u.join(10, 'PERSONAL_WORKOUTS_N'); // 50
+      await workouts(10, `${MON}T05:00:00Z`);
+      await u.on(`${MON}T05:30:00Z`);
+      for (const c of [ww, am, p1]) expect((await u.challenge(c.id)).status).toBe('completed');
+      const p2 = await u.join(10, 'PERSONAL_WORKOUTS_N'); // 50, but only 40 left under the cap
+      await workouts(10, `${MON}T06:00:00Z`);
+      await u.on(`${MON}T06:30:00Z`);
+      expect(await u.challenge(p2.id)).toMatchObject({ status: 'completed', xpAwarded: 40 });
+      const paid = (await u.ledger('challenge')).reduce((t: number, i: { amount: number }) => t + i.amount, 0);
+      expect(paid).toBe(150);
+
+      // Water on dated goals: Mon 2000 (goal 2000), Tue 2500 (goal raised to 2500), Wed 2500.
+      await u.drink(MON, 2000);
+      await u.on(TUE);
+      await u.goal(2500);
+      await u.drink(TUE, 2500);
+      expect((await u.challenge(water.id)).progress).toBe(2);
+      await u.on(WED);
+      await u.drink(WED, 2500);
+      const done = await u.challenge(water.id);
+      expect(done).toMatchObject({ status: 'completed', progress: 3, xpAwarded: 0, waterGoalMl: 2000 });
+      const rows = () => prisma.xPTransaction.count({ where: { userId: u.id, sourceType: 'challenge', sourceId: water.id } });
+      expect(await rows()).toBe(0);
+
+      // Re-evaluate in every way the API allows: reads, more water, a goal change, the engine directly.
+      await u.drink(WED, 500);
+      await u.goal(1000);
+      await u.hydrated();
+      await u.challenge(water.id);
+      await engine.evaluate(u.id, new Date());
+      await engine.idle();
+      expect(await u.challenge(water.id)).toMatchObject({ status: 'completed', xpAwarded: 0, completedAt: done.completedAt });
+      expect(await rows()).toBe(0);
+      expect((await u.ledger('challenge')).reduce((t: number, i: { amount: number }) => t + i.amount, 0)).toBe(150);
+    });
   });
 });
