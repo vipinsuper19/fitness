@@ -37,7 +37,7 @@ fun FitnessApp(
     onOpenAchievements: () -> Unit = {},
     onOpenXpLedger: () -> Unit = {},
     /** Slot so UI tests can render the shell without Hilt. Defaults to the real screen for each tab. */
-    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m, onWorkoutNavigate, onOpenAchievements, onOpenXpLedger) },
+    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m, onWorkoutNavigate, onOpenAchievements, onOpenXpLedger, onOpenProfile) },
 ) {
     var current by rememberSaveable { mutableStateOf(TopLevelDestination.START) }
     Scaffold(
@@ -79,6 +79,7 @@ private fun TabContent(
     onWorkoutNavigate: (WorkoutDestination) -> Unit,
     onOpenAchievements: () -> Unit,
     onOpenXpLedger: () -> Unit = {},
+    onOpenProfile: () -> Unit = {},
 ) = when (dest) {
     TopLevelDestination.HOME -> HomeScreen(
         modifier,
@@ -90,6 +91,6 @@ private fun TabContent(
         onOpenXpLedger = onOpenXpLedger,
     )
     TopLevelDestination.WORKOUT -> WorkoutHomeRoute(onWorkoutNavigate, modifier)
-    TopLevelDestination.NUTRITION -> NutritionScreen(modifier)
+    TopLevelDestination.NUTRITION -> NutritionScreen(modifier, onOpenProfile = onOpenProfile)
     TopLevelDestination.PROGRESS -> ProgressScreen(modifier)
 }
