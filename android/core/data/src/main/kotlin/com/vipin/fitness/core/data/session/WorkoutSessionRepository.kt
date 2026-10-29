@@ -252,6 +252,9 @@ class DefaultWorkoutSessionRepository @Inject constructor(
     /** Sign-out, confirmed by the user: sessions and unsent writes go with the account. */
     override suspend fun clearUserState() {
         db.withTransaction {
+            // The signed-out user's Retry-After window (and any ownerless one) goes with their queue.
+            outbox.clearNotBefore(dao.currentUserId() ?: "")
+            outbox.clearNotBefore("")
             outbox.clear()
             dao.clear()
             dao.clearCurrentAccount()
@@ -268,6 +271,7 @@ class DefaultWorkoutSessionRepository @Inject constructor(
             // not backfilled: there are no real users yet, only test installs, so deleting them on
             // the next sign-in is intentional.
             outbox.deleteNotOwnedBy(userId)
+            outbox.clearNotBeforeNotOwnedBy(userId) // their writes are gone, so is their window
             dao.deleteNotOwnedBy(userId)
             dao.setCurrentAccount(CurrentAccountEntity(userId = userId))
         }

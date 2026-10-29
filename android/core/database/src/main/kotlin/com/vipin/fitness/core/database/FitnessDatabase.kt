@@ -6,6 +6,7 @@ import androidx.room.RoomDatabase
 import com.vipin.fitness.core.database.badges.SeenBadgeBaselineEntity
 import com.vipin.fitness.core.database.badges.SeenBadgeDao
 import com.vipin.fitness.core.database.badges.SeenBadgeEntity
+import com.vipin.fitness.core.database.outbox.OutboxRateLimitEntity
 import com.vipin.fitness.core.database.outbox.PendingWriteDao
 import com.vipin.fitness.core.database.outbox.PendingWriteEntity
 import com.vipin.fitness.core.database.session.CurrentAccountEntity
@@ -22,12 +23,14 @@ import com.vipin.fitness.core.database.session.WorkoutSessionEntity
  * tables and a nullable column only, so an auto-migration covers it.
  *
  * v3: seen_badges and seen_badge_baselines (per-user "Badge earned" cache). New tables only: auto-migration.
+ *
+ * v4: outbox_rate_limit (per-user Retry-After window that survives a restart). New table only: auto-migration.
  */
 @Database(
-    entities = [PendingWriteEntity::class, WorkoutSessionEntity::class, CurrentAccountEntity::class, SessionExerciseEntity::class, SessionSetEntity::class, SeenBadgeEntity::class, SeenBadgeBaselineEntity::class],
-    version = 3,
+    entities = [PendingWriteEntity::class, WorkoutSessionEntity::class, CurrentAccountEntity::class, SessionExerciseEntity::class, SessionSetEntity::class, SeenBadgeEntity::class, SeenBadgeBaselineEntity::class, OutboxRateLimitEntity::class],
+    version = 4,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
 )
 abstract class FitnessDatabase : RoomDatabase() {
     abstract fun pendingWriteDao(): PendingWriteDao
