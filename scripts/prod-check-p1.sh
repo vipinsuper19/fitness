@@ -3,10 +3,12 @@
 # the nutrition summary (#70), strength progress (#72), macro targets (#85) and progression suggestions (#90), using TWO throwaway
 # accounts (A = owner, B = other user).
 #   scripts/prod-check-p1.sh              # the Fitness API server (only allowed host, see ALLOWED_API)
-#   scripts/prod-check-p1.sh --self-test  # register-timeout, signal and stale-state cleanup against a local stub
+#   scripts/prod-check-p1.sh --self-test  # register-timeout, signal, stale-state cleanup and the run lock against a local stub
 #   scripts/prod-check-p1.sh --cleanup-stale  # only delete accounts left in $P1_STATE_DIR by killed runs, then exit
 # - Every run first sweeps $P1_STATE_DIR: each leftover account is logged into, deleted, login
 #   confirmed 401, and its file removed (already-gone accounts: file just removed).
+# - One run per $P1_STATE_DIR (flock on $P1_STATE_DIR/.lock): a second concurrent run, or --cleanup-stale,
+#   exits 3 with a message instead of sweeping the first run's live accounts.
 # Safety:
 # - Host allowlist: refuses to run unless API is exactly https://fitness-api-6pcc.onrender.com/api/v1
 #   (loopback is allowed only inside --self-test).
@@ -85,6 +87,21 @@ PY
   [ "$n" = 0 ] && [ "$f" = 0 ] && grep -q "STALE .*account deleted (login 401)" /tmp/p1-selftest-stale2.log \
     && echo "SELFTEST stale-state at run start: PASS (swept before signup, 0 left)" || { echo "SELFTEST stale-state at run start: FAIL ($n accounts, $f files left)"; rc=1; }
   kill "$SP"; wait "$SP" 2>/dev/null
+  # 5) Concurrent runs: a second run on the same state dir exits 3 with a clear message, without
+  #    sweeping the first run's live accounts (both still exist, both files kept); the first then cleans up.
+  python3 "$STUB" "$PORT" 0 & SP=$!; sleep 1
+  API="$LOCAL" P1_SELFTEST=1 P1_SELFTEST_HOLD=1 bash "$0" > /tmp/p1-selftest-lock1.log 2>&1 & RP=$!
+  for _ in $(seq 50); do grep -q HOLDING /tmp/p1-selftest-lock1.log && break; sleep 0.2; done
+  API="$LOCAL" P1_SELFTEST=1 bash "$0" > /tmp/p1-selftest-lock2.log 2>&1; s2=$?
+  API="$LOCAL" P1_SELFTEST=1 bash "$0" --cleanup-stale > /tmp/p1-selftest-lock3.log 2>&1; s3=$?
+  n2="$(left)"; f2="$(ls "$P1_STATE_DIR" | wc -l)"
+  kill -s TERM "$RP"; wait "$RP" 2>/dev/null
+  n="$(left)"; f="$(ls "$P1_STATE_DIR" | wc -l)"
+  [ "$s2" = 3 ] && [ "$s3" = 3 ] && grep -q "another prod-check run holds" /tmp/p1-selftest-lock2.log && grep -q "another prod-check run holds" /tmp/p1-selftest-lock3.log \
+    && ! grep -q STALE /tmp/p1-selftest-lock2.log /tmp/p1-selftest-lock3.log && [ "$n2" = 2 ] && [ "$f2" = 2 ] && [ "$n" = 0 ] && [ "$f" = 0 ] \
+    && echo "SELFTEST concurrent-run lock: PASS (2nd run and --cleanup-stale exit 3, first run's 2 accounts untouched, then 0 left)" \
+    || { echo "SELFTEST concurrent-run lock: FAIL (rc=$s2/$s3, during: $n2 accounts $f2 files, after: $n accounts $f files)"; rc=1; }
+  kill "$SP"; wait "$SP" 2>/dev/null
   # 4) Allowlist: any other host is refused before any request.
   API="https://example.com/api/v1" bash "$0" > /tmp/p1-selftest-host.log 2>&1; h=$?
   [ "$h" = 2 ] && grep -q "refusing" /tmp/p1-selftest-host.log && echo "SELFTEST allowlist: PASS" || { echo "SELFTEST allowlist: FAIL"; rc=1; }
@@ -95,13 +112,20 @@ if [ "$API" != "$ALLOWED_API" ] && ! { [ "${P1_SELFTEST:-}" = 1 ] && [[ "$API" =
   echo "refusing to run against $API: only $ALLOWED_API is allowed" >&2; exit 2
 fi
 umask 077
+# Credential state files live outside /tmp so a crash or reboot mid-run cannot lose them: an
+# undeleted account can then still be logged into and deleted by hand.
+STATE_DIR="${P1_STATE_DIR:-$HOME/.cache/p1-state}"; mkdir -p "$STATE_DIR"; chmod 700 "$STATE_DIR"
+# One run per state dir: a second concurrent run would otherwise sweep the first run's live
+# accounts as "stale". The lock (fd 9) is held until this process exits; nothing is touched before it.
+exec 9>"$STATE_DIR/.lock"
+if ! flock -n 9; then
+  echo "another prod-check run holds $STATE_DIR/.lock; not sweeping or signing up. Wait for it to finish (or use a different P1_STATE_DIR)." >&2
+  exit 3
+fi
 B="$(mktemp -t p1.body.XXXXXXXX)"; BF="$(mktemp -t p1.req.XXXXXXXX)"; HF="$(mktemp -t p1.hdr.XXXXXXXX)"
 declare -A ST TOK CREATED DELETED
 ACCOUNTS=()   # every account we attempted to register, in order
 TMPS=()       # extra per-run temp files, removed at cleanup
-# Credential state files live outside /tmp so a crash or reboot mid-run cannot lose them: an
-# undeleted account can then still be logged into and deleted by hand.
-STATE_DIR="${P1_STATE_DIR:-$HOME/.cache/p1-state}"; mkdir -p "$STATE_DIR"; chmod 700 "$STATE_DIR"
 AS=""   # current account; "" = unauthenticated
 PASS=0; FAIL=0; FAILS=()
 uid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
