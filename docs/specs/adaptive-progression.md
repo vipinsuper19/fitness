@@ -25,13 +25,16 @@ Otherwise the suggestion is `hold` or `deload` with a reason.
 | trackingType | Suggestion | Step |
 |---|---|---|
 | `reps_weight` with `targetWeightKg` | raise `targetWeightKg` | lower-body primary muscle (quads, hamstrings, glutes, calves): **+5%**, otherwise **+2.5%**; rounded **down** to 0.5 kg, minimum +1.0 kg (+0.5 kg when target < 10 kg) |
-| `reps_weight` without a target | set `targetWeightKg` | to the heaviest weight used in all N sessions' counted sets (no increase) |
-| `reps` (bodyweight) | raise `repsMin`/`repsMax` | +1 rep each (+2 when `repsMax >= 15`); when `repsMax` would exceed 20, suggest no rep change and `reason: REP_CEILING` (a harder variation is a client/user choice) |
+| `reps_weight` without a target | set `targetWeightKg` | to the heaviest weight used in all N sessions' counted sets, rounded down to 0.5 kg (no increase) |
+| `reps` (bodyweight) | raise `repsMin`/`repsMax` | +1 rep each (+2 when `repsMax >= 15`); when `repsMax` would exceed 20, `hold` / `REP_CEILING` with `harderVariations` (below) |
 | `duration` | raise `durationSeconds` | +10% rounded **down** to 5 s, minimum +5 s |
 | `distance_duration` | raise `durationSeconds` | same as `duration` |
 
 ## Cap
-- One step per suggestion; the suggested value is **at most +10%** of the current value (weight, reps or seconds) and stays within the plan schema limits (`targetWeightKg` ≤ 1000, reps ≤ 100, `durationSeconds` ≤ 7200). If the minimum step would exceed 10%, the step is the minimum step anyway only when the current value is below the small-load threshold (target < 10 kg, reps < 10, duration < 50 s); otherwise `hold` with `CAP_REACHED`.
+- One step per suggestion, capped at **+10%** of the current value (weight, reps or seconds).
+- **The minimum step overrides the cap.** When the minimum step (+1.0 kg, +0.5 kg under 10 kg, +1 rep, +5 s) is more than 10% of a small current value, the minimum step is suggested anyway.
+- Values stay within the plan schema limits (`targetWeightKg` ≤ 1000, reps ≤ 100, `durationSeconds` ≤ 7200). An exercise already at a limit is `hold` / `CAP_REACHED`.
+- **Every suggested weight is a multiple of 0.5 kg** (increase, deload and `NO_TARGET_SET`; rounded down).
 
 ## Cooldown
 The server derives "last progression applied" from plan versions: the newest plan version where this exercise's prescribed load (target weight, reps or duration) increased versus the previous version. If its `createdAt` is less than 7 days ago, `hold` with `COOLDOWN` and `cooldownUntil`. No new table is needed.
@@ -43,17 +46,31 @@ Suggest a **deload** (−10% of `targetWeightKg` rounded down to 0.5 kg, or −1
 A deload is a suggestion like any other; it is never applied automatically. Pain or medical symptoms are **not** inferred from data; the client shows its standard "stop and seek professional advice" copy whenever the user reports pain (out of scope here).
 
 ## Response
-`ProgressionSuggestions`: `{ planId, planVersion, generatedAt, windowSessions: 3, suggestions: [...] }`, one item per planned exercise, in plan order:
-- `plannedWorkoutId`, `exerciseId`, `trackingType`
+`ProgressionSuggestions`: `{ planId, planVersion, generatedAt, windowSessions: 3, suggestions: [...] }`. `planVersion` (top level) is the latest version all suggestions were computed against. One item per planned exercise, in plan order:
+- `plannedWorkoutId`, `exerciseId`, `order`, `trackingType`
 - `action`: `increase | hold | deload`
-- `reason`: `ALL_SETS_COMPLETED` (increase) | `NOT_ENOUGH_HISTORY` | `MISSED_TARGET` | `HIGH_EFFORT` | `COOLDOWN` | `CAP_REACHED` | `REP_CEILING` | `NO_TARGET_SET` (increase that only sets a missing target) | `REPEATED_MISSES` | `VERY_HARD` (deloads)
-- `current`: `{ targetWeightKg, repsMin, repsMax, durationSeconds }` (the latest plan version's values)
-- `suggested`: same shape, or `null` for `hold`. Only changed fields differ from `current`.
+- `reason`: enum code (stable, for client logic and localisation), one of:
+  | Code | Action | Meaning |
+  |---|---|---|
+  | `ALL_SETS_COMPLETED` | increase | Last 3 sessions met the prescription at manageable effort |
+  | `NO_TARGET_SET` | increase | No `targetWeightKg` yet; suggests the heaviest weight used |
+  | `NOT_ENOUGH_HISTORY` | hold | Fewer than 3 qualifying sessions |
+  | `MISSED_TARGET` | hold | A session in the window missed sets, reps, weight or duration |
+  | `HIGH_EFFORT` | hold | A session in the window had `perceivedDifficulty` ≥ 4 |
+  | `COOLDOWN` | hold | Load was raised less than 7 days ago (`cooldownUntil` set) |
+  | `CAP_REACHED` | hold | Already at the schema limit |
+  | `REP_CEILING` | hold | Bodyweight reps at the 20-rep ceiling; see `harderVariations` |
+  | `REPEATED_MISSES` | deload | Two consecutive sessions missed the prescription |
+  | `VERY_HARD` | deload | Two latest sessions at `perceivedDifficulty` 5 |
+- `reasonText`: optional English sentence for display (e.g. "You completed all sets in your last 3 sessions."); clients may localise from `reason` instead. May be absent or null.
+- `current`: `PrescriptionValues` `{ sets, repsMin, repsMax, targetWeightKg, durationSeconds }`, the latest plan version's exact values.
+- `suggested`: for `increase`/`deload`, the **complete** `PrescriptionValues` to write into that `PlannedExercise` (unchanged fields copied from `current`), so the client builds the PATCH without computing anything; `null` for `hold`. v1 never changes `sets`.
+- `harderVariations`: optional array of `exerciseId`s, present only with `REP_CEILING` and possibly empty. Derived from the catalogue (there is no explicit progression link): exercises with the same `primaryMuscle` and `trackingType`, `difficulty` exactly one level above this exercise's (`beginner → intermediate → advanced`), and equipment the original also uses (or none); at most 3, ordered by slug. Empty when none match or the exercise is already `advanced`.
 - `cooldownUntil`: date-time or null
 - `basedOn`: up to 3 items `{ sessionId, completedAt, perceivedDifficulty|null, completedSets, plannedSets, metTarget, bestReps|null, bestWeightKg|null, bestDurationSeconds|null, bestDistanceM|null }`, newest first.
 
-## Accepting a suggestion
-The client copies `suggested` into that exercise of its latest plan draft and calls `PATCH /workout-plans/{planId}` with `baseVersion = planVersion`. A stale suggestion fails with the existing `409 VERSION_CONFLICT`; the client refetches. Dismissing needs no call (v1 keeps no dismiss state).
+## Accepting suggestions
+`PATCH /workout-plans/{planId}` takes a **full** `WorkoutPlanDraft` (every workout and exercise) plus `baseVersion`, and creates one new version. So **one PATCH can carry every accepted suggestion**: the client takes the plan at `planVersion`, replaces `sets/repsMin/repsMax/targetWeightKg/durationSeconds` of each accepted exercise (matched by `plannedWorkoutId` + `exerciseId`) with `suggested`, and sends it with `baseVersion = planVersion`. A stale version gets the existing `409 VERSION_CONFLICT`; the client refetches the plan and suggestions. After a successful PATCH, suggestions computed for the old version are stale (accepted ones now enter cooldown); refetch before applying more. Dismissing needs no call (v1 keeps no dismiss state).
 
 ## Errors and edge cases
 - Auth required (`401`); another user's plan or unknown id → `404`.
@@ -66,7 +83,10 @@ The client copies `suggested` into that exercise of its latest plan draft and ca
 - Empty history → all `hold` / `NOT_ENOUGH_HISTORY`, `basedOn: []`; 2 sessions → still `NOT_ENOUGH_HISTORY`.
 - `reps_weight` upper body 40 kg, 3 met sessions → 41 kg (2.5% = 1.0); lower body 100 kg → 105 kg; 8 kg target → 8.5 kg; rounding down to 0.5 kg.
 - Missing target → `NO_TARGET_SET` with the heaviest weight used.
-- `reps` 8–12 → 9–13; 15–18 → 17–20; 19–20 → `REP_CEILING`.
+- `reps` 8–12 → 9–13; 15–18 → 17–20; 19–20 → `REP_CEILING` with `harderVariations` (one-level-harder same-muscle exercise listed; `advanced` exercise → `[]`).
+- Minimum step overrides the cap: 5 kg → 5.5 kg (+10%), 3–5 reps → 4–6; 30 s → 35 s. All suggested weights are multiples of 0.5 kg.
+- `suggested` is complete (unchanged fields equal `current`); every item has a `reason` from the enum; `reasonText` optional.
+- Accepting two suggestions in one PATCH with `baseVersion = planVersion` creates one version with both changes.
 - `duration` 60 s → 65 s; 300 s → 330 s.
 - One session missing a set or a rep → `MISSED_TARGET`; `perceivedDifficulty` 4 in the window → `HIGH_EFFORT`.
 - Two consecutive misses → deload −10%; two sessions at difficulty 5 → `VERY_HARD` deload.
