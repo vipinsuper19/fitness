@@ -33,4 +33,16 @@
     <string name="kind_hip">Hip</string>
     <string name="kind_arm">Arm</string>
     <string name="kind_thigh">Thigh</string>
+    <string name="progress_xp">XP</string>
+    <string name="xp_amount">%1$s XP</string>
+    <string name="xp_source_workout">Workout</string>
+    <string name="xp_source_adjustment">Adjustment</string>
+    <string name="xp_source_badge">Badge</string>
+    <string name="xp_source_challenge">Challenge</string>
+    <string name="xp_source_session_correction">Session correction</string>
+    <string name="xp_source_other">XP</string>
+    <string name="xp_ledger_empty">No XP yet. Finish a workout to earn some.</string>
+    <string name="xp_ledger_offline">You\'re offline. Check your connection.</string>
+    <string name="xp_ledger_failed">Couldn\'t load your XP history.</string>
+    <string name="xp_retry">Retry</string>
 </resources>
