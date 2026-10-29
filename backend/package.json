@@ -19,6 +19,7 @@
     "contract:lint": "redocly lint ../contracts/openapi.yaml --config ../contracts/redocly.yaml",
     "db:seed": "tsx prisma/seed.ts",
     "badges:backfill": "tsx src/achievements/backfill.ts",
+    "targets:backfill": "tsx src/targets/backfill.ts",
     "migrate:check": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code"
   },
   "dependencies": {

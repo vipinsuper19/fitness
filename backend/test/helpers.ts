@@ -16,6 +16,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     AUTH_RATE_LIMIT_PER_MINUTE: '1000',
     AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: '1000',
     EXPORT_RATE_LIMIT_PER_HOUR: '1000',
+    TARGET_HISTORY_RATE_LIMIT_PER_MINUTE: '1000',
     LOGIN_MAX_FAILURES_PER_ACCOUNT: '1000',
     // Off by default so specs asserting exact XP stay deterministic; achievements.int-spec turns it on.
     ACHIEVEMENTS_HOOKS: 'off',
@@ -35,4 +36,18 @@ export async function createTestApp(
   configureApp(app, env);
   await app.init();
   return app;
+}
+
+/**
+ * Target history (docs/specs/target-history.md): a PUT dates its targets "today", so tests that
+ * read earlier days move the user's newest row to 1900-01-01, as if set long ago (like the backfill).
+ */
+export async function backdateTargets(prisma: PrismaService, userId: string): Promise<void> {
+  const newest = await prisma.profileTargetHistory.findFirst({ where: { userId }, orderBy: { effectiveFrom: 'desc' } });
+  if (!newest) return;
+  const old = new Date('1900-01-01T00:00:00Z');
+  await prisma.$transaction([
+    prisma.profileTargetHistory.deleteMany({ where: { userId, effectiveFrom: { not: newest.effectiveFrom } } }),
+    prisma.profileTargetHistory.update({ where: { userId_effectiveFrom: { userId, effectiveFrom: newest.effectiveFrom } }, data: { effectiveFrom: old } }),
+  ]);
 }

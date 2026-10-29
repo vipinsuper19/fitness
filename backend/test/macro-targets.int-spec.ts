@@ -2,7 +2,7 @@
  * Profile macro targets (docs/specs/macro-targets.md) over HTTP against Postgres (DB_TESTS=1):
  * PUT /me/profile semantics (omit keeps, null clears, 0 stored as null), validation, no
  * derivation from kcal, GET /me/export, and the nutrition summary wiring (independent pcts,
- * HALF_UP from the unrounded average, current targets for past periods). Clock is faked
+ * HALF_UP from the unrounded average, dated targets for past periods). Clock is faked
  * (Date only) so log dates relative to "today" are stable.
  */
 import { randomUUID } from 'node:crypto';
@@ -12,7 +12,7 @@ import request from 'supertest';
 
 import { seed } from '../prisma/seed';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createTestApp } from './helpers';
+import { backdateTargets, createTestApp } from './helpers';
 
 const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
 const describeDb = run ? describe : describe.skip;
@@ -114,12 +114,14 @@ describeDb('profile macro targets (HTTP + Postgres)', () => {
     await log(u.token, await food(u.token, { proteinG: 10.2, carbsG: 20, fatG: 5 }), '2026-10-28');
     // Only protein set; no kcal or water target.
     await put(u.token, { dailyProteinTargetG: 200 });
+    await backdateTargets(prisma, u.id);
     let s = await summary(u.token, 'from=2026-10-27&to=2026-10-28&bucket=week');
     expect(s.targets).toEqual({ kcal: null, proteinG: 200, carbsG: null, fatG: null, waterMl: null });
     // 10.15/200*100 = 5.075 -> 5.1 HALF_UP (the rounded 10.2 avg would give exactly 5.1 too; see next case).
     expect(s.points[0].adherence).toEqual({ kcalPct: null, proteinPct: 5.1, carbsPct: null, fatPct: null, waterPct: null });
     // Unrounded-average case: target 3 -> 10.15/3*100 = 338.333.. -> 338.3; rounded avg 10.2 would give 340.0.
     await put(u.token, { dailyProteinTargetG: 3, dailyFatTargetG: 8 });
+    await backdateTargets(prisma, u.id);
     s = await summary(u.token, 'from=2026-10-27&to=2026-10-28&bucket=week');
     expect(s.points[0].adherence).toMatchObject({ proteinPct: 338.3, carbsPct: null, fatPct: 62.5 });
   });
@@ -128,6 +130,7 @@ describeDb('profile macro targets (HTTP + Postgres)', () => {
     const u = await signUp();
     await log(u.token, await food(u.token, { proteinG: 50, carbsG: 100, fatG: 20 }), '2026-10-28');
     await put(u.token, { dailyProteinTargetG: 0, dailyCarbsTargetG: 200 });
+    await backdateTargets(prisma, u.id);
     let s = await summary(u.token, 'from=2026-10-28&to=2026-10-28');
     expect(s.targets).toMatchObject({ proteinG: null, carbsG: 200 });
     expect(s.points[0].adherence).toMatchObject({ proteinPct: null, carbsPct: 50 });
@@ -135,12 +138,15 @@ describeDb('profile macro targets (HTTP + Postgres)', () => {
     expect(s.points[0].adherence).toBeNull();
   });
 
-  it('current targets apply to past periods (set today, read an earlier week)', async () => {
+  it('targets changed today do not change a past period (dated history)', async () => {
     const u = await signUp();
     await log(u.token, await food(u.token, { proteinG: 40, carbsG: 0, fatG: 0 }), '2026-10-20');
     await put(u.token, { dailyProteinTargetG: 80 }); // "today" = 2026-10-29
     const s = await summary(u.token, 'from=2026-10-19&to=2026-10-25&bucket=week');
-    expect(s.points[0].adherence.proteinPct).toBe(50);
+    expect(s.targets).toBeNull();
+    expect(s.points[0].adherence).toBeNull();
+    const today = await summary(u.token, 'from=2026-10-29&to=2026-10-29');
+    expect(today.targets).toMatchObject({ proteinG: 80 });
   });
 
   it('auth guard', async () => {

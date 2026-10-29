@@ -29,6 +29,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
    Optional overrides; defaults come from `backend/src/config/env.ts`:
    - `JWT_ACCESS_TTL_SECONDS` (900), `JWT_REFRESH_TTL_DAYS` (30)
    - `AUTH_RATE_LIMIT_PER_MINUTE` (10), `AUTH_REFRESH_RATE_LIMIT_PER_MINUTE` (30), `LOGIN_MAX_FAILURES_PER_ACCOUNT` (5)
+   - `TARGET_HISTORY_RATE_LIMIT_PER_MINUTE` (60, per user)
    - `EXPORT_RATE_LIMIT_PER_HOUR` (5), `EXPORT_MAX_ROWS` (5000), `EXPORT_MAX_SESSIONS` (2000), `EXPORT_MAX_PLAN_VERSIONS` (200), `EXPORT_MAX_SETS_TOTAL` (20000), `EXPORT_MAX_PLAN_EXERCISES_TOTAL` (10000)
    - `PORT` is set by Render.
 3. Build: `npm ci --include=dev && npm run build` (`prisma generate` + `tsc`).
@@ -40,6 +41,13 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
 5. Seed the catalogs (exercises and Indian foods). It's idempotent (upserts on fixed ids), never touches user data, and is safe to re-run. Render Free has no shell, so either:
    - **GitHub Actions (recommended):** add the repository secret `FITNESS_DATABASE_URL` (Settings → Secrets and variables → Actions) with the Supabase session pooler URI (port 5432). Then go to Actions → **db-seed** → Run workflow. It prints the exercise and food counts before and after the seed, and never prints the URL.
    - **Locally:** `cd backend && DATABASE_URL=... DIRECT_URL=... npm run db:seed`. This needs outbound access to port 5432.
+6. **Release backfills (manual, one-off).** Render runs only `migrate:deploy` on start; there is no post-deploy hook on Free, and none of these run automatically.
+   - **Target history** ([target-history.md](specs/target-history.md)). Order: **migrate → deploy → backfill**.
+     1. The migration `20261029001200_profile_target_history` runs on start (`migrate:deploy`) and already does the idempotent `1900-01-01` backfill.
+     2. The new app goes live; wait for `post-deploy-smoke` to pass for that commit.
+     3. Run the reconcile once: Actions → **targets-backfill** → Run workflow (same `FITNESS_DATABASE_URL` secret as db-seed), or locally `cd backend && DATABASE_URL=... npm run targets:backfill`. It catches target changes the old instance accepted during the deploy window. Re-running is a no-op.
+     - **After any redeploy that follows a rollback, run it again** (the old app doesn't write history).
+   - **Badges:** `DATABASE_URL=... npm run badges:backfill`, locally.
 
 ## 3. Verify
 - `curl https://<service>.onrender.com/health` → `{"status":"ok",...}`

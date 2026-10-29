@@ -60,7 +60,8 @@ class PlansViewModelTest {
         assertEquals(listOf("a"), vm.state.value.items.map { it.id })
         vm.setFilter(PlanStatus.ARCHIVED)
         vm.perform("c", PlanAction.UNARCHIVE)
-        assertEquals(PlanStatus.INACTIVE, vm.state.value.items.first { it.id == "c" }.status)
+        assertEquals(PlanStatus.INACTIVE, repo.plans.first { it.id == "c" }.status)
+        assertTrue(vm.state.value.items.none { it.id == "c" })
         assertEquals(listOf("restart:b:k1", "resume:a:k2", "pause:a:k3", "archive:b:k4", "unarchive:c:k5"), repo.calls)
     }
 
@@ -73,17 +74,26 @@ class PlansViewModelTest {
         assertEquals(1, a.currentWeek)
     }
 
-    @Test fun unarchiveUpdatesTheRowFromTheReturnedPlanWithoutReloading() {
+    @Test fun unarchiveUnderArchivedFilterDropsTheRowWithoutReloading() {
         repo.plans[2] = repo.plans[2].copy(pausedAt = FakePlanManagementRepository.PAUSED_AT) // archived while paused
         val vm = vm()
         vm.setFilter(PlanStatus.ARCHIVED)
         val lists = repo.listCalls.size
         vm.perform("c", PlanAction.UNARCHIVE)
-        val c = vm.state.value.items.single { it.id == "c" }
+        // Under the Archived filter the restored plan leaves the list.
+        assertTrue(vm.state.value.items.none { it.id == "c" })
+        val c = repo.plans.single { it.id == "c" }
         assertEquals(PlanStatus.PAUSED, c.status)
         assertEquals(FakePlanManagementRepository.PAUSED_AT, c.pausedAt)
         assertEquals(lists, repo.listCalls.size)
         assertNull(vm.state.value.busyId)
+    }
+
+    @Test fun unarchiveUnderAllUpdatesTheRowInPlace() {
+        repo.pages = { _, _ -> ApiResult.Success(PlanSummaryPage(repo.plans.toList(), null)) } // e.g. a stale All list still showing it
+        val vm = vm()
+        vm.perform("c", PlanAction.UNARCHIVE)
+        assertEquals(PlanStatus.INACTIVE, vm.state.value.items.single { it.id == "c" }.status)
     }
 
     @Test fun planArchivedShowsTheNoticeAndRefreshClearsIt() {
