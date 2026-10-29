@@ -2317,7 +2317,11 @@ components:
       description: Exact `PlannedExercise` prescription fields; copy them as-is into the plan draft
       properties:
         sets: { type: integer, minimum: 1, maximum: 20 }
-        targetWeightKg: { type: [number, 'null'], minimum: 0, maximum: 1000, multipleOf: 0.5 }
+        targetWeightKg:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1000
+          description: 'In `current`, the plan''s target as stored (it can be off the 0.5 kg grid, e.g. 40.3). In `suggested`, always a multiple of 0.5 kg.'
         repsMin: { type: [integer, 'null'], minimum: 1, maximum: 100 }
         repsMax: { type: [integer, 'null'], minimum: 1, maximum: 100 }
         durationSeconds: { type: [integer, 'null'], minimum: 1, maximum: 7200 }
@@ -2356,7 +2360,11 @@ components:
           description: 'Only with `REP_CEILING`; may be empty. Derived by rule (no curated links in v1): same primaryMuscle and trackingType, difficulty one level higher, compatible equipment. Deterministic order: exercise name ascending, then id; at most 3.'
         current: { $ref: '#/components/schemas/PrescriptionValues' }
         suggested:
-          oneOf: [{ $ref: '#/components/schemas/PrescriptionValues' }, { type: 'null' }]
+          oneOf:
+            - allOf:
+                - $ref: '#/components/schemas/PrescriptionValues'
+                - properties: { targetWeightKg: { multipleOf: 0.5 } }
+            - { type: 'null' }
           description: Null for `hold`; otherwise the complete values to write (unchanged fields equal `current`)
         cooldownUntil: { type: [string, 'null'], format: date-time }
         basedOn: { type: array, maxItems: 3, items: { $ref: '#/components/schemas/ProgressionBasis' }, description: Newest first }

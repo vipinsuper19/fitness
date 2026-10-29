@@ -37,34 +37,7 @@ function paramRefs(op: Operation, pathItem: PathItem): string[] {
 }
 
 describe('contracts/openapi.yaml', () => {
-  it('covers every MVP endpoint from the plan', () => {
-    const expected = [
-      'post /auth/register', 'post /auth/login', 'post /auth/refresh', 'post /auth/logout',
-      'delete /me', 'get /me/export', 'get /me/profile', 'put /me/profile',
-      'get /goals', 'post /goals', 'get /goals/{goalId}', 'patch /goals/{goalId}', 'delete /goals/{goalId}',
-      'get /exercises', 'get /exercises/{exerciseId}',
-      'post /workout-plans/generate', 'post /workout-plans', 'get /workout-plans/active',
-      'get /workout-plans/{planId}', 'patch /workout-plans/{planId}', 'post /workout-plans/{planId}/activate',
-      // P1: plan management (docs/specs/plan-management.md)
-      'get /workout-plans', 'post /workout-plans/{planId}/deactivate', 'delete /workout-plans/{planId}',
-      'post /workout-sessions', 'post /workout-sessions/{sessionId}/sets',
-      'patch /workout-sessions/{sessionId}', 'post /workout-sessions/{sessionId}/complete',
-      'get /workout-sessions/history',
-      'get /foods/search', 'post /foods', 'get /foods/{foodId}', 'patch /foods/{foodId}', 'delete /foods/{foodId}', 'get /food-logs', 'post /food-logs',
-      'patch /food-logs/{foodLogId}', 'delete /food-logs/{foodLogId}',
-      'get /water-logs', 'post /water-logs', 'patch /water-logs/{waterLogId}', 'delete /water-logs/{waterLogId}', 'get /nutrition/daily',
-      'get /body-measurements', 'post /body-measurements', 'get /progress/summary',
-      'get /progress/exercises', 'get /progress/exercises/{exerciseId}',
-      'get /xp/ledger', 'get /xp/balance',
-      // P1: badges & challenges (docs/specs/badges-challenges.md)
-      'get /badges', 'get /challenges/templates', 'get /challenges', 'post /challenges',
-      'get /challenges/{challengeId}', 'post /challenges/{challengeId}/leave',
-      // P1: notification preferences, storage only (docs/specs/notification-preferences.md)
-      'get /me/notification-preferences', 'patch /me/notification-preferences',
-    ];
-    const actual = new Set(operations().map(({ method, path }) => `${method} ${path}`));
-    for (const route of expected) expect(actual).toContain(route);
-  });
+  // Route coverage (both directions) lives in contract-routes.spec.ts, generated from the app's own routes.
 
   it('accepts Idempotency-Key on every write except token and pure-compute calls', () => {
     const exempt = new Set(['login', 'refreshTokens', 'logout', 'generateWorkoutPlan']);

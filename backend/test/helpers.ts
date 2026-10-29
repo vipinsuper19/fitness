@@ -6,6 +6,7 @@ import { ENV } from '../src/config/config.module';
 import { Env, loadEnv } from '../src/config/env';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { configureApp } from '../src/setup';
+import { installResponseChecker } from './support/openapi';
 
 export function testEnv(overrides: Record<string, string> = {}): Env {
   return loadEnv({
@@ -34,6 +35,7 @@ export async function createTestApp(
   if (options.prisma) builder = builder.overrideProvider(PrismaService).useValue(options.prisma);
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false });
+  installResponseChecker(app); // before configureApp's middleware, so it sees every JSON response
   configureApp(app, env);
   await app.init();
   return app;
