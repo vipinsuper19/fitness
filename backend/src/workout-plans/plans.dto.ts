@@ -104,7 +104,7 @@ export class WorkoutPlanUpdateDto extends OmitType(WorkoutPlanDraftDto, ['name']
   @ApiPropertyOptional({ deprecated: true, description: 'Ignored; the new version copies the latest name' }) @Allow()
   name?: unknown;
 
-  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1)
+  @ApiProperty({ minimum: 1, maximum: 1_000_000 }) @IsInt() @Min(1) @Max(1_000_000)
   baseVersion!: number;
 }
 

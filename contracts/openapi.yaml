@@ -193,6 +193,7 @@ paths:
                     code: IDEMPOTENCY_KEY_REUSED
                     message: This Idempotency-Key was used for a different request.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/login:
     post:
@@ -235,6 +236,7 @@ paths:
                 code: INVALID_CREDENTIALS
                 message: Email or password is incorrect.
                 requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/refresh:
     post:
@@ -282,6 +284,7 @@ paths:
                     code: REFRESH_TOKEN_REUSED
                     message: Sign in again.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/logout:
     post:
@@ -307,6 +310,7 @@ paths:
       responses:
         '204': { description: Signed out (also returned for an already revoked token) }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /me:
@@ -348,6 +352,7 @@ paths:
                 code: INVALID_PASSWORD
                 message: Password is incorrect.
                 requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /me/macro-suggestion:
     get:
@@ -801,6 +806,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /me/notification-devices:
     post:
@@ -840,6 +846,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /me/notification-devices/{deviceId}:
     parameters:
@@ -951,6 +958,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /goals:
@@ -1019,6 +1027,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /goals/{goalId}:
     parameters:
@@ -1076,6 +1085,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [goals]
@@ -1231,6 +1241,7 @@ paths:
                         notes: null
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '422':
           description: '`NO_MATCHING_EXERCISES`: the catalog has exercises but none fit this `experienceLevel` and `equipment` (bodyweight is always allowed). `details` echoes `experienceLevel` and `equipment`. The user can change their inputs, e.g. add equipment.'
@@ -1390,6 +1401,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/active:
     get:
@@ -1452,7 +1464,7 @@ paths:
         - name: version
           in: query
           description: A specific version; latest when omitted
-          schema: { type: integer, minimum: 1 }
+          schema: { type: integer, minimum: 1, maximum: 1000000 }
       responses:
         '200':
           description: Plan
@@ -1615,6 +1627,7 @@ paths:
                   value: { code: VERSION_CONFLICT, message: 'This plan changed since you opened it. Reload and edit the latest version.', details: { currentVersion: 5 }, requestId: 7f3a9c1e-2b4d-4e6f-8a0c-1d3e5f7a9b21 }
                 keyReused:
                   value: { code: IDEMPOTENCY_KEY_REUSED, message: 'This Idempotency-Key was used for a different request.', requestId: 7f3a9c1e-2b4d-4e6f-8a0c-1d3e5f7a9b22 }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-plans]
@@ -1794,6 +1807,7 @@ paths:
                     code: IDEMPOTENCY_KEY_REUSED
                     message: This Idempotency-Key was used for a different request.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/{planId}/deactivate:
     post:
@@ -1910,6 +1924,7 @@ paths:
                     code: IDEMPOTENCY_KEY_REUSED
                     message: This Idempotency-Key was used for a different request.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /workout-plans/{planId}/progression-suggestions:
@@ -2086,6 +2101,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/history:
     get:
@@ -2262,6 +2278,7 @@ paths:
                     code: IDEMPOTENCY_KEY_REUSED
                     message: This Idempotency-Key was used for a different request.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-sessions]
@@ -2362,6 +2379,7 @@ paths:
                     code: IDEMPOTENCY_KEY_REUSED
                     message: This Idempotency-Key was used for a different request.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/complete:
     post:
@@ -2445,6 +2463,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422':
           description: '`SESSION_EMPTY` (no completed sets)'
           content:
@@ -2577,6 +2596,7 @@ paths:
                     code: IDEMPOTENCY_KEY_REUSED
                     message: This Idempotency-Key was used for a different request.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422':
           description: '`SESSION_EMPTY`: no completed set would be left; discard the session instead'
           content:
@@ -2815,6 +2835,7 @@ paths:
                     code: IDEMPOTENCY_KEY_REUSED
                     message: This Idempotency-Key was used for a different request.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /foods/search:
@@ -2918,6 +2939,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /foods/{foodId}:
     parameters:
@@ -2999,6 +3021,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [nutrition]
@@ -3104,6 +3127,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /food-logs/{foodLogId}:
     parameters:
@@ -3151,6 +3175,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [nutrition]
@@ -3217,6 +3242,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /water-logs/{waterLogId}:
     parameters:
@@ -3249,6 +3275,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [nutrition]
@@ -3490,6 +3517,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /body-measurements/{measurementId}:
     parameters:
@@ -3552,6 +3580,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [progress]
@@ -3973,6 +4002,7 @@ paths:
                     code: IDEMPOTENCY_IN_PROGRESS
                     message: A request with this Idempotency-Key is still running. Retry shortly.
                     requestId: req_7f3a9c1e2b4d
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /challenges/{challengeId}:
     parameters:
@@ -4226,6 +4256,17 @@ components:
                 code: IDEMPOTENCY_IN_PROGRESS
                 message: A request with this Idempotency-Key is still running. Retry shortly.
                 requestId: req_7f3a9c1e2b4d
+    PayloadTooLarge:
+      description: '`PAYLOAD_TOO_LARGE`: the JSON body is over 100 KB (102400 bytes), or over 256 KB on `/workout-plans` routes (a maximal plan is about 145 KB). Sent before authentication and validation, with `requestId` and the `X-Request-Id` header. See docs/specs/input-limits.md.'
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            code: PAYLOAD_TOO_LARGE
+            message: Request body is too large.
+            requestId: req_7f3a9c1e2b4d
     RateLimited:
       description: '`RATE_LIMITED` with `details.retryAfterSeconds` (equal to `Retry-After`). Like every response it carries `X-Request-Id`, equal to `requestId` in the body.'
       headers:
@@ -4264,7 +4305,7 @@ components:
         code:
           type: string
           description: Stable machine code (UPPER_SNAKE_CASE). Clients branch on this, not on `message`.
-          examples: [VALIDATION_FAILED, NOT_FOUND, IDEMPOTENCY_KEY_REUSED, NO_MATCHING_EXERCISES, EXERCISE_CATALOG_EMPTY]
+          examples: [VALIDATION_FAILED, NOT_FOUND, IDEMPOTENCY_KEY_REUSED, NO_MATCHING_EXERCISES, EXERCISE_CATALOG_EMPTY, PAYLOAD_TOO_LARGE]
         message:
           type: string
           description: Human-readable, safe to show
@@ -4654,14 +4695,14 @@ components:
       required: [type]
       properties:
         type: { $ref: '#/components/schemas/GoalType' }
-        targetValue: { type: [number, 'null'], minimum: 0 }
-        startValue: { type: [number, 'null'], minimum: 0 }
+        targetValue: { type: [number, 'null'], minimum: 0, maximum: 999999 }
+        startValue: { type: [number, 'null'], minimum: 0, maximum: 999999 }
         targetDate: { type: [string, 'null'], format: date }
     GoalUpdate:
       type: object
       properties:
         status: { $ref: '#/components/schemas/GoalStatus' }
-        targetValue: { type: [number, 'null'], minimum: 0 }
+        targetValue: { type: [number, 'null'], minimum: 0, maximum: 999999 }
         targetDate: { type: [string, 'null'], format: date }
 
     MuscleGroup:
@@ -4700,6 +4741,7 @@ components:
         sessionMinutes: { type: integer, minimum: 15, maximum: 180 }
         equipment:
           type: array
+          maxItems: 10
           items: { $ref: '#/components/schemas/Equipment' }
           description: Available equipment; empty or omitted means bodyweight only
         weeks: { type: integer, minimum: 1, maximum: 16, default: 4 }
@@ -4713,7 +4755,7 @@ components:
       required: [exerciseId, order, sets]
       properties:
         exerciseId: { $ref: '#/components/schemas/Id' }
-        order: { type: integer, minimum: 0 }
+        order: { type: integer, minimum: 0, maximum: 1000 }
         sets: { type: integer, minimum: 1, maximum: 20 }
         repsMin: { type: [integer, 'null'], minimum: 1, maximum: 100 }
         repsMax: { type: [integer, 'null'], minimum: 1, maximum: 100 }
@@ -4751,7 +4793,7 @@ components:
         generator: { $ref: './schemas/workout-plan-draft.schema.json#/properties/generator' }
         rationale: { $ref: './schemas/workout-plan-draft.schema.json#/properties/rationale' }
         workouts: { $ref: './schemas/workout-plan-draft.schema.json#/properties/workouts' }
-        baseVersion: { type: integer, minimum: 1 }
+        baseVersion: { type: integer, minimum: 1, maximum: 1000000 }
     PrescriptionValues:
       type: object
       required: [sets, targetWeightKg, repsMin, repsMax, durationSeconds]
@@ -4938,7 +4980,7 @@ components:
       type: object
       properties:
         plannedWorkoutId: { $ref: '#/components/schemas/Id' }
-        planVersion: { type: integer, minimum: 1 }
+        planVersion: { type: integer, minimum: 1, maximum: 1000000 }
         startedAt:
           type: string
           format: date-time
@@ -5052,6 +5094,18 @@ components:
         fiberG: { type: [number, 'null'], minimum: 0 }
         sugarG: { type: [number, 'null'], minimum: 0 }
         sodiumMg: { type: [number, 'null'], minimum: 0 }
+    NutrientsInput:
+      type: object
+      description: '`Nutrients` as sent by clients (`FoodCreate`, `FoodUpdate`, `nutrientsOverride`): at most one decimal place per value, with the caps below.'
+      required: [energyKcal, proteinG, carbsG, fatG]
+      properties:
+        energyKcal: { type: number, minimum: 0, maximum: 5000 }
+        proteinG: { type: number, minimum: 0, maximum: 900 }
+        carbsG: { type: number, minimum: 0, maximum: 900 }
+        fatG: { type: number, minimum: 0, maximum: 900 }
+        fiberG: { type: [number, 'null'], minimum: 0, maximum: 900 }
+        sugarG: { type: [number, 'null'], minimum: 0, maximum: 900 }
+        sodiumMg: { type: [number, 'null'], minimum: 0, maximum: 9000 }
     ServingUnit:
       type: string
       enum: [g, ml, piece, katori, cup, tbsp, tsp, plate, glass, slice]
@@ -5079,7 +5133,7 @@ components:
         servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         servingUnit: { $ref: '#/components/schemas/ServingUnit' }
         gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
-        nutrients: { $ref: '#/components/schemas/Nutrients' }
+        nutrients: { $ref: '#/components/schemas/NutrientsInput' }
         isVegetarian: { type: [boolean, 'null'] }
     ExportedFood:
       allOf:
@@ -5107,7 +5161,7 @@ components:
         servingSize: { type: number, exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         servingUnit: { $ref: '#/components/schemas/ServingUnit' }
         gramsPerServing: { type: [number, 'null'], exclusiveMinimum: 0, maximum: 10000, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
-        nutrients: { $ref: '#/components/schemas/Nutrients' }
+        nutrients: { $ref: '#/components/schemas/NutrientsInput' }
         isVegetarian: { type: [boolean, 'null'] }
     FoodLog:
       type: object
@@ -5135,7 +5189,7 @@ components:
         date: { type: string, format: date }
         mealType: { $ref: '#/components/schemas/MealType' }
         servings: { type: number, exclusiveMinimum: 0, maximum: 100, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
-        nutrientsOverride: { $ref: '#/components/schemas/Nutrients' }
+        nutrientsOverride: { $ref: '#/components/schemas/NutrientsInput' }
     FoodLogUpdate:
       type: object
       description: |
@@ -5145,7 +5199,7 @@ components:
         mealType: { $ref: '#/components/schemas/MealType' }
         servings: { type: number, exclusiveMinimum: 0, maximum: 100, description: At most two decimal places; more is `400 VALIDATION_FAILED` }
         nutrientsOverride:
-          oneOf: [{ $ref: '#/components/schemas/Nutrients' }, { type: 'null' }]
+          oneOf: [{ $ref: '#/components/schemas/NutrientsInput' }, { type: 'null' }]
           description: null restores the computed values
     WaterLog:
       type: object
@@ -5482,7 +5536,7 @@ components:
       required: [templateCode, target]
       properties:
         templateCode: { type: string, maxLength: 40 }
-        target: { type: integer, minimum: 1, description: 'Must be one of the template''s `targets`' }
+        target: { type: integer, minimum: 1, maximum: 1000, description: 'Must be one of the template''s `targets`' }
     Challenge:
       type: object
       required: [id, templateCode, type, title, target, progress, unit, windowStart, windowEnd, joinDate, timezone, waterGoalMl, status, joinedAt, completedAt, leftAt, xpAwarded]
