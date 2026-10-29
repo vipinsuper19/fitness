@@ -4,7 +4,7 @@ import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.XpLedgerApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -27,7 +27,7 @@ class XpLedgerRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        repo = DefaultXpLedgerRepository(retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(XpLedgerApi::class.java), json)
+        repo = DefaultXpLedgerRepository(buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(XpLedgerApi::class.java), json)
     }
 
     @After fun tearDown() = server.close()

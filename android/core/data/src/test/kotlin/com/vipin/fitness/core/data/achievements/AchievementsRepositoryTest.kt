@@ -4,7 +4,7 @@ import com.vipin.fitness.core.network.AchievementsApi
 import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -32,7 +32,7 @@ class AchievementsRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        repo = DefaultAchievementsRepository(retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(AchievementsApi::class.java), json)
+        repo = DefaultAchievementsRepository(buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(AchievementsApi::class.java), json)
     }
 
     @After fun tearDown() = server.close()

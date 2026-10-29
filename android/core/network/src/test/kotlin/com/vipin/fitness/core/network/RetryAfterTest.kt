@@ -32,3 +32,15 @@ class RetryAfterTest {
         assertFalse(ApiError.Http(409, "IDEMPOTENCY_KEY_REUSED", "x", null).isRetryable)
     }
 }
+
+class RetryAfterDefaultTest {
+    @Test fun a429WithoutAUsableHeaderWaits30sOthersStayNull() {
+        assertEquals(30_000L, DEFAULT_RETRY_AFTER_MS)
+        assertEquals(30_000L, retryAfterFor(429, null, 0))
+        assertEquals(30_000L, retryAfterFor(429, "soon", 0))
+        assertEquals(7_000L, retryAfterFor(429, "7", 0))
+        assertEquals(0L, retryAfterFor(429, "0", 0))
+        assertNull(retryAfterFor(503, null, 0))
+        assertEquals(2_000L, retryAfterFor(503, "2", 0))
+    }
+}

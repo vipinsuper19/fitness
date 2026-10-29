@@ -5,7 +5,7 @@ import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.StrengthProgressApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -28,7 +28,7 @@ class StrengthProgressRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         repo = DefaultStrengthProgressRepository(r.create(StrengthProgressApi::class.java), json)
     }
 

@@ -3,7 +3,7 @@ package com.vipin.fitness.core.data
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.MacroSuggestionApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import com.vipin.fitness.core.network.model.ProfileDto
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonNull
@@ -26,7 +26,7 @@ class MacroSuggestionRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         repo = DefaultMacroSuggestionRepository(r.create(MacroSuggestionApi::class.java), json)
     }
 

@@ -13,7 +13,10 @@ sealed interface ApiError {
         val code: String,
         val message: String,
         val requestId: String?,
-        /** From a 429/503 `Retry-After` header (seconds or HTTP date), in ms from now; null if absent. */
+        /**
+         * From a 429/503 `Retry-After` header (seconds or HTTP date), in ms from now. A 429 without a
+         * usable header gets [DEFAULT_RETRY_AFTER_MS]; otherwise null if absent.
+         */
         val retryAfterMs: Long? = null,
     ) : ApiError
     data object Network : ApiError
@@ -46,7 +49,7 @@ internal fun HttpException.toApiError(json: Json): ApiError.Http {
         code = dto?.code ?: "HTTP_${code()}",
         message = dto?.message ?: message(),
         requestId = dto?.requestId ?: response()?.headers()?.get("X-Request-Id"),
-        retryAfterMs = parseRetryAfter(response()?.headers()?.get("Retry-After"), System.currentTimeMillis()),
+        retryAfterMs = retryAfterFor(code(), response()?.headers()?.get("Retry-After"), System.currentTimeMillis()),
     )
 }
 
@@ -60,6 +63,13 @@ val ApiError.isRetryable: Boolean
         is ApiError.Unexpected -> false
         is ApiError.Http -> status == 408 || status == 429 || status >= 500 || code == "IDEMPOTENCY_IN_PROGRESS"
     }
+
+/** Wait after a 429 whose `Retry-After` is missing or unparseable (never 0 ms: that would hammer the server). */
+const val DEFAULT_RETRY_AFTER_MS = 30_000L
+
+/** [status]'s wait: the header if usable; a 429 without one waits [DEFAULT_RETRY_AFTER_MS]; others null. */
+fun retryAfterFor(status: Int, header: String?, nowMs: Long): Long? =
+    parseRetryAfter(header, nowMs) ?: DEFAULT_RETRY_AFTER_MS.takeIf { status == 429 }
 
 /** `Retry-After` as delay-seconds or an HTTP date, in ms from [nowMs] (never negative); null if missing or bad. */
 fun parseRetryAfter(value: String?, nowMs: Long): Long? {

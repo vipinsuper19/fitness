@@ -10,7 +10,7 @@ import com.vipin.fitness.core.network.auth.AuthTokens
 import com.vipin.fitness.core.network.auth.SessionEvents
 import com.vipin.fitness.core.network.auth.TokenStore
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -64,7 +64,7 @@ class RepositoriesTest {
 
     @Before fun setUp() {
         server.start()
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         val clock = Clock.fixed(Instant.ofEpochMilli(0), ZoneOffset.UTC)
         session = DefaultSessionRepository(r.create(AuthApi::class.java), store, SessionEvents(), json, clock, cache, setOf(userState))
         profiles = DefaultProfileRepository(r.create(ProfileApi::class.java), json, cache)
