@@ -11,6 +11,8 @@ import { installResponseChecker } from './support/openapi';
 export function testEnv(overrides: Record<string, string> = {}): Env {
   return loadEnv({
     NODE_ENV: 'test',
+    // Quiet test output; test/request-log.int-spec.ts turns it on.
+    REQUEST_LOG: 'off',
     DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://user:pass@localhost:5432/fitness',
     JWT_ACCESS_SECRET: 'test-access-secret-0123456789abcdef',
     JWT_REFRESH_SECRET: 'test-refresh-secret-0123456789abcdef',
