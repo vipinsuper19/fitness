@@ -2,6 +2,8 @@
 <resources>
     <string name="nutrition_title">Nutrition</string>
     <string name="nutrition_retry">Retry</string>
+    <string name="nutrition_go_to_today">Go to today</string>
+    <string name="food_select">Choose food</string>
     <string name="nutrition_prev_day">Previous day</string>
     <string name="nutrition_next_day">Next day</string>
     <string name="nutrition_today">Today</string>

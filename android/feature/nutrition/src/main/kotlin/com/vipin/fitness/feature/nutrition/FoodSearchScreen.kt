@@ -100,8 +100,8 @@ private fun SearchPanel(s: FoodSearchState, vm: FoodSearchViewModel) {
 }
 
 @Composable
-private fun FoodRow(food: Food, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 6.dp).testTag("food_${food.id}")) {
+internal fun FoodRow(food: Food, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().tappableRow(stringResource(R.string.food_select), true, onClick).padding(vertical = 6.dp).testTag("food_${food.id}")) {
         Row {
             Text(listOfNotNull(food.name, food.brand).joinToString(" · "), Modifier.weight(1f))
             if (food.custom) Text(stringResource(R.string.custom_badge), style = MaterialTheme.typography.labelSmall)

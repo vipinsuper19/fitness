@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -127,7 +128,8 @@ private fun DateBar(s: DiaryState, vm: DiaryViewModel) {
         TextButton(onClick = vm::previousDay) { Text("‹ " + stringResource(R.string.nutrition_prev_day)) }
         Text(
             if (s.date == s.today) stringResource(R.string.nutrition_today) else NutritionFormat.date(s.date),
-            Modifier.weight(1f).clickable(onClick = vm::goToToday),
+            Modifier.weight(1f).tappableRow(stringResource(R.string.nutrition_go_to_today), true, vm::goToToday)
+                .wrapContentHeight(Alignment.CenterVertically).testTag("diary_date"),
             style = MaterialTheme.typography.titleMedium,
         )
         TextButton(onClick = vm::nextDay, enabled = s.canGoForward) { Text(stringResource(R.string.nutrition_next_day) + " ›") }
@@ -155,7 +157,7 @@ private fun TotalsCard(d: DailyNutrition) {
 }
 
 @Composable
-private fun MealCard(meal: MealType, logs: List<FoodLog>, kcal: Double, saving: Boolean, onAdd: () -> Unit, onEdit: (FoodLog) -> Unit) {
+internal fun MealCard(meal: MealType, logs: List<FoodLog>, kcal: Double, saving: Boolean, onAdd: () -> Unit, onEdit: (FoodLog) -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -165,7 +167,7 @@ private fun MealCard(meal: MealType, logs: List<FoodLog>, kcal: Double, saving: 
             if (logs.isEmpty()) Text(stringResource(R.string.nutrition_no_entries), style = MaterialTheme.typography.bodySmall)
             logs.forEach { log ->
                 HorizontalDivider()
-                Column(Modifier.fillMaxWidth().clickable(enabled = !saving) { onEdit(log) }.padding(vertical = 6.dp).testTag("log_${log.id}")) {
+                Column(Modifier.fillMaxWidth().tappableRow(stringResource(R.string.edit_entry_title), !saving) { onEdit(log) }.padding(vertical = 6.dp).testTag("log_${log.id}")) {
                     Row {
                         Text(log.foodName, Modifier.weight(1f))
                         Text(NutritionFormat.kcal(log.nutrients.energyKcal))
@@ -181,7 +183,7 @@ private fun MealCard(meal: MealType, logs: List<FoodLog>, kcal: Double, saving: 
 }
 
 @Composable
-private fun WaterCard(d: DailyNutrition, logs: List<WaterLog>, saving: Boolean, onAdd: (Int) -> Unit, onEdit: (WaterLog) -> Unit) {
+internal fun WaterCard(d: DailyNutrition, logs: List<WaterLog>, saving: Boolean, onAdd: (Int) -> Unit, onEdit: (WaterLog) -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(R.string.water_title), style = MaterialTheme.typography.titleMedium)
@@ -198,7 +200,11 @@ private fun WaterCard(d: DailyNutrition, logs: List<WaterLog>, saving: Boolean, 
                 }
             }
             logs.forEach { w ->
-                Text(NutritionFormat.ml(w.amountMl), Modifier.fillMaxWidth().clickable(enabled = !saving) { onEdit(w) }.padding(vertical = 4.dp))
+                Text(
+                    NutritionFormat.ml(w.amountMl),
+                    Modifier.fillMaxWidth().tappableRow(stringResource(R.string.water_edit), !saving) { onEdit(w) }
+                        .wrapContentHeight(Alignment.CenterVertically).padding(vertical = 4.dp).testTag("water_log_${w.id}"),
+                )
             }
         }
     }
