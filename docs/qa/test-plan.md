@@ -267,9 +267,25 @@ Notes:
 
 Notes: a PATCH creates a new plan version with new planned-workout ids, so suggestions after an accepted change are matched by the new ids (PG21–25). Cooldown is per (workout, exercise position): setting a target on a no-target entry is not a raise (PG24).
 
+### Dated water goals in challenges and HYDRATED_7 (#109)
+
+Spec: `docs/specs/badges-challenges.md` §2 (water goal, dated). No new endpoints, so no prod-check section. Automated over HTTP in `backend/test/qa-challenges-dated-water.e2e-spec.ts` (DB_TESTS=1): the clock moves day by day and the user logs in again, so water is logged on its own day and goals change through `PUT /me/profile`.
+
+| # | Case | Expected | Test |
+|---|---|---|---|
+| DW1 | Goal raised mid-week (2000 → 3000 on Wed) | Mon 2500 and Tue 2000 count, Wed 2500 doesn't until it reaches 3000; then `completed`, XP once; `waterGoalMl` stays 2000 (join value, display only); target history lists both rows | "goal raised mid-week…" |
+| DW2 | Goal lowered mid-week (3000 → 1500 on Tue) | Mon 2500 still doesn't count; only Tue counts | "goal lowered mid-week…" |
+| DW3 | A later goal (higher or lower) set after a day | Earlier days keep their result; a same-day replace applies to that day | "a later goal does not change a day already judged…" |
+| DW4 | No goal ever / water goal cleared | That day needs 2000 ml (1999 no, 2000 yes); join shows `waterGoalMl` 2000 | "no goal ever set, or water goal cleared…" |
+| DW5 | Another user's goals | No effect on my days | "another user's goals never affect my days" |
+| DW6 | HYDRATED_7 with goal raised mid-streak | 3 days at 2500 (goal 2000) + 4 days at 3000 (goal 3000) earns it, though 2500 < today's 3000; progress 3/7 before; raising the goal later never revokes it or pays badge XP again | "HYDRATED_7: goal raised mid-streak…" |
+| DW7 | Future-dated water in the window | Not counted (AB1) | "a future-dated water log does not count today…" |
+| DW8 | IST Monday week boundary (Sun 23:30 IST; Mon 00:30 IST = Sun 19:00 UTC) | Sun 23:30 IST: Sunday water counts for the week of Mon 19th, Monday water is still future and never counts; Mon 00:30 IST: a weekly join opens the week of Mon 26th (re-join 409), Monday water counts there, the old week expires at 1/3; at 19:00 UTC Sunday the IST date (Monday) is used, never the UTC date | "Sunday 23:30 IST counts for the old week…" |
+| DW9 | Weekly XP cap, then a water challenge on dated goals | 30+30+50 then a second PERSONAL_WORKOUTS_N capped to 40 (=150); the water challenge then completes (goal raised mid-week) with `xpAwarded` 0 and no ledger row; more water, a goal change, reads and a direct re-evaluation never pay it; challenge ledger total stays 150 | "cap reached first: the water challenge completes with xpAwarded 0…" |
+
 ### Suggest macros — Android UI (#120)
 
-Robolectric, through the real MainActivity (Nutrition → Macro targets) with `FakeMacroSuggestionRepository` and `FakeProfileRepository` from core:testing: `android/app/src/test/kotlin/com/vipin/fitness/ui/MacroTargetsUiTest.kt` (14 tests).
+Robolectric, through the real MainActivity (Nutrition → Macro targets) with `FakeMacroSuggestionRepository` and `FakeProfileRepository` from core:testing: `android/app/src/test/kotlin/com/vipin/fitness/ui/MacroTargetsUiTest.kt` (15 tests).
 
 | # | Case | Expected | Test |
 |---|---|---|---|
@@ -284,6 +300,7 @@ Robolectric, through the real MainActivity (Nutrition → Macro targets) with `F
 | SM9 | Suggest offline, then Retry | Error then card; 2 calls | `suggestOfflineThenRetry` |
 | SM10 | Profile load fails, then Retry | Error, no Suggest button; Retry shows targets | `loadFailsThenRetry` |
 | SM11 | Not now | Card hidden, nothing saved; Suggest asks the server again (no cache) | `notNowHidesTheCardWithoutSavingAndAsksAgainNextTime` |
-| SM12 | Imperial units | Basis weight in lb, not kg | `basisWeightFollowsImperialUnits` |
+| SM12 | Imperial units | Exactly "Based on 154.3 lb and the goal: lose weight" (70 kg), no kg | `basisWeightFollowsImperialUnits` |
 | SM13 | Vegetarian + no active goal | Veg protein hint; "no active goal, so maintain" | `vegetarianHintAndDefaultGoal` |
 | SM14 | Back | Returns to the diary | `backReturnsToTheDiary` |
+| SM15 | Suggestion held in flight | Only a spinner: no Not now / Apply / Suggest to tap while held; on release the card appears, nothing saved, 1 call. (Not now can't be tapped mid-request from the UI; the late-after-dismiss drop is covered by `MacroTargetsTest.aLateSuggestionAfterDismissIsDropped`.) | `aHeldSuggestionOffersNoNotNowAndSavesNothingWhenReleased` |

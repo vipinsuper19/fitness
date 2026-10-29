@@ -1,9 +1,7 @@
 package com.vipin.fitness.feature.nutrition
 
 import com.vipin.fitness.core.data.Nutrients
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.text.NumberFormat
+import com.vipin.fitness.core.common.format.IndianNumberFormat
 import java.time.LocalDate
 import com.vipin.fitness.core.common.time.APP_ZONE
 import java.time.ZoneId
@@ -16,28 +14,7 @@ internal object NutritionFormat {
     val ZONE: ZoneId = APP_ZONE
     private val dateFmt = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", LOCALE)
 
-    fun number(v: Double, maxDecimals: Int = 1): String =
-        indianGrouping(
-            NumberFormat.getNumberInstance(Locale.ROOT).apply {
-                maximumFractionDigits = maxDecimals
-                minimumFractionDigits = 0
-                roundingMode = RoundingMode.HALF_UP
-                isGroupingUsed = false
-            }.format(BigDecimal.valueOf(v)), // decimal value, so 1.45 rounds to 1.5 rather than the double 1.4499…
-        )
-
-    /** en-IN (lakh) grouping: the last three digits, then pairs: 1,00,000 and 12,34,567.8. The JDK only groups in threes. */
-    internal fun indianGrouping(plain: String): String {
-        val neg = plain.startsWith("-")
-        val body = plain.removePrefix("-")
-        val int = body.substringBefore('.')
-        val frac = body.substringAfter('.', "")
-        val grouped = if (int.length <= 3) int else {
-            val head = int.dropLast(3)
-            head.reversed().chunked(2).joinToString(",").reversed() + "," + int.takeLast(3)
-        }
-        return (if (neg) "-" else "") + grouped + (if (frac.isNotEmpty()) ".$frac" else "")
-    }
+    fun number(v: Double, maxDecimals: Int = 1): String = IndianNumberFormat.number(v, maxDecimals)
 
     fun kcal(v: Double) = "${number(v, 0)} kcal"
     fun grams(v: Double) = "${number(v)} g"

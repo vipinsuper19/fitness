@@ -9,11 +9,8 @@ import com.vipin.fitness.core.network.ApiResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
-import java.math.BigDecimal
-import java.math.RoundingMode
-import java.text.NumberFormat
+import com.vipin.fitness.core.common.format.IndianNumberFormat
 import java.time.ZoneId
-import java.util.Locale
 import javax.inject.Inject
 
 /** How history shows times and weights: the profile's zone and units. */
@@ -34,13 +31,7 @@ class HistoryDisplaySource @Inject constructor(
     ) { units, zone -> HistoryDisplay(zone, units) }
 }
 
-/** en-IN, half-up on the decimal value, at most one decimal, no grouping surprises from the device locale. */
+/** Shared en-IN formatter (half-up, lakh grouping, never "-0"), at most one decimal. */
 internal object HistoryFormat {
-    private val LOCALE: Locale = Locale.forLanguageTag("en-IN")
-
-    fun number(v: Double): String = NumberFormat.getNumberInstance(LOCALE).apply {
-        maximumFractionDigits = 1
-        minimumFractionDigits = 0
-        roundingMode = RoundingMode.HALF_UP
-    }.format(BigDecimal.valueOf(v))
+    fun number(v: Double): String = IndianNumberFormat.number(v, 1)
 }

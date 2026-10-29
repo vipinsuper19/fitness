@@ -180,14 +180,7 @@ private fun XpSlotBody(xp: XpBalance) {
 
 /** en-IN, half-up (same rules as nutrition). Water is ml, or US fl oz for imperial. */
 internal object HomeFormat {
-    private val LOCALE = java.util.Locale.forLanguageTag("en-IN")
-
-    fun number(v: Double, maxDecimals: Int = 1): String =
-        java.text.NumberFormat.getNumberInstance(LOCALE).apply {
-            maximumFractionDigits = maxDecimals
-            minimumFractionDigits = 0
-            roundingMode = java.math.RoundingMode.HALF_UP
-        }.format(java.math.BigDecimal.valueOf(v))
+    fun number(v: Double, maxDecimals: Int = 1): String = com.vipin.fitness.core.common.format.IndianNumberFormat.number(v, maxDecimals)
 
     fun water(ml: Int, units: UnitSystem): String =
         if (units == UnitSystem.METRIC) "${number(ml.toDouble(), 0)} ml" else "${number(UnitConversion.mlToFlOz(ml.toDouble()))} fl oz"

@@ -40,6 +40,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.CompletableDeferred
 import javax.inject.Inject
 
 /** Suggest macros (#120): Nutrition → Macro targets, through the real MainActivity with core:testing fakes. */
@@ -209,7 +210,7 @@ class MacroTargetsUiTest {
     @Test fun basisWeightFollowsImperialUnits() {
         units.units.value = UnitSystem.IMPERIAL
         suggest()
-        assertTrue(showsIn(T.SUGGESTION, "lb and the goal: lose weight"))
+        assertTrue(compose.onAllNodes(hasText("Based on 154.3 lb and the goal: lose weight"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
         assertFalse(showsIn(T.SUGGESTION, "70 kg"))
     }
 
@@ -219,6 +220,25 @@ class MacroTargetsUiTest {
         suggest()
         assertTrue(showsIn(T.SUGGESTION, "Vegetarian protein ideas: dal, paneer, curd, soy."))
         assertTrue(showsIn(T.SUGGESTION, "no active goal, so maintain"))
+    }
+
+    /**
+     * SM15: a suggestion still in flight. The screen shows only a spinner while suggesting, so
+     * "Not now" can't be tapped until the card is there; the late-after-dismiss race is covered at
+     * ViewModel level (MacroTargetsTest.aLateSuggestionAfterDismissIsDropped). Here: no Not now
+     * while held, and releasing shows the card without saving anything.
+     */
+    @Test fun aHeldSuggestionOffersNoNotNowAndSavesNothingWhenReleased() {
+        val gate = CompletableDeferred<Unit>()
+        suggestions.gate = gate
+        open(); click(T.SUGGEST)
+        waitTag(T.SUGGEST_LOADING)
+        assertFalse(present(T.DISMISS)); assertFalse(present(T.APPLY)); assertFalse(present(T.SUGGEST))
+        gate.complete(Unit)
+        waitTag(T.SUGGESTION)
+        assertFalse(present(T.SUGGEST_LOADING))
+        assertTrue(profiles.updates.isEmpty())
+        assertEquals(1, suggestions.calls)
     }
 
     @Test fun backReturnsToTheDiary() {

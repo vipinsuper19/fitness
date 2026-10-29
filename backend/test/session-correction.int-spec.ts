@@ -90,10 +90,12 @@ describeDb('PRD 5.3: session correction (HTTP + Postgres)', () => {
     expect(c2.xpBalance.total).toBe(before + 24);
     await api(u.token).delete(`/api/v1/workout-sessions/${s.id}`).expect(204);
 
-    const rows = await prisma.xPTransaction.findMany({ where: { userId: u.id, sourceType: 'session_correction' }, orderBy: { createdAt: 'asc' } });
-    expect(rows.map((r) => r.amount)).toEqual([2, -2, -24]);
-    const kinds = await prisma.sessionCorrection.findMany({ where: { sessionId: s.id }, orderBy: { createdAt: 'asc' } });
-    expect(kinds.map((k) => k.kind)).toEqual(['correction', 'correction', 'discard']);
+    // The clock is frozen, so the rows can share a createdAt: pair each ledger row with its
+    // correction (sourceId = correction id) instead of relying on the order of ties.
+    const rows = await prisma.xPTransaction.findMany({ where: { userId: u.id, sourceType: 'session_correction' } });
+    const kinds = await prisma.sessionCorrection.findMany({ where: { sessionId: s.id } });
+    const kindOf = new Map(kinds.map((k) => [k.id, k.kind]));
+    expect(rows.map((r) => `${kindOf.get(r.sourceId)} ${r.amount}`).sort()).toEqual(['correction -2', 'correction 2', 'discard -24']);
     const net = await prisma.xPTransaction.aggregate({ where: { userId: u.id, sourceType: { in: ['workout_session', 'session_correction'] } }, _sum: { amount: true } });
     expect(net._sum.amount).toBe(0);
     expect(await balance(u.token)).toBe(before);
