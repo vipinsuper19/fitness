@@ -2,6 +2,7 @@ package com.vipin.fitness
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.vipin.fitness.core.data.ConsentRepository
 import com.vipin.fitness.core.data.ProfileRepository
 import com.vipin.fitness.core.data.SessionRepository
 import com.vipin.fitness.core.datastore.ProfileFlagsCache
@@ -20,6 +21,7 @@ class AppViewModel @Inject constructor(
     private val session: SessionRepository,
     private val profiles: ProfileRepository,
     private val cache: ProfileFlagsCache,
+    private val consent: ConsentRepository? = null,
 ) : ViewModel() {
     private val _startRoute = MutableStateFlow<Route?>(null)
 
@@ -37,6 +39,9 @@ class AppViewModel @Inject constructor(
             // Known-complete users skip the network on launch; refresh the profile (and so the
             // cache) in the background. A failure here is fine: Main works offline.
             if (completed) launch { profiles.get() }
+            // Sessions from before consent shipped have no recorded user: learn it now so the
+            // consent gate can save their answer.
+            if (signedIn) launch { consent?.refreshActiveUser() }
         }
     }
 
