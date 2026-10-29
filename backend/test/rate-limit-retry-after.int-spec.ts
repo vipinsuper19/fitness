@@ -1,6 +1,7 @@
 /**
  * Every 429 carries Retry-After (DB_TESTS=1): for each named throttle (src/common/rate-limit.ts), set its env limit
- * to 1, hit one representative route twice, and expect a 429 RATE_LIMITED with `Retry-After` = positive integer seconds.
+ * to 1, hit one representative route twice, and expect a 429 RATE_LIMITED with `Retry-After` = positive integer seconds
+ * and an `X-Request-Id` header equal to the body's `requestId`.
  * Throttle guards run before validation, so request bodies don't matter (the first call may be a 400/401/404).
  */
 import { randomUUID } from 'node:crypto';
@@ -36,6 +37,9 @@ function expectRateLimited(res: request.Response) {
   expect(res.status).toBe(429);
   expect(res.headers['retry-after']).toMatch(/^[1-9][0-9]*$/);
   expect(res.body).toEqual(expect.objectContaining({ code: 'RATE_LIMITED', requestId: expect.any(String) }));
+  // Documented on components/responses/RateLimited: X-Request-Id is set on 429s too and equals the body's requestId.
+  expect(res.headers['x-request-id']).toMatch(/^[A-Za-z0-9._-]{8,64}$/);
+  expect(res.headers['x-request-id']).toBe(res.body.requestId);
 }
 
 describeDb('every 429 carries Retry-After', () => {
