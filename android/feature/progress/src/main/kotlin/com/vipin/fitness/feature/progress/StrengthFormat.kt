@@ -2,8 +2,7 @@ package com.vipin.fitness.feature.progress
 
 import com.vipin.fitness.core.common.UnitConversion
 import com.vipin.fitness.core.common.UnitSystem
-import java.math.BigDecimal
-import java.math.RoundingMode
+import com.vipin.fitness.core.common.format.IndianNumberFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -13,20 +12,7 @@ internal object StrengthFormat {
     private const val M_PER_MILE = 1609.344
     private val dateFmt = DateTimeFormatter.ofPattern("d MMM yyyy", ProgressFormat.LOCALE)
 
-    /** "1,00,000.5": HALF_UP to [maxDecimals], trailing zeros dropped, Indian grouping. */
-    fun number(v: Double, maxDecimals: Int = 1): String {
-        val plain = BigDecimal.valueOf(v).setScale(maxDecimals, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
-        val neg = plain.startsWith("-")
-        val body = plain.removePrefix("-")
-        val int = body.substringBefore('.')
-        val frac = body.substringAfter('.', "")
-        val grouped = if (int.length <= 3) int else {
-            val head = int.dropLast(3)
-            head.reversed().chunked(2).joinToString(",").reversed() + "," + int.takeLast(3)
-        }
-        return (if (neg && (int.trimStart('0').isNotEmpty() || frac.trim('0').isNotEmpty())) "-" else "") +
-            grouped + if (frac.isNotEmpty()) ".$frac" else ""
-    }
+    fun number(v: Double, maxDecimals: Int = 1): String = IndianNumberFormat.number(v, maxDecimals)
 
     fun weightUnit(units: UnitSystem) = if (units == UnitSystem.IMPERIAL) "lb" else "kg"
 

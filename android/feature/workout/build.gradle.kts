@@ -19,6 +19,7 @@ android {
 
 dependencies {
     implementation(projects.core.data)
+    implementation(projects.core.common)
     implementation(projects.core.designsystem)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

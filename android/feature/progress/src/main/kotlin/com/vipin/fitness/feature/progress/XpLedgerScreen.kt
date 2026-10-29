@@ -29,7 +29,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.data.xp.XpEntry
 import com.vipin.fitness.core.data.xp.XpSourceType
-import java.text.NumberFormat
+import com.vipin.fitness.core.common.format.IndianNumberFormat
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -53,7 +53,7 @@ internal object XpFormat {
     private val dateTime = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", ProgressFormat.LOCALE)
 
     fun amount(v: Int): String {
-        val n = NumberFormat.getIntegerInstance(ProgressFormat.LOCALE).format(kotlin.math.abs(v.toLong()))
+        val n = IndianNumberFormat.integer(kotlin.math.abs(v.toLong()))
         return if (v < 0) "\u2212$n" else "+$n"
     }
 
@@ -83,7 +83,7 @@ fun XpLedgerContent(s: XpLedgerState, onRetry: () -> Unit, onLoadMore: () -> Uni
         Text(stringResource(R.string.xp_ledger_title), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp))
         s.balance?.let { b ->
             Text(
-                stringResource(R.string.xp_ledger_balance, b.level, NumberFormat.getIntegerInstance(ProgressFormat.LOCALE).format(b.total.toLong())),
+                stringResource(R.string.xp_ledger_balance, b.level, IndianNumberFormat.integer(b.total.toLong())),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 16.dp).testTag(XpLedgerTags.BALANCE),
             )

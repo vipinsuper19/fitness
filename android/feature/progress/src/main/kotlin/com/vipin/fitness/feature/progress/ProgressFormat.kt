@@ -7,7 +7,7 @@ import com.vipin.fitness.core.data.MeasureDimension
 import com.vipin.fitness.core.data.MeasurementKind
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.NumberFormat
+import com.vipin.fitness.core.common.format.IndianNumberFormat
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -20,13 +20,8 @@ internal object ProgressFormat {
     private val dateFmt = DateTimeFormatter.ofPattern("EEE, d MMM yyyy", LOCALE)
     private val shortDateFmt = DateTimeFormatter.ofPattern("d MMM", LOCALE)
 
-    /** Formats the decimal value of [v] half-up, so 1.45 shows 1.5 and 2.5 shows 3 at 0 places. */
-    fun number(v: Double, maxDecimals: Int = 1): String =
-        NumberFormat.getNumberInstance(LOCALE).apply {
-            maximumFractionDigits = maxDecimals
-            minimumFractionDigits = 0
-            roundingMode = RoundingMode.HALF_UP
-        }.format(BigDecimal.valueOf(v))
+    /** Shared en-IN formatter: half-up on the decimal value, lakh grouping, never "-0". */
+    fun number(v: Double, maxDecimals: Int = 1): String = IndianNumberFormat.number(v, maxDecimals)
 
     /** Plain number for an input field: no grouping, up to [decimals] places, half-up. */
     fun input(v: Double, decimals: Int = 1): String = BigDecimal.valueOf(v).setScale(decimals, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
