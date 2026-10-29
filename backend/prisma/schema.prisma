@@ -313,7 +313,6 @@ model WorkoutPlan {
   versions  WorkoutPlanVersion[]
   activeFor UserProfile?         @relation("ActivePlan")
 
-  @@index([userId])
   @@index([userId, archivedAt])
   @@map("workout_plans")
 }
@@ -397,8 +396,9 @@ model WorkoutSession {
   plannedWorkout PlannedWorkout?     @relation(fields: [plannedWorkoutId], references: [id], onDelete: SetNull)
   sets           ExerciseSetLog[]
 
-  @@index([userId, completedAt])
   @@index([userId, status, completedAt])
+  @@index([planVersionId])
+  @@index([plannedWorkoutId])
   @@map("workout_sessions")
 }
 
@@ -674,6 +674,7 @@ model IdempotencyKey {
 
   @@unique([scope, key])
   @@index([expiresAt])
+  @@index([userId])
   @@map("idempotency_keys")
 }
 
