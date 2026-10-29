@@ -24,7 +24,20 @@ export interface TokenPair {
 export interface AccessClaims {
   sub: string;
   typ: 'access';
+  /**
+   * Session id: the refresh family this access token was issued with (docs/specs/notification-sending.md,
+   * "Session binding"). Optional: tokens signed before it shipped have none and stay valid until they expire.
+   */
+  sid?: string;
 }
+
+/** What a verified access token proves. `sid` comes only from the signed token. */
+export interface AccessIdentity {
+  userId: string;
+  sid?: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Serialises every write to one refresh family (rotate, logout, reuse/family revoke) for the rest of the
@@ -56,7 +69,7 @@ export class TokenService {
 
   async issue(userId: string, familyId: string = randomUUID(), db: Db = this.prisma): Promise<TokenPair> {
     const { refreshToken } = await this.createRefresh(db, userId, familyId);
-    return { accessToken: await this.signAccess(userId), refreshToken, tokenType: 'Bearer', expiresIn: this.env.JWT_ACCESS_TTL_SECONDS };
+    return { accessToken: await this.signAccess(userId, familyId), refreshToken, tokenType: 'Bearer', expiresIn: this.env.JWT_ACCESS_TTL_SECONDS };
   }
 
   private async createRefresh(db: Db, userId: string, familyId: string): Promise<{ id: string; refreshToken: string }> {
@@ -73,8 +86,9 @@ export class TokenService {
     return { id: row.id, refreshToken };
   }
 
-  signAccess(userId: string): Promise<string> {
-    const claims: AccessClaims = { sub: userId, typ: 'access' };
+  /** Signs an access token bound to the refresh family `familyId` (claim `sid`). */
+  signAccess(userId: string, familyId: string): Promise<string> {
+    const claims: AccessClaims = { sub: userId, typ: 'access', sid: familyId };
     return this.jwt.signAsync(claims, {
       secret: this.env.JWT_ACCESS_SECRET,
       algorithm: 'HS256',
@@ -85,8 +99,8 @@ export class TokenService {
     });
   }
 
-  /** Returns the user id, or throws UNAUTHENTICATED / TOKEN_EXPIRED. */
-  async verifyAccess(token: string): Promise<string> {
+  /** Returns the user id and, when the token has one, its session id; or throws UNAUTHENTICATED / TOKEN_EXPIRED. */
+  async verifyAccess(token: string): Promise<AccessIdentity> {
     try {
       const claims = await this.jwt.verifyAsync<AccessClaims>(token, {
         secret: this.env.JWT_ACCESS_SECRET,
@@ -95,7 +109,9 @@ export class TokenService {
         audience: JWT_AUDIENCE,
       });
       if (claims.typ !== 'access' || typeof claims.sub !== 'string') throw new Error('wrong token type');
-      return claims.sub;
+      if (claims.sid === undefined) return { userId: claims.sub }; // legacy token, issued before `sid`
+      if (typeof claims.sid !== 'string' || !UUID.test(claims.sid)) throw new Error('malformed sid');
+      return { userId: claims.sub, sid: claims.sid };
     } catch (error) {
       if (error instanceof Error && error.name === 'TokenExpiredError') {
         throw new ApiError(HttpStatus.UNAUTHORIZED, 'TOKEN_EXPIRED', 'Your session expired. Refresh and try again.');
@@ -138,7 +154,7 @@ export class TokenService {
     });
     if (!outcome) throw new ApiError(HttpStatus.UNAUTHORIZED, 'REFRESH_TOKEN_REUSED', 'Sign in again.');
     return {
-      accessToken: await this.signAccess(row.userId),
+      accessToken: await this.signAccess(row.userId, row.familyId),
       refreshToken: outcome.refreshToken,
       tokenType: 'Bearer',
       expiresIn: this.env.JWT_ACCESS_TTL_SECONDS,

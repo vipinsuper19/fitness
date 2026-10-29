@@ -7,7 +7,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IS_PUBLIC } from './public.decorator';
 import { TokenService } from './token.service';
 
-export type AuthedRequest = Request & { userId?: string };
+/**
+ * Set only by JwtAuthGuard from the verified token. `sessionId` is the token's `sid` (refresh family); it is
+ * undefined for tokens issued before `sid` shipped.
+ */
+export type AuthedRequest = Request & { userId?: string; sessionId?: string };
 
 /**
  * Global guard: every route needs a valid access token for a user that still
@@ -28,11 +32,14 @@ export class JwtAuthGuard implements CanActivate {
     const header = req.header('authorization') ?? '';
     const match = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(header);
     if (!match?.[1]) throw new ApiError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED', 'Sign in to continue.');
-    const userId = await this.tokens.verifyAccess(match[1]);
+    // Clear first so nothing else (a body, query or earlier middleware) can supply a session id.
+    req.sessionId = undefined;
+    const { userId, sid } = await this.tokens.verifyAccess(match[1]);
     // A deleted account's access tokens stay signed until they expire; refuse them.
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) throw new ApiError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED', 'Sign in to continue.');
     req.userId = userId;
+    req.sessionId = sid;
     return true;
   }
 }

@@ -162,10 +162,10 @@ Table `notification_devices`: `id` uuid, `user_id` (FK → users `ON DELETE CASC
 Both: 401, 409 (key reuse), `429 RATE_LIMITED` per user per route, `NOTIFICATION_DEVICES_RATE_LIMIT_PER_MINUTE` (default 30).
 
 ### Session binding (decision 4; checked against the auth code)
-**Finding:** the access token does **not** carry the refresh-family id today. `TokenService.signAccess(userId)` signs only `{sub, typ: 'access'}` plus `iss`, `aud`, `exp` and a random `jti`; `verifyAccess` returns only the user id. Families exist only on `refresh_tokens.family_id` (a UUID per login, kept across rotations). `POST /auth/logout` takes the refresh token in the body and revokes the presented token's **whole family** (`TokenService.revoke`, since backend/logout-revoke-family; docs/specs/auth-logout.md); reuse detection revokes the whole family (`revokeFamily`).
+**Shipped (step 1, branch `backend/access-token-sid`):** access tokens carry `sid` = the refresh `family_id` (a UUID per login, kept across rotations). `issue()` signs the new family and `rotate()` signs `row.familyId`. `TokenService.verifyAccess` returns `{userId, sid?}`. A present `sid` must be a UUID, otherwise the token is `401`. Tokens issued before this shipped have no `sid` and still verify everywhere. `JwtAuthGuard` sets `req.sessionId` only from the verified token, clearing anything preset, and handlers read it with `@CurrentSessionId()`. Nothing uses it yet. *Before:* `signAccess(userId)` signed only `{sub, typ}`. `POST /auth/logout` takes the refresh token in the body and revokes the presented token's **whole family** (`TokenService.revoke`, since backend/logout-revoke-family; docs/specs/auth-logout.md); reuse detection revokes the whole family (`revokeFamily`).
 
 **How devices are bound:**
-1. Access tokens gain a session claim `sid` = the refresh `family_id`. `issue()` passes the new family id; `rotate()` passes `row.familyId`. The guard exposes it to handlers (e.g. `@CurrentSession()`); it isn't needed elsewhere. No contract change (tokens are opaque to the client).
+1. **(Shipped.)** Access tokens gain a session claim `sid` = the refresh `family_id`. `issue()` passes the new family id; `rotate()` passes `row.familyId`. The guard exposes it to handlers (`@CurrentSessionId()`); it isn't needed elsewhere. No contract change (tokens are opaque to the client).
 2. `POST /me/notification-devices` stores `refresh_family_id = sid` on the device row (updating it on every upsert, so a re-login on the same phone rebinds the token to the new session).
 3. **Logout:** `AuthService.logout` looks up the presented refresh token's `family_id` (owner-checked, as now) and, in the same transaction as the revoke, deletes `notification_devices` with that `user_id` and `refresh_family_id`. A logout with an unknown or already-revoked token still deletes nothing else.
 4. **Reuse detection / family revoke:** `revokeFamily` deletes that family's devices too.
@@ -219,7 +219,7 @@ All secrets live in Render env vars (and the GitHub secret for the cron), never 
 1. **Quiet hours:** reminders that fall in quiet hours are dropped. Events are held and sent merged per type when quiet hours end; anything older than 24 h is discarded.
 2. **At-most-once:** a row stuck in `sending` for 10 minutes is marked `failed` (`STUCK_SENDING`), logged, and never retried.
 3. **Workout days** are weekdays the user picks, all 7 by default, with no coupling to plans.
-4. **Session binding:** the access token has no family id today, so access tokens gain a `sid` claim (the refresh family). Devices are registered against it at POST time and deleted by it on logout and family revoke.
+4. **Session binding:** access tokens carry a `sid` claim (the refresh family; shipped). Devices are registered against it at POST time and deleted by it on logout and family revoke.
 5. **`reminders` stays inside the preferences resource**: one PATCH, one lock.
 6. **The tick endpoint stays out of openapi**, with an explicit `x-internal` allowlist in the contract test (test-only), so drift is still caught for public routes.
 7. **Generic copy only:** no health numbers, food or weight in notification text, because of lock screens.
