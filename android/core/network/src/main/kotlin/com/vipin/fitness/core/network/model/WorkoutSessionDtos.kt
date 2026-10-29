@@ -31,6 +31,7 @@ data class SetLogUpsertDto(
     val weightKg: Double? = null,
     val durationSeconds: Int? = null,
     val loggedAt: String? = null,
+    val distanceM: Double? = null,
 )
 
 @Serializable
