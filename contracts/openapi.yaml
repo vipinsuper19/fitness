@@ -2081,7 +2081,7 @@ components:
           type: array
           maxItems: 3
           items: { $ref: '#/components/schemas/Id' }
-          description: Only with `REP_CEILING`; may be empty. Same primaryMuscle and trackingType, difficulty one level higher, compatible equipment.
+          description: Only with `REP_CEILING`; may be empty. Derived by rule (no curated links in v1): same primaryMuscle and trackingType, difficulty one level higher, compatible equipment. Deterministic order: exercise name ascending, then id; at most 3.
         current: { $ref: '#/components/schemas/PrescriptionValues' }
         suggested:
           oneOf: [{ $ref: '#/components/schemas/PrescriptionValues' }, { type: 'null' }]
