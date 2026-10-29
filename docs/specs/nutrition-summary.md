@@ -20,8 +20,8 @@
 
 ## Targets
 
-- The profile stores only the **current** `dailyCalorieTargetKcal` and `dailyWaterTargetMl`. There is no target history and there are no macro targets.
-- `targets` are therefore the current targets, applied to every period. `proteinG`, `carbsG` and `fatG` are always `null` until the profile gains macro targets. `targets` is `null` only when none of calories, water, protein, carbs or fat has a target (only macros set → non-null with `kcal`/`waterMl` null).
+- The profile stores only the **current** `dailyCalorieTargetKcal` and `dailyWaterTargetMl`. There is no target history. Macro targets (`dailyProteinTargetG`, `dailyCarbsTargetG`, `dailyFatTargetG`) follow the same rule.
+- `targets` are therefore the current targets, applied to every period. `proteinG`, `carbsG` and `fatG` are the profile's current macro targets (`daily*TargetG`, see [macro-targets.md](macro-targets.md)), `null` when unset. `targets` is `null` only when none of calories, water, protein, carbs or fat has a target (only macros set → non-null with `kcal`/`waterMl` null).
 - Adherence, each × 100 with one decimal HALF_UP:
   - `kcalPct` = `avgPerLoggedDay.energyKcal / targets.kcal`
   - `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro> / targets.<macro>`
