@@ -20,6 +20,7 @@ class DefaultProfileRepository @Inject constructor(
     private val api: ProfileApi,
     private val json: Json,
     private val cache: ProfileFlagsCache,
+    private val zone: ProfileZone? = null,
 ) : ProfileRepository {
     override suspend fun get() = apiCall(json) { api.get().toDomain() }.cached()
 
@@ -29,6 +30,7 @@ class DefaultProfileRepository @Inject constructor(
     /** Every profile the server returns refreshes the launch cache. */
     private suspend fun ApiResult<Profile>.cached(): ApiResult<Profile> = also {
         if (it is ApiResult.Success) cache.save(it.value.onboardingCompleted, it.value.unitSystem)
+        if (it is ApiResult.Success) zone?.remember(it.value)
     }
 }
 

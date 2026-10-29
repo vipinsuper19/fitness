@@ -32,7 +32,7 @@ class GoalsViewModelTest {
     private val oct21 = LocalDate.of(2026, 10, 21)
     private var profile = Profile()
     private fun vm(): GoalsViewModel {
-        val zone = ProfileZone(FakeProfileRepository(profile))
+        val zone = ProfileZone { FakeProfileRepository(profile) }
         return GoalsViewModel(goals, GoalProgressService(goals, progress, clock, zone), FakeUnitPreference(), clock, zone)
     }
 

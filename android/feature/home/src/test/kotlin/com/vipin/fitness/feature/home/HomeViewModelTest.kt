@@ -35,7 +35,7 @@ class HomeViewModelTest {
     private val clock = MutableClock(Instant.parse("2026-10-21T18:20:00Z"))
     private val oct21 = LocalDate.of(2026, 10, 21)
     private val goals = com.vipin.fitness.core.testing.FakeGoalsRepository()
-    private fun vm() = HomeViewModel(home, workouts, progress, FakeUnitPreference(), clock, com.vipin.fitness.core.data.GoalProgressService(goals, progress, clock, com.vipin.fitness.core.data.ProfileZone(com.vipin.fitness.core.testing.FakeProfileRepository())))
+    private fun vm() = HomeViewModel(home, workouts, progress, FakeUnitPreference(), clock, com.vipin.fitness.core.data.GoalProgressService(goals, progress, clock, com.vipin.fitness.core.data.ProfileZone { com.vipin.fitness.core.testing.FakeProfileRepository() }))
     private fun <T> Slot<T>.value() = (this as Slot.Ready<T>).value
 
     private fun plan(name: String, vararg days: Pair<DayOfWeek, String>) = WorkoutPlan(

@@ -73,13 +73,13 @@ class GoalsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { unitPref.units.collect { u -> _state.update { it.copy(units = u) } } }
-        viewModelScope.launch { zone = profileZone.zone() }
         load()
     }
 
     fun load() {
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
+            zone = profileZone.zone()
             when (val r = service.load(status = null)) {
                 is ApiResult.Success -> _state.update { it.copy(loading = false, items = r.value) }
                 is ApiResult.Failure -> _state.update { it.copy(loading = false, error = r.error.userMessage()) }
