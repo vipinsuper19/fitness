@@ -398,7 +398,6 @@ model WorkoutSession {
   sets           ExerciseSetLog[]
 
   @@index([userId, completedAt])
-  @@index([userId, status])
   @@index([userId, status, completedAt])
   @@map("workout_sessions")
 }
