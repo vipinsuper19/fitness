@@ -60,7 +60,7 @@ fun ProgressScreen(modifier: Modifier = Modifier) {
         PrimaryTabRow(selectedTabIndex = tab) {
             Tab(tab == 0, { tab = 0 }, Modifier.testTag("progress_tab_charts"), text = { Text(stringResource(R.string.progress_charts)) })
             Tab(tab == 1, { tab = 1 }, Modifier.testTag("progress_tab_measurements"), text = { Text(stringResource(R.string.progress_measurements)) })
-            Tab(tab == 2, { tab = 2 }, Modifier.testTag("progress_tab_goals"), text = { Text(stringResource(R.string.progress_goals)) })
+            Tab(tab == 2, { tab = 2 }, Modifier.testTag(GoalsTags.TAB), text = { Text(stringResource(R.string.progress_goals)) })
             Tab(tab == 3, { tab = 3 }, Modifier.testTag(StrengthTags.TAB), text = { Text(stringResource(R.string.progress_strength)) })
         }
         when (tab) {

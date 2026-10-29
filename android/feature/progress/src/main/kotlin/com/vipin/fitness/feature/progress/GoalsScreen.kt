@@ -55,15 +55,15 @@ internal fun GoalsContent(
     onDelete: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(onClick = onAdd, enabled = !s.saving, modifier = Modifier.fillMaxWidth().testTag("goal_add")) { Text(stringResource(R.string.goal_add)) }
-        s.writeError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("goal_write_error")) }
+        Button(onClick = onAdd, enabled = !s.saving, modifier = Modifier.fillMaxWidth().testTag(GoalsTags.ADD)) { Text(stringResource(R.string.goal_add)) }
+        s.writeError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag(GoalsTags.WRITE_ERROR)) }
         when {
             s.loading && s.items.isEmpty() -> CircularProgressIndicator()
             s.error != null -> {
                 Text(s.error, color = MaterialTheme.colorScheme.error)
                 Button(onClick = onRetry) { Text(stringResource(R.string.progress_retry)) }
             }
-            s.items.isEmpty() -> Text(stringResource(R.string.goal_empty), modifier = Modifier.testTag("goal_empty"))
+            s.items.isEmpty() -> Text(stringResource(R.string.goal_empty), modifier = Modifier.testTag(GoalsTags.EMPTY))
             else -> {
                 s.active.forEach { GoalCard(it, s.units, s.saving, onStatus, onDelete) }
                 if (s.past.isNotEmpty()) {
@@ -110,7 +110,7 @@ fun goalProgressText(p: GoalProgress, units: UnitSystem): String? {
 @Composable
 private fun GoalCard(p: GoalProgress, units: UnitSystem, saving: Boolean, onStatus: (String, GoalStatus) -> Unit, onDelete: (String) -> Unit) {
     val g = p.goal
-    Card(Modifier.fillMaxWidth().testTag("goal_${g.id}")) {
+    Card(Modifier.fillMaxWidth().testTag(GoalsTags.card(g.id))) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(goalTitle(g.type), style = MaterialTheme.typography.titleMedium)
             when (g.status) {
@@ -120,8 +120,8 @@ private fun GoalCard(p: GoalProgress, units: UnitSystem, saving: Boolean, onStat
             }
             goalProgressText(p, units)?.let { Text(it) }
             p.fraction?.let { f ->
-                LinearProgressIndicator(progress = { f.toFloat() }, modifier = Modifier.fillMaxWidth().testTag("goal_bar_${g.id}"))
-                if (p.milestone > 0) Text(stringResource(R.string.goal_milestone, p.milestone), color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("goal_milestone_${g.id}"))
+                LinearProgressIndicator(progress = { f.toFloat() }, modifier = Modifier.fillMaxWidth().testTag(GoalsTags.bar(g.id)))
+                if (p.milestone > 0) Text(stringResource(R.string.goal_milestone, p.milestone), color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag(GoalsTags.milestone(g.id)))
             }
             g.targetDate?.let { Text(stringResource(R.string.goal_by_date, ProgressFormat.date(it)), style = MaterialTheme.typography.bodySmall) }
             FlowRowActions(g.id, g.status, saving, onStatus, onDelete)
@@ -134,12 +134,12 @@ private fun GoalCard(p: GoalProgress, units: UnitSystem, saving: Boolean, onStat
 private fun FlowRowActions(id: String, status: GoalStatus, saving: Boolean, onStatus: (String, GoalStatus) -> Unit, onDelete: (String) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (status == GoalStatus.ACTIVE) {
-            TextButton(onClick = { onStatus(id, GoalStatus.ACHIEVED) }, enabled = !saving, modifier = Modifier.testTag("goal_achieved_$id")) { Text(stringResource(R.string.goal_mark_achieved)) }
-            TextButton(onClick = { onStatus(id, GoalStatus.ABANDONED) }, enabled = !saving, modifier = Modifier.testTag("goal_abandon_$id")) { Text(stringResource(R.string.goal_abandon)) }
+            TextButton(onClick = { onStatus(id, GoalStatus.ACHIEVED) }, enabled = !saving, modifier = Modifier.testTag(GoalsTags.achieved(id))) { Text(stringResource(R.string.goal_mark_achieved)) }
+            TextButton(onClick = { onStatus(id, GoalStatus.ABANDONED) }, enabled = !saving, modifier = Modifier.testTag(GoalsTags.abandon(id))) { Text(stringResource(R.string.goal_abandon)) }
         } else {
-            TextButton(onClick = { onStatus(id, GoalStatus.ACTIVE) }, enabled = !saving, modifier = Modifier.testTag("goal_reactivate_$id")) { Text(stringResource(R.string.goal_reactivate)) }
+            TextButton(onClick = { onStatus(id, GoalStatus.ACTIVE) }, enabled = !saving, modifier = Modifier.testTag(GoalsTags.reactivate(id))) { Text(stringResource(R.string.goal_reactivate)) }
         }
-        TextButton(onClick = { onDelete(id) }, enabled = !saving, modifier = Modifier.testTag("goal_delete_$id")) {
+        TextButton(onClick = { onDelete(id) }, enabled = !saving, modifier = Modifier.testTag(GoalsTags.delete(id))) {
             Text(stringResource(R.string.goal_delete), color = MaterialTheme.colorScheme.error)
         }
     }
@@ -156,7 +156,7 @@ private fun GoalFormDialog(f: GoalForm, units: UnitSystem, saving: Boolean, onFo
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     GoalType.creatable.forEach { t ->
-                        FilterChip(selected = f.type == t, onClick = { onForm { it.copy(type = t) } }, label = { Text(goalTitle(t)) }, modifier = Modifier.testTag("goal_type_${t.wire}"))
+                        FilterChip(selected = f.type == t, onClick = { onForm { it.copy(type = t) } }, label = { Text(goalTitle(t)) }, modifier = Modifier.testTag(GoalsTags.type(t.wire)))
                     }
                 }
                 if (f.type.isWeight || f.type == GoalType.WORKOUTS_PER_WEEK) {
@@ -166,7 +166,7 @@ private fun GoalFormDialog(f: GoalForm, units: UnitSystem, saving: Boolean, onFo
                         isError = GoalFormError.TARGET in f.errors,
                         supportingText = { if (GoalFormError.TARGET in f.errors) Text(stringResource(if (f.type == GoalType.WORKOUTS_PER_WEEK) R.string.goal_err_workouts else R.string.goal_err_weight)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.testTag("goal_target"),
+                        modifier = Modifier.testTag(GoalsTags.TARGET),
                     )
                 }
                 if (f.type == GoalType.LOSE_WEIGHT || f.type == GoalType.GAIN_MUSCLE) {
@@ -176,7 +176,7 @@ private fun GoalFormDialog(f: GoalForm, units: UnitSystem, saving: Boolean, onFo
                         isError = GoalFormError.START in f.errors,
                         supportingText = { if (GoalFormError.START in f.errors) Text(stringResource(R.string.goal_err_weight)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.testTag("goal_start"),
+                        modifier = Modifier.testTag(GoalsTags.START),
                     )
                 }
                 OutlinedTextField(
@@ -184,11 +184,11 @@ private fun GoalFormDialog(f: GoalForm, units: UnitSystem, saving: Boolean, onFo
                     label = { Text(stringResource(R.string.goal_target_date)) },
                     isError = GoalFormError.DATE in f.errors,
                     supportingText = { Text(stringResource(if (GoalFormError.DATE in f.errors) R.string.goal_err_date else R.string.goal_date_hint)) },
-                    modifier = Modifier.testTag("goal_date"),
+                    modifier = Modifier.testTag(GoalsTags.DATE),
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onSave, enabled = !saving, modifier = Modifier.testTag("goal_save")) { Text(stringResource(R.string.progress_save)) } },
+        confirmButton = { TextButton(onClick = onSave, enabled = !saving, modifier = Modifier.testTag(GoalsTags.SAVE)) { Text(stringResource(R.string.progress_save)) } },
         dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.goal_cancel)) } },
     )
 }

@@ -58,6 +58,28 @@ class NutritionSummaryRepositoryTest {
         assertEquals(2000, full.avgWaterMlPerLoggedDay)
     }
 
+    @Test fun decodesPerPointTargetsAndTargetsChanged() = runTest {
+        server.enqueue(MockResponse(code = 200, body = """{"from":"2026-10-01","to":"2026-10-29","bucket":"month","timezone":"Asia/Kolkata",
+            "targets":{"kcal":2000,"proteinG":null,"carbsG":null,"fatG":null,"waterMl":null},
+            "points":[
+              {"period":"2026-10-01","daysInPeriod":29,"daysLogged":0,"totals":null,"avgPerLoggedDay":null,"waterMl":null,"waterDaysLogged":0,
+               "avgWaterMlPerLoggedDay":null,"adherence":null,"entryCount":0,"entriesMissing":{"fiberG":0,"sugarG":0,"sodiumMg":0},
+               "targets":{"kcal":2200,"proteinG":90,"carbsG":null,"fatG":70,"waterMl":3000},"targetsChanged":true},
+              {"period":"2026-10-02","daysInPeriod":1,"daysLogged":0,"totals":null,"avgPerLoggedDay":null,"waterMl":null,"waterDaysLogged":0,
+               "avgWaterMlPerLoggedDay":null,"adherence":null,"entryCount":0,"entriesMissing":{"fiberG":0,"sugarG":0,"sodiumMg":0},
+               "targets":null,"targetsChanged":false},
+              {"period":"2026-10-03","daysInPeriod":1,"daysLogged":0,"waterDaysLogged":0,"entryCount":0,"entriesMissing":{"fiberG":0,"sugarG":0,"sodiumMg":0}}]}"""))
+        val s = (repo.summary(LocalDate.parse("2026-10-01"), LocalDate.parse("2026-10-29"), SummaryBucket.MONTH) as ApiResult.Success).value
+        val (a, b, c) = s.points
+        assertEquals(NutritionTargets(2200, 90, null, 70, 3000), a.targets)
+        assertEquals(true, a.targetsChanged)
+        assertNull(b.targets)
+        assertEquals(false, b.targetsChanged)
+        // An older server without the fields.
+        assertNull(c.targets)
+        assertEquals(false, c.targetsChanged)
+    }
+
     @Test fun nullTargetsAndUnknownBucket() = runTest {
         server.enqueue(MockResponse(code = 200, body = """{"from":"2026-10-29","to":"2026-10-29","bucket":"day","timezone":"Asia/Kolkata","targets":null,"points":[]}"""))
         val s = (repo.summary(LocalDate.parse("2026-10-29"), LocalDate.parse("2026-10-29"), SummaryBucket.DAY) as ApiResult.Success).value
