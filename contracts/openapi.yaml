@@ -290,6 +290,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationPreferences' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     patch:
       tags: [me]
       operationId: updateNotificationPreferences
@@ -316,6 +317,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /me/profile:
     get:
       tags: [me]

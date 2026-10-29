@@ -20,7 +20,7 @@ One opt-in flag per type, each tied to an existing feature:
 - Water and food reminders are **off** by default because they are frequent; the rest are low-volume and tied to things the user chose (a plan, a challenge).
 - A master switch `enabled` (default **on**) turns everything off without losing the per-type choices. A type is effectively on only when `enabled` **and** its flag are true.
 - **New types:** adding a type is a contract change that also sets its default. Users who never set it get that default. Clients must ignore type keys they don't know in responses.
-- **Removed types:** a stored flag for a type no longer in the catalog is ignored and dropped on the next write. It is never returned.
+- **Removed types:** a stored flag for a type no longer in the catalog is ignored and dropped on the next write. It is never returned. A PATCH naming a removed type is an unknown type and gets `400 VALIDATION_FAILED` (`types.<key>`).
 
 ## Quiet hours
 `quietHours: { enabled, start, end }` with `start` and `end` as local wall-clock times `HH:MM` (24 h, `00:00`–`23:59`). Default **enabled, 22:00 → 07:00**.
@@ -56,14 +56,14 @@ One opt-in flag per type, each tied to an existing feature:
 - PUT isn't offered: a full replace would make older clients reset types they don't know about.
 
 **Validation** (`400 VALIDATION_FAILED`, `details.fields` keyed by path; nothing is saved if any field fails):
-- **Unknown type key** → `types.<key>: "unknown notification type"`. It's rejected, not ignored, so a typo can't silently do nothing. Clients send only the types they got from `GET`.
+- **Unknown type key** (including a removed type) → `types.<key>: "unknown notification type"`. It's rejected, not ignored, so a typo can't silently do nothing. Clients send only the types they got from `GET`.
 - **Non-boolean** `enabled`, `types.*` or `quietHours.enabled`; **null** for any field.
 - **`start` or `end`** not matching `^([01]\d|2[0-3]):[0-5]\d$` → `quietHours.start` or `quietHours.end`.
 - **`start == end`** after the merge → `quietHours: "start and end must differ"`.
 - **Unknown top-level or `quietHours` property** (including the read-only `timezone` and `updatedAt`) → rejected as unknown, like other request bodies.
 - **Empty body `{}`** is valid and is a no-op.
 
-Errors: 401 as usual, 409 for Idempotency-Key conflicts. There is no 404 (a missing row reads as defaults).
+Errors: 401 as usual, 409 for Idempotency-Key conflicts, and `429 RATE_LIMITED` on both GET and PATCH (per-user limit, like the other `/me` endpoints). There is no 404 (a missing row reads as defaults).
 
 ## Tests (for the implementation PR)
 - GET with no row returns the defaults and writes nothing; a new user has no row.
