@@ -58,6 +58,7 @@ jobs:
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             adb logcat -c
+            mkdir -p e2e-out && adb shell am instrument -w -r -e class com.vipin.fitness.e2e.OutboxProcessorOnDeviceTest com.vipin.fitness.test/androidx.test.runner.AndroidJUnitRunner > e2e-out/on-device-probe.txt 2>&1 || true
             bash .github/scripts/e2e-instrument.sh "$RUNNER_TEMP/acct" || echo failed > "$RUNNER_TEMP/e2e-failed"
             mkdir -p e2e-out && adb pull /sdcard/Android/data/com.vipin.fitness/files/e2e e2e-out/ || true
             adb root || true
