@@ -65,9 +65,9 @@ Follow-up for Backend/contract: document the 401-after-delete retry in `openapi.
 
 ## P1 API checks — prod (`scripts/prod-check-p1.sh`)
 
-Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Only runs against `https://fitness-api-6pcc.onrender.com/api/v1` (host allowlist; the only Fitness API server, used as prod). `--self-test` checks the register-timeout recovery, INT/TERM cleanup and the allowlist against a local stub. Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 temp files, never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
+Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Only runs against `https://fitness-api-6pcc.onrender.com/api/v1` (host allowlist; the only Fitness API server, used as prod). `--self-test` checks the register-timeout recovery, INT/TERM cleanup and the allowlist against a local stub. Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 state files under `~/.cache/p1-state` (outside /tmp, so a reboot mid-run cannot lose them; override with `P1_STATE_DIR`), never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
 
-**Last prod run: 2026-10-29 11:31:27 IST — 107/107 PASS (SC 20, PM 27, NS 12, ST 27, MT 21), both accounts deleted (login 401).**
+**Last prod run: 2026-10-29 12:39:12 IST — 144/144 PASS (SC 20, PM 27, NS 12, ST 27, MT 21, PG 37), both accounts deleted (login 401).**
 
 ### Session corrections (#63)
 
@@ -214,3 +214,49 @@ Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Only ru
 Notes:
 - Archiving the **active** plan pauses it first, so it gets `pausedAt` at archive time (contract: "same effect as pause"); a later pause on the archived plan leaves `pausedAt` unchanged (PM27).
 - Sets logged with `POST /workout-sessions/{id}/sets` need an `Idempotency-Key`; without one the session stays empty and `complete` returns 422.
+
+### Progression suggestions (#90)
+
+`GET /workout-plans/{planId}/progression-suggestions` (docs/specs/adaptive-progression.md): read-only, rule-based, window of the newest 3 completed sessions per exercise in the plan. A custom plan (W1: 12 exercises covering reps_weight upper/lower body, off-grid 40.3 kg, no-target, reps, duration, distance_duration; W2: bench at 40 kg and push-up at 19–20 reps) gets 3 W1 sessions (difficulty 3, 2, 3) with planned misses (lat pulldown once; tricep, squat, superman in the last two). A second plan checks effort (difficulty 5, 5, then 3). B is the other user.
+
+| # | Check | Prod 2026-10-29 |
+|---|---|---|
+| PG01 | empty history: 200, planVersion, 14 suggestions, window 3 | PASS |
+| PG02 | all hold NOT_ENOUGH_HISTORY, order 0..11,0,1 | PASS |
+| PG03 | two sessions: still NOT_ENOUGH_HISTORY (BP, LP) | PASS |
+| PG04 | BP (chest 40) -> increase 41 | PASS |
+| PG05 | LP (quads 100, 5%) -> increase 105 | PASS |
+| PG06 | BC (8 kg, min step 0.5) -> 8.5 | PASS |
+| PG07 | SPR (40.3 off-grid) -> 41.5 | PASS |
+| PG08 | ROW no target -> increase NO_TARGET_SET 22 (heaviest 22.3 floored) | PASS |
+| PG09 | PU W1 (8-12 reps) -> 9-13 | PASS |
+| PG10 | PU W2 (19-20) -> hold REP_CEILING with harderVariations array | PASS |
+| PG11 | PL 60 s -> 65 | PASS |
+| PG12 | WALK 300 s -> 330 | PASS |
+| PG13 | LAT missed once -> hold MISSED_TARGET | PASS |
+| PG14 | TRI missed twice -> deload REPEATED_MISSES 27 | PASS |
+| PG15 | SUP missed twice -> deload 55 s | PASS |
+| PG16 | SQ (reps) missed twice -> hold REPEATED_MISSES, no suggestion | PASS |
+| PG17 | basedOn: 3 sessions newest first, BP met, best 40/10, WALK distance 2000 | PASS |
+| PG18 | all suggested weights on the 0.5 kg grid, no cooldownUntil yet | PASS |
+| PG19 | GET is read-only: plan version and XP unchanged | PASS |
+| PG20 | accept BP/ROW/PU (W1) with PATCH baseVersion -> version+1 | PASS |
+| PG21 | BP W1 -> hold COOLDOWN, cooldownUntil ~ PATCH + 7 d | PASS |
+| PG22 | PU W1 (9-13 accepted) -> COOLDOWN | PASS |
+| PG23 | BP W2 (not raised) still increase 41, same basedOn | PASS |
+| PG24 | ROW 22 (target set from null: not a raise) -> increase 23, no cooldown | PASS |
+| PG25 | LP untouched still increase 105, planVersion = new version | PASS |
+| PG26 | PATCH stale baseVersion -> 409 VERSION_CONFLICT | PASS |
+| PG27 | two very hard sessions: GOB -> deload VERY_HARD 18 | PASS |
+| PG28 | GB (reps) -> hold VERY_HARD, no suggestion | PASS |
+| PG29 | third session at 3 (window has a 5): GOB and GB hold HIGH_EFFORT | PASS |
+| PG30 | unknown plan id -> 404 | PASS |
+| PG31 | malformed plan id -> 404 | PASS |
+| PG32 | other user -> 404 | PASS |
+| PG33 | other user starts session on A's planned workout -> 404 | PASS |
+| PG34 | B's own plan (same exercise): no history from A | PASS |
+| PG35 | archived plan -> 409 PLAN_ARCHIVED | PASS |
+| PG36 | other user on archived plan -> 404 (not 409) | PASS |
+| PG37 | unauthenticated -> 401 | PASS |
+
+Notes: a PATCH creates a new plan version with new planned-workout ids, so suggestions after an accepted change are matched by the new ids (PG21–25). Cooldown is per (workout, exercise position): setting a target on a no-target entry is not a raise (PG24).
