@@ -126,6 +126,18 @@ class PlansViewModelTest {
         assertNull(vm.state.value.busyId)
     }
 
+    @Test fun rateLimitedActionIsRetryableAndReusesItsKey() {
+        val vm = vm()
+        repo.failure = ApiResult.Failure(ApiError.Http(429, "RATE_LIMITED", "x", null, retryAfterMs = 2_000))
+        vm.perform("a", PlanAction.PAUSE)
+        assertEquals(PlansError.FAILED, vm.state.value.actionError)
+        repo.failure = null
+        vm.perform("a", PlanAction.PAUSE)
+        assertEquals("pause:a:k1", repo.calls.last())
+        vm.perform("b", PlanAction.ARCHIVE) // a settled action frees its key; a new one gets a new key
+        assertEquals("archive:b:k2", repo.calls.last())
+    }
+
     @Test fun planArchivedShowsTheNoticeAndRefreshClearsIt() {
         val vm = vm()
         repo.failure = archived

@@ -29,6 +29,16 @@ class RepositoriesTest {
         override fun get() = tokens
         override fun save(tokens: AuthTokens) { this.tokens = tokens }
         override fun clear() { tokens = null }
+        override fun compareAndSet(expectedRefresh: String, tokens: AuthTokens): Boolean = synchronized(this) {
+            if (this.tokens?.refreshToken != expectedRefresh) return false
+            this.tokens = tokens
+            true
+        }
+        override fun clearIf(expectedRefresh: String): Boolean = synchronized(this) {
+            if (tokens?.refreshToken != expectedRefresh) return false
+            tokens = null
+            true
+        }
     }
 
     private class MemoryCache : ProfileFlagsCache {

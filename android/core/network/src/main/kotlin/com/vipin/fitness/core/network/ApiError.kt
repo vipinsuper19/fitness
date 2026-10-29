@@ -8,7 +8,14 @@ import java.io.IOException
 /** What the UI and repositories see instead of raw Retrofit/OkHttp exceptions. */
 sealed interface ApiError {
     /** Server answered with an error body. [code] is the contract's stable code, e.g. EMAIL_TAKEN. */
-    data class Http(val status: Int, val code: String, val message: String, val requestId: String?) : ApiError
+    data class Http(
+        val status: Int,
+        val code: String,
+        val message: String,
+        val requestId: String?,
+        /** From a 429/503 `Retry-After` header (seconds or HTTP date), in ms from now; null if absent. */
+        val retryAfterMs: Long? = null,
+    ) : ApiError
     data object Network : ApiError
     data class Unexpected(val cause: Throwable) : ApiError
 }
@@ -39,5 +46,27 @@ internal fun HttpException.toApiError(json: Json): ApiError.Http {
         code = dto?.code ?: "HTTP_${code()}",
         message = dto?.message ?: message(),
         requestId = dto?.requestId ?: response()?.headers()?.get("X-Request-Id"),
+        retryAfterMs = parseRetryAfter(response()?.headers()?.get("Retry-After"), System.currentTimeMillis()),
     )
+}
+
+/**
+ * True when the same request (same Idempotency-Key) may succeed later: offline, 408, 429, 5xx or a
+ * concurrent duplicate. Callers keep the write and its key instead of dropping or re-keying it.
+ */
+val ApiError.isRetryable: Boolean
+    get() = when (this) {
+        ApiError.Network -> true
+        is ApiError.Unexpected -> false
+        is ApiError.Http -> status == 408 || status == 429 || status >= 500 || code == "IDEMPOTENCY_IN_PROGRESS"
+    }
+
+/** `Retry-After` as delay-seconds or an HTTP date, in ms from [nowMs] (never negative); null if missing or bad. */
+fun parseRetryAfter(value: String?, nowMs: Long): Long? {
+    val v = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    v.toLongOrNull()?.let { return if (it >= 0) it * 1000 else null }
+    return runCatching {
+        val at = java.time.ZonedDateTime.parse(v, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli()
+        (at - nowMs).coerceAtLeast(0)
+    }.getOrNull()
 }

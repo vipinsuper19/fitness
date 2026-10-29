@@ -62,6 +62,13 @@ class ChallengeFormatTest {
         compose.onNodeWithTag(ChallengeTags.waterRule("a1"), useUnmergedTree = true).assertDoesNotExist()
     }
 
+    @Test fun historyWaterCardShowsTheGoalAtJoin() {
+        val w = testWaterChallenge("w3", waterGoalMl = 2500, status = ChallengeStatus.COMPLETED)
+        compose.setContent { AchievementsContent(BadgesState(loading = false), ChallengesState(loading = false, history = listOf(w)), now, BadgeActions(), ChallengeActions(), initialTab = 1) }
+        compose.onNode(hasTestTag("history_w3")).assertExists()
+        compose.onNodeWithTag(ChallengeTags.waterGoal("w3"), useUnmergedTree = true).assertTextEquals("Goal at join: 2,500 ml (for information only)")
+    }
+
     @Test fun historyWaterCardWithoutGoalShowsOnlyTheRule() {
         val w = testWaterChallenge("w2", waterGoalMl = null, status = ChallengeStatus.COMPLETED)
         compose.setContent { AchievementsContent(BadgesState(loading = false), ChallengesState(loading = false, history = listOf(w)), now, BadgeActions(), ChallengeActions(), initialTab = 1) }

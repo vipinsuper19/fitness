@@ -12,6 +12,7 @@ import com.vipin.fitness.core.data.workout.PlanSummary
 import com.vipin.fitness.core.data.workout.isPlanArchived
 import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
+import com.vipin.fitness.core.network.isRetryable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -121,10 +122,20 @@ class PlansViewModel @Inject constructor(
 
     fun dismissActionError() = _state.update { it.copy(actionError = null) }
 
+    /**
+     * One Idempotency-Key per (plan, action), kept while the outcome may still change on retry
+     * (offline, 429, 5xx) so the retry is deduped; dropped once it succeeds or fails for good.
+     */
+    private val actionKeys = mutableMapOf<String, String>()
+
+    private fun settleKey(slot: String, r: ApiResult<*>) {
+        if (!(r is ApiResult.Failure && r.error.isRetryable)) actionKeys.remove(slot)
+    }
+
     fun perform(planId: String, action: PlanAction) {
         if (action == PlanAction.RENAME) return startRename(planId)
         if (_state.value.busyId != null) return
-        val key = newKey()
+        val key = actionKeys.getOrPut("$planId:$action") { newKey() }
         val status = _state.value.items.firstOrNull { it.id == planId }?.status
         _state.update { it.copy(busyId = planId, actionError = null) }
         viewModelScope.launch {
@@ -137,6 +148,7 @@ class PlansViewModel @Inject constructor(
                 PlanAction.RENAME -> error("handled above")
             }
             _state.update { it.copy(busyId = null) }
+            settleKey("$planId:$action", r)
             if (action == PlanAction.UNARCHIVE && r is ApiResult.Success) {
                 // The 200 plan says where it went (paused or inactive): update the row, no reload.
                 val u = r.value as PlanRowUpdate
@@ -167,10 +179,13 @@ class PlansViewModel @Inject constructor(
         if (rename.saving) return
         val name = PlanName.normalize(raw)
             ?: return _state.update { it.copy(rename = rename.copy(error = PlansError.INVALID_NAME)) }
-        val key = newKey()
+        val slot = "${rename.planId}:rename:$name"
+        val key = actionKeys.getOrPut(slot) { newKey() }
         _state.update { it.copy(rename = rename.copy(saving = true, error = null)) }
         viewModelScope.launch {
-            when (val r = repo.rename(rename.planId, name, key)) {
+            val renamed = repo.rename(rename.planId, name, key)
+            settleKey(slot, renamed)
+            when (val r = renamed) {
                 is ApiResult.Success -> _state.update { s ->
                     s.copy(rename = null, items = s.items.map { if (it.id == rename.planId) it.copy(name = r.value.name) else it })
                 }

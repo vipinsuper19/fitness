@@ -47,6 +47,19 @@ class NotificationSettingsViewModelTest {
         assertEquals(NotificationError.FAILED, vm().state.value.loadError)
     }
 
+    @Test fun rateLimitedSaveIsRetryableAndReusesTheKey() {
+        val vm = vm()
+        vm.setType(NotificationType.WATER_REMINDER, true)
+        repo.updateResult = { ApiResult.Failure(ApiError.Http(429, "RATE_LIMITED", "x", null, retryAfterMs = 5_000)) }
+        vm.save()
+        assertEquals(NotificationError.RATE_LIMITED, vm.state.value.saveError)
+        assertTrue(vm.state.value.dirty) // the change is kept, not reverted or refetched
+        repo.updateResult = null
+        vm.save()
+        assertEquals(listOf("k1", "k1"), repo.updates.map { it.second })
+        assertTrue(vm.state.value.savedOk)
+    }
+
     @Test fun patchesOnlyTheChangedType() {
         val vm = vm()
         vm.setType(NotificationType.WATER_REMINDER, true)

@@ -42,7 +42,22 @@ class EncryptedTokenStore internal constructor(
         cached
     }
 
-    override fun save(tokens: AuthTokens) = synchronized(lock) {
+    override fun save(tokens: AuthTokens) = synchronized(lock) { write(tokens) }
+
+    override fun compareAndSet(expectedRefresh: String, tokens: AuthTokens): Boolean = synchronized(lock) {
+        if (get()?.refreshToken != expectedRefresh) return@synchronized false
+        write(tokens)
+        true
+    }
+
+    override fun clearIf(expectedRefresh: String): Boolean = synchronized(lock) {
+        if (get()?.refreshToken != expectedRefresh) return@synchronized false
+        clear()
+        true
+    }
+
+    /** Caller holds [lock]. */
+    private fun write(tokens: AuthTokens) {
         val json = JSONObject()
             .put("a", tokens.accessToken)
             .put("r", tokens.refreshToken)
@@ -53,7 +68,7 @@ class EncryptedTokenStore internal constructor(
         } catch (e: GeneralSecurityException) {
             // Even a regenerated key failed: we can't keep the session safely, so end it.
             dropSession()
-            return@synchronized
+            return
         }
         val blob = Base64.encodeToString(sealed, Base64.NO_WRAP)
         prefs.edit(commit = true) { putString(KEY, blob) } // commit: a lost rotated refresh token logs the user out
