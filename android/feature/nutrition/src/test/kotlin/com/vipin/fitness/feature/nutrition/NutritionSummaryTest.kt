@@ -110,7 +110,18 @@ class NutritionSummaryFormatTest {
     @Test fun waterInMlOrFlOz() {
         assertEquals("2,000 ml", formatWater(2000, UnitSystem.METRIC))
         assertEquals("12,345 ml", formatWater(12_345, UnitSystem.METRIC))
+        assertEquals("1,00,000 ml", formatWater(100_000, UnitSystem.METRIC)) // en-IN lakh grouping
         assertEquals("67.6 fl oz", formatWater(2000, UnitSystem.IMPERIAL))
+    }
+
+    @Test fun lakhGrouping() {
+        assertEquals("999", NutritionFormat.number(999.0))
+        assertEquals("1,000", NutritionFormat.number(1000.0))
+        assertEquals("1,00,000", NutritionFormat.number(100_000.0))
+        assertEquals("12,34,567.9", NutritionFormat.number(1_234_567.85))
+        assertEquals("1,23,45,678", NutritionFormat.number(12_345_678.0, 0))
+        assertEquals("-1,00,000.5", NutritionFormat.number(-100_000.45))
+        assertEquals("0.1", NutritionFormat.number(0.05))
     }
 
     @Test fun pctsHalfUp() {

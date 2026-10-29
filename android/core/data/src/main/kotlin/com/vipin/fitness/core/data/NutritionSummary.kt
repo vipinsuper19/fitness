@@ -4,6 +4,7 @@ import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.NutritionSummaryApi
 import com.vipin.fitness.core.network.apiCall
 import com.vipin.fitness.core.network.model.NutritionSummaryDto
+import com.vipin.fitness.core.network.model.NutritionTargetsDto
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import javax.inject.Inject
@@ -25,6 +26,10 @@ data class NutritionSummaryPoint(
     val waterDaysLogged: Int,
     val avgWaterMlPerLoggedDay: Int?,
     val adherence: NutritionAdherence?,
+    /** Targets in effect on the period's last date (#104); null when none, or from an older server. */
+    val targets: NutritionTargets? = null,
+    /** True when a target changed inside the period; false when unchanged or not reported. */
+    val targetsChanged: Boolean = false,
 ) {
     val empty get() = daysLogged == 0 && waterDaysLogged == 0
 }
@@ -41,7 +46,7 @@ fun NutritionSummaryDto.toDomain() = NutritionSummary(
     from = LocalDate.parse(from),
     to = LocalDate.parse(to),
     bucket = SummaryBucket.entries.firstOrNull { it.wire == bucket } ?: SummaryBucket.DAY,
-    targets = targets?.let { NutritionTargets(it.kcal, it.proteinG, it.carbsG, it.fatG, it.waterMl) },
+    targets = targets?.toDomain(),
     points = points.map { p ->
         NutritionSummaryPoint(
             period = LocalDate.parse(p.period),
@@ -52,9 +57,13 @@ fun NutritionSummaryDto.toDomain() = NutritionSummary(
             waterDaysLogged = p.waterDaysLogged,
             avgWaterMlPerLoggedDay = p.avgWaterMlPerLoggedDay,
             adherence = p.adherence?.let { NutritionAdherence(it.kcalPct, it.proteinPct, it.carbsPct, it.fatPct, it.waterPct) },
+            targets = p.targets?.toDomain(),
+            targetsChanged = p.targetsChanged ?: false,
         )
     },
 )
+
+fun NutritionTargetsDto.toDomain() = NutritionTargets(kcal, proteinG, carbsG, fatG, waterMl)
 
 interface NutritionSummaryRepository {
     suspend fun summary(from: LocalDate, to: LocalDate, bucket: SummaryBucket): ApiResult<NutritionSummary>

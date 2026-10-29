@@ -34,6 +34,10 @@ data class NutritionSummaryPointDto(
     val avgWaterMlPerLoggedDay: Int? = null,
     val adherence: NutritionAdherenceDto? = null,
     val entryCount: Int = 0,
+    /** #104: targets in effect on the period's last date; absent from older servers. */
+    val targets: NutritionTargetsDto? = null,
+    /** #104: the target changed within the period; absent (null) from older servers. */
+    val targetsChanged: Boolean? = null,
 )
 
 @Serializable
