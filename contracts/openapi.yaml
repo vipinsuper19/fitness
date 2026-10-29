@@ -570,6 +570,46 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /workout-plans/{planId}/name:
+    put:
+      tags: [workout-plans]
+      operationId: renameWorkoutPlan
+      summary: Rename a plan without creating a new version
+      description: |
+        Sets the name of the plan's latest version in place. `version` does not change and
+        no new version is created; older versions keep the names they were saved with
+        (`GET /workout-plans/{planId}?version=N` shows the old name). The name is trimmed;
+        after trimming it must be 1–80 characters, otherwise `400 VALIDATION_FAILED`
+        (blank or whitespace-only is rejected). Renaming to the current name (after
+        trimming) is a no-op that returns 200. `PUT` is idempotent by itself; an
+        `Idempotency-Key` is also accepted as on other writes. Works for active, paused
+        and inactive plans; archived plans are read-only (`409 PLAN_ARCHIVED`). Status,
+        `activatedAt`, `pausedAt` and `currentWeek` are unchanged. The new name shows in
+        `GET /workout-plans` (`WorkoutPlanSummary.name`), `GET /workout-plans/active` and
+        `GET /workout-plans/{planId}` straight away. A later `PATCH` takes its name from its
+        own draft, as before.
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanRename' }
+      responses:
+        '200':
+          description: Renamed (or already had this name); the latest version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`PLAN_ARCHIVED` (archived plans are read-only), or an idempotency conflict'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /workout-plans/{planId}/deactivate:
     post:
       tags: [workout-plans]
@@ -2107,6 +2147,12 @@ components:
         Derived from stored fields, in this order: `archived` = `archivedAt` set; `active` =
         the profile's active plan; `paused` = `pausedAt` set; else `inactive`. New values
         may be added; treat unknown values as `inactive`.
+    PlanRename:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, description: 'Trimmed by the server; must be 1–80 characters after trimming' }
     PlanActivate:
       type: object
       additionalProperties: false
