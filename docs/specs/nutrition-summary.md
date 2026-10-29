@@ -21,13 +21,13 @@
 ## Targets
 
 - **Dated history (supersedes the old "current targets for every period" rule):** the five daily targets are kept as dated history ([target-history.md](target-history.md)). Each day uses the targets **in effect that day** (the newest history row on or before it; none → all null).
-- Top-level `targets` are the targets in effect on `to`. Each point also has `targets` (in effect on its last date) and `targetsChanged`. `proteinG`, `carbsG` and `fatG` are the profile's current macro targets (`daily*TargetG`, see [macro-targets.md](macro-targets.md)), `null` when unset. `targets` is `null` only when none of calories, water, protein, carbs or fat has a target (only macros set → non-null with `kcal`/`waterMl` null).
+- Top-level `targets` are the targets in effect on `to`. Each point also has `targets` (in effect on its last date) and `targetsChanged` (true when the target in effect (any of the five) differs between any two calendar dates in the period (bucket), within `from`..`to`). `proteinG`, `carbsG` and `fatG` are the macro targets in effect on that date (`daily*TargetG` history, see [macro-targets.md](macro-targets.md) and [target-history.md](target-history.md)), `null` when unset. `targets` is `null` only when none of calories, water, protein, carbs or fat has a target (only macros set → non-null with `kcal`/`waterMl` null).
 - Adherence, each × 100 with one decimal HALF_UP, as a **ratio of sums over the days that count** (logged days whose own target for that value is non-null):
   - `kcalPct` = Σ `energyKcal` ÷ Σ that day's kcal target, over food-logged days with a kcal target
   - `proteinPct`, `carbsPct`, `fatPct`: the same, per macro
   - `waterPct`: the same, over water-logged days with a water target
 
-  With a constant target this equals `avgPerLoggedDay / target`, exactly as before. `kcalPct`, `proteinPct`, `carbsPct` and `fatPct` are `null` when no counted day exists (no food logged, or no logged day with that target). `waterPct` is `null` when no water was logged or `targets.waterMl` is `null`. A target of 0 is treated as `null`. `adherence` is `null` only when every pct is `null`.
+  With a constant target this equals `avgPerLoggedDay / target`, exactly as before. `kcalPct`, `proteinPct`, `carbsPct` and `fatPct` are `null` when no counted day exists (no food logged, or no logged day with that target). `waterPct` is `null` when there is no water-logged day with a water target. A target of 0 is treated as `null`. `adherence` is `null` only when every pct is `null`.
 - **Client local date:** periods use the local `date` the client sends on each food and water log. The profile timezone is only echoed back as `timezone` and is not used to re-bucket logs, so the client must send the correct local date for logs made near midnight.
 - **Unrounded pcts:** the pcts are computed from the unrounded average, so a pct may not exactly match the displayed (rounded) average divided by the target.
 - **Water-only days:** a day with only water logged counts in `waterDaysLogged` but not in `daysLogged`.

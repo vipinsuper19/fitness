@@ -36,14 +36,14 @@ Food and water logs already carry a local `date`. Each logged day uses its own t
 - **Adherence is the ratio of sums over the days that count:**
   - `kcalPct` = Σ `energyKcal` on food-logged days whose kcal target is non-null ÷ Σ of those days' kcal targets × 100.
   - `proteinPct`, `carbsPct` and `fatPct` work the same way, with each macro's own target.
-  - `waterPct` uses water-logged days whose water target is non-null.
+  - `waterPct` uses water-logged days whose water target is non-null; it is `null` when there is **no water-logged day with a water target**.
 
   This equals "average intake ÷ the average of each logged day's own target". With a constant target it is exactly today's `avgPerLoggedDay / target × 100`, so existing numbers don't move. One decimal, HALF_UP, from unrounded sums.
 - A pct is `null` when no counted day exists: no logs, or no day in the period with that target set.
 - Logged days without that target are left out of that pct only. `avgPerLoggedDay` and `daysLogged` are unchanged and still cover every logged day.
 - Unlogged days never count; they don't add a target to the denominator.
 - **Why the ratio of sums, not the mean of daily pcts:** a mean of per-day pcts lets one tiny-target or near-empty day swing the period. The ratio of sums matches today's formula exactly when targets don't change.
-- **Per point:** new `targets` (`NutritionTargets | null`) holds the targets in effect on the period's **last date**, and `targetsChanged` (boolean) is true when any target differs between days of the period. Clients show a "target changed during this period" hint when it is true.
+- **Per point:** new `targets` (`NutritionTargets | null`) holds the targets in effect on the period's **last date**, and `targetsChanged` (boolean) is true when the target in effect (any of the five) differs between any two calendar dates in the period (bucket), within `from`..`to`; always false for a single-day bucket. Clients show a "target changed during this period" hint when it is true.
 - **Top-level `targets`** is now the targets in effect on `to`, no longer "current". It is still `null` when all five are null on `to`.
 
 ### `GET /nutrition/daily`
@@ -65,7 +65,7 @@ Food and water logs already carry a local `date`. Each logged day uses its own t
 2. **Deploy the app** that writes history on PUT and reads it in the summary, daily view and export.
 3. **Reconcile:** run the idempotent `npm run targets:backfill` once after the app is live. Old app instances may have handled target PUTs between steps 1 and 2 without writing history. For each profile whose newest history row differs from its current five values, or that has targets but no row, it upserts a row (`1900-01-01` when there is no row, otherwise today in the profile timezone). Running it again is a no-op.
 
-Rollback: the old app ignores the table, so rolling back the app is safe. The table can stay in place.
+Rollback: the old app ignores the table, so rolling back the app is safe. The table can stay in place. **Re-run `npm run targets:backfill` after any redeploy that follows a rollback**, because the old app does not write history for target changes it accepts.
 
 ## Effects on existing docs
 - **nutrition-summary.md:** the "Targets" section now uses the targets in effect each day. The "if targets are stored with history later" note is resolved by this spec.
@@ -110,7 +110,7 @@ Rollback: the old app ignores the table, so rolling back the app is safe. The ta
 - Summary: load the user's history rows with `effective_from ≤ to` once, newest first. Resolve each day's targets in code with one forward walk over the range (at most 366 days). No per-day queries.
 - Decimal maths and HALF_UP as before.
 
-## Decisions (Tech Lead, #104)
+## Decisions
 1. **Timezone and target in one PUT:** "today" is computed in the **new** timezone, and the history row is written in the **same transaction** as the profile update.
 2. **Top-level `summary.targets`** is the targets in effect on `to`. Per-period targets are on each point.
 3. **Days before the first target:** days logged before the user's first history row are **excluded** from the pcts. They still count in `avgPerLoggedDay` and `daysLogged`. The first target does **not** apply back to sign-up.

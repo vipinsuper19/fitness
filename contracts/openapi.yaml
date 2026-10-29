@@ -272,6 +272,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TargetHistory' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /me/profile:
     get:
       tags: [me]
@@ -2627,14 +2628,14 @@ components:
     NutritionAdherence:
       type: object
       description: |
-        Percent of the daily target (one decimal, HALF_UP). `kcalPct` and the macro pcts are null when no food was logged in
-        the period or their target is null; `waterPct` is null when no water was logged or `targets.waterMl` is null. A target
-        of 0 is treated as null.
-        `kcalPct` = `avgPerLoggedDay.energyKcal` / `targets.kcal` × 100; `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro>` / `targets.<macro>` × 100
-        (each macro pct is null when its own target is null, independently of the others; each day uses its own target in effect); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
-        With dated targets (docs/specs/target-history.md) each pct is a ratio of sums over the counted days (logged days whose own
-        target is non-null; days before the user's first target never count): Σ intake ÷ Σ that day's target × 100. This equals the formulas above when the target is constant over the
-        period. A pct is null when no counted day exists.
+        Percent of the daily target (one decimal, HALF_UP, from unrounded sums). Each pct is a **ratio of sums over the counted
+        days**: Σ intake ÷ Σ that day's own target in effect × 100 (docs/specs/target-history.md). Counted days for `kcalPct`
+        and each macro pct are food-logged days whose own target for that value is non-null; for `waterPct`, water-logged days
+        with a water target. Days before the user's first target never count. A target of 0 is treated as null.
+        Special case, target constant over the period: `kcalPct` = `avgPerLoggedDay.energyKcal` / `targets.kcal` × 100, the
+        macro pcts = `avgPerLoggedDay.<macro>` / `targets.<macro>` × 100, `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
+        Null rules, each pct independent: `kcalPct` and each macro pct are null when there is no food-logged day with that
+        target; `waterPct` is null when there is no water-logged day with a water target.
       required: [kcalPct, proteinPct, carbsPct, fatPct, waterPct]
       properties:
         kcalPct: { type: [number, 'null'], minimum: 0 }
@@ -2673,7 +2674,7 @@ components:
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/NutritionTargets'
-        targetsChanged: { type: boolean, description: 'True when any target differs between days of the period. Always present once implemented.' }
+        targetsChanged: { type: boolean, description: 'True when the target in effect (any of the five) differs between any two calendar dates in the period (bucket); false for a single day. Always present once implemented.' }
         entriesMissing:
           type: object
           description: As in `DailyNutrition`, over the period's entries
