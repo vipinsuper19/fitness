@@ -31,6 +31,11 @@ export interface Facts {
   foodDates: string[];
   waterByDate: Map<string, number>;
   waterGoalMl: number;
+  /**
+   * The water goal in force on a local date: that day's `dailyWaterTargetMl` from
+   * profile_target_history, else 2000 ml (no target yet, or water target unset that day).
+   */
+  waterGoalOn: (date: string) => number;
   measurementDates: string[];
 }
 
@@ -171,7 +176,8 @@ export function challengeCount(c: ChallengeState, f: Facts, today: string): numb
     case 'WEEKLY_ACTIVE_MINUTES':
       return Math.floor(sessionsIn.reduce((t, s) => t + s.activeSeconds, 0) / 60);
     case 'WEEKLY_WATER_DAYS':
-      return goalDays(f.waterByDate, c.waterGoalMl ?? DEFAULT_WATER_GOAL_ML).filter(inWindow).length;
+      // Each day is judged against its own dated target (c.waterGoalMl is the join-time value, display only).
+      return [...f.waterByDate].filter(([d, ml]) => inWindow(d) && ml >= f.waterGoalOn(d)).length;
     case 'WEEKLY_FOOD_LOG_DAYS':
       return f.foodDates.filter(inWindow).length;
     case 'PERSONAL_WORKOUTS_N':

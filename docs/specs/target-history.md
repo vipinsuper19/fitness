@@ -115,4 +115,4 @@ Rollback: the old app ignores the table, so rolling back the app is safe. The ta
 2. **Top-level `summary.targets`** is the targets in effect on `to`. Per-period targets are on each point.
 3. **Days before the first target:** days logged before the user's first history row are **excluded** from the pcts. They still count in `avgPerLoggedDay` and `daysLogged`. The first target does **not** apply back to sign-up.
 4. **No back-dated edits in v1.** History is written only by `PUT /me/profile` for today. Back-dated editing is future work. If it is added, it will **not recompute** anything derived (XP, badges, challenges); reads simply use the edited rows.
-- **Badges and challenges:** none use target adherence today. Any future ones must use **each day's own target** in effect, never the current one.
+- **Badges and challenges:** `WEEKLY_WATER_DAYS` uses **each day's own water target** in effect (else 2000 ml), see [badges-challenges.md](badges-challenges.md) §2. The `HYDRATED_7` badge still uses the current goal. Any future target-based rule must use each day's own target, never the current one.

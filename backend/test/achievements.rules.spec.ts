@@ -10,7 +10,7 @@ const today = '2026-10-21'; // Wednesday
 const at = (date: string, hour = 12) => new Date(startOfLocalDay(date, tz).getTime() + hour * 3_600_000);
 const days = (from: string, n: number) => Array.from({ length: n }, (_, i) => new Date(Date.parse(`${from}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10));
 const facts = (over: Partial<Facts> = {}): Facts => ({
-  tz, today, sessions: [], completedSets: 0, coreXp: 0, foodDates: [], waterByDate: new Map(), waterGoalMl: 2000, measurementDates: [], ...over,
+  tz, today, sessions: [], completedSets: 0, coreXp: 0, foodDates: [], waterByDate: new Map(), waterGoalMl: 2000, waterGoalOn: () => 2000, measurementDates: [], ...over,
 });
 const badge = (code: string) => BADGES.find((b) => b.code === code)!;
 const earned = (code: string, f: Facts) => { const { current, target } = badge(code).progress(f); return current >= target; };
@@ -97,10 +97,19 @@ describe('challenge rules', () => {
     expect(challengeCount(base({}), f, today)).toBe(3);
     expect(challengeCount(base({ templateCode: 'WEEKLY_ACTIVE_MINUTES', target: 60 }), f, today)).toBe(90);
   });
-  it('water days use the goal captured at join (default 2000)', () => {
+  it('water days use each day\'s own goal (default 2000), not the goal captured at join', () => {
     const f = facts({ waterByDate: new Map([['2026-10-19', 2000], ['2026-10-20', 2400], ['2026-10-18', 9000]]) });
     expect(challengeCount(base({ templateCode: 'WEEKLY_WATER_DAYS' }), f, today)).toBe(2);
-    expect(challengeCount(base({ templateCode: 'WEEKLY_WATER_DAYS', waterGoalMl: 2200 }), f, today)).toBe(1);
+    expect(challengeCount(base({ templateCode: 'WEEKLY_WATER_DAYS', waterGoalMl: 2200 }), f, today)).toBe(2);
+    expect(challengeCount(base({ templateCode: 'WEEKLY_WATER_DAYS' }), { ...f, waterGoalOn: () => 2200 }, today)).toBe(1);
+  });
+  it('water goal changed mid-week: each day is judged against its own goal', () => {
+    // Mon 19 and Tue 20 at 2000; from Wed 21 the goal is 3000.
+    const goalOn = (d: string) => (d >= '2026-10-21' ? 3000 : 2000);
+    const w = new Map([['2026-10-19', 2500], ['2026-10-20', 2000], ['2026-10-21', 2500]]);
+    expect(challengeCount(base({ templateCode: 'WEEKLY_WATER_DAYS', waterGoalMl: 3000 }), facts({ waterByDate: w, waterGoalOn: goalOn }), today)).toBe(2);
+    w.set('2026-10-21', 3000);
+    expect(challengeCount(base({ templateCode: 'WEEKLY_WATER_DAYS', waterGoalMl: 3000 }), facts({ waterByDate: w, waterGoalOn: goalOn }), today)).toBe(3);
   });
   it('personal workouts count only after joining (not earlier the same day)', () => {
     const f = facts({ sessions: [...sessions([today], 8), ...sessions([today], 18)] });
