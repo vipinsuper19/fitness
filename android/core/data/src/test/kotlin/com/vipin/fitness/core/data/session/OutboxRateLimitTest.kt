@@ -145,6 +145,20 @@ class OutboxRateLimitTest {
         assertEquals(OutboxProcessor.DEFAULT_RATE_LIMIT_WAIT_MS, outbox.rateLimitDelayMs())
     }
 
+    @Test fun noHeaderUsesDetailsRetryAfterSeconds() = runTest {
+        startWithTwoSets()
+        server.enqueue(MockResponse(code = 429, body = """{"code":"RATE_LIMITED","message":"x","details":{"retryAfterSeconds":9}}"""))
+        outbox.drain()
+        assertEquals(9_000L, outbox.rateLimitDelayMs())
+    }
+
+    @Test fun headerWinsOverDetails() = runTest {
+        startWithTwoSets()
+        server.enqueue(MockResponse(code = 429, headers = headersOf("Retry-After", "4"), body = """{"code":"RATE_LIMITED","message":"x","details":{"retryAfterSeconds":9}}"""))
+        outbox.drain()
+        assertEquals(4_000L, outbox.rateLimitDelayMs())
+    }
+
     @Test fun hugeRetryAfterIsCappedAtAnHour() = runTest {
         startWithTwoSets(); server.enqueue(limited("999999")); outbox.drain()
         assertEquals(OutboxProcessor.MAX_RATE_LIMIT_WAIT_MS, outbox.rateLimitDelayMs())

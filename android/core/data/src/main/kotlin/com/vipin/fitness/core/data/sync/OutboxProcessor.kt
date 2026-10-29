@@ -16,7 +16,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import retrofit2.Response
 import android.util.Log
-import com.vipin.fitness.core.network.parseRetryAfter
+import com.vipin.fitness.core.network.retryAfterFor
+import com.vipin.fitness.core.network.model.retryAfterSeconds
 import java.io.IOException
 import java.time.Clock
 import java.util.UUID
@@ -157,12 +158,13 @@ class OutboxProcessor @Inject constructor(
             pending.delete(w.id)
             return true
         }
-        val error = r.errorBody()?.string()?.let { runCatching { json.decodeFromString<ErrorDto>(it).code }.getOrNull() }
+        val errorDto = r.errorBody()?.string()?.let { runCatching { json.decodeFromString<ErrorDto>(it) }.getOrNull() }
+        val error = errorDto?.code
         // 404 (session gone, e.g. discarded on another device) and other 4xx: dropped below.
         return when {
             // 429: keep the write, its key and its place; wait out Retry-After before sending again.
             code == 429 -> {
-                val wait = parseRetryAfter(r.headers()["Retry-After"], clock.millis()) ?: DEFAULT_RATE_LIMIT_WAIT_MS
+                val wait = retryAfterFor(429, r.headers()["Retry-After"], clock.millis(), errorDto?.details.retryAfterSeconds()) ?: DEFAULT_RATE_LIMIT_WAIT_MS
                 notBeforeMs = clock.millis() + wait.coerceIn(MIN_RATE_LIMIT_WAIT_MS, MAX_RATE_LIMIT_WAIT_MS)
                 pending.setNotBefore(OutboxRateLimitEntity(owner(), notBeforeMs))
                 pending.markFailed(w.id, error ?: "RATE_LIMITED")
