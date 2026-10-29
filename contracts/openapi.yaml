@@ -586,9 +586,9 @@ paths:
         and inactive plans; archived plans are read-only, so any rename, even to the same name, is `409 PLAN_ARCHIVED`. Status,
         `activatedAt`, `pausedAt` and `currentWeek` are unchanged. The new name shows in
         `GET /workout-plans` (`WorkoutPlanSummary.name`), `GET /workout-plans/active` and
-        `GET /workout-plans/{planId}` straight away. A later `PATCH` stores its draft's
-        (required) `name`, so a draft built from the renamed plan keeps the new name.
-        There is no version check; the last write wins.
+        `GET /workout-plans/{planId}` straight away. A later `PATCH` without `name` copies
+        the renamed name; clients leave `name` out unless the user edited it. There is no
+        version check; the last write wins.
       parameters:
         - $ref: '#/components/parameters/PlanId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2077,12 +2077,20 @@ components:
     WorkoutPlanDraft:
       $ref: './schemas/workout-plan-draft.schema.json'
     WorkoutPlanUpdate:
-      allOf:
-        - $ref: '#/components/schemas/WorkoutPlanDraft'
-        - type: object
-          required: [baseVersion]
-          properties:
-            baseVersion: { type: integer, minimum: 1 }
+      type: object
+      description: |
+        A `WorkoutPlanDraft` plus `baseVersion`, except that `name` is optional. A missing
+        `name` copies the latest version's name (including a rename made with
+        `PUT /workout-plans/{planId}/name`). A provided `name` is trimmed and must be 1–80
+        characters, as before. Clients should leave `name` out unless the user edited it.
+      required: [weeks, workouts, generator, baseVersion]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, description: Optional; omitted = keep the latest version's name }
+        weeks: { $ref: './schemas/workout-plan-draft.schema.json#/properties/weeks' }
+        generator: { $ref: './schemas/workout-plan-draft.schema.json#/properties/generator' }
+        rationale: { $ref: './schemas/workout-plan-draft.schema.json#/properties/rationale' }
+        workouts: { $ref: './schemas/workout-plan-draft.schema.json#/properties/workouts' }
+        baseVersion: { type: integer, minimum: 1 }
     PrescriptionValues:
       type: object
       required: [sets, targetWeightKg, repsMin, repsMax, durationSeconds]
