@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # QA API checks against the Fitness API server for session corrections (#63), plan management (#65),
-# the nutrition summary (#70), strength progress (#72), macro targets (#85) and progression suggestions (#90), using TWO throwaway
+# the nutrition summary (#70), strength progress (#72), macro targets (#85), progression suggestions (#90) and notification preferences (#116/#127), using TWO throwaway
 # accounts (A = owner, B = other user).
 #   scripts/prod-check-p1.sh              # the Fitness API server (only allowed host, see ALLOWED_API)
 #   scripts/prod-check-p1.sh --self-test  # register-timeout, signal, stale-state cleanup and the run lock against a local stub
@@ -525,6 +525,25 @@ r DELETE "/workout-plans/$PE" '' "$(uid)"; r GET "/workout-plans/$PE/progression
 check "PG35 archived plan -> 409 PLAN_ARCHIVED" "$(code_is 409 PLAN_ARCHIVED)" "C=$C code=$(j .code)"
 AS=B; r GET "/workout-plans/$PE/progression-suggestions"; check "PG36 other user on archived plan -> 404 (not 409)" "$(is 404)" "C=$C"
 AS=""; r GET "/workout-plans/$PG/progression-suggestions"; check "PG37 unauthenticated -> 401" "$(is 401)" "C=$C"
+AS=A
+
+# NP: notification preferences (#116 API; Android screen #127). A has no row yet, so GET shows the defaults.
+NPD='{"enabled":true,"types":{"workout_reminder":true,"streak_reminder":true,"water_reminder":false,"food_log_reminder":false,"challenge_updates":true,"badge_earned":true,"progression_suggestion":true},"quietHours":{"enabled":true,"start":"22:00","end":"07:00"}}'
+npm() { jq -e --argjson d "$1" '{enabled,types,quietHours}==$d' "$B" >/dev/null && echo 0 || echo 1; }
+AS=A; r GET /me/notification-preferences
+check "NP01 GET defaults: exact shape, timezone Asia/Kolkata, updatedAt null" "$([ "$C" = 200 ] && [ "$(npm "$NPD")" = 0 ] && [ "$(j .timezone)/$(j .updatedAt)" = Asia/Kolkata/null ] && echo 0 || echo 1)" "C=$C $(jq -c . "$B" 2>/dev/null | head -c 400)"
+AS=""; r GET /me/notification-preferences; check "NP02 GET unauthenticated -> 401" "$(is 401)" "C=$C"
+AS=A; NPK="$(uid)"; NPB='{"types":{"water_reminder":true},"quietHours":{"start":"23:00","end":"07:00"}}'
+r PATCH /me/notification-preferences "$NPB" "$NPK"
+NPE="$(jq -c '.types.water_reminder=true|.quietHours.start="23:00"' <<<"$NPD")"
+check "NP03 PATCH partial merge -> 200 full result, updatedAt set" "$([ "$C" = 200 ] && [ "$(npm "$NPE")" = 0 ] && [ "$(j .updatedAt)" != null ] && echo 0 || echo 1)" "C=$C $(j .code)"
+r PATCH /me/notification-preferences "$NPB" "$NPK"; check "NP04 same key + body replay -> 200 same result" "$([ "$C" = 200 ] && [ "$(npm "$NPE")" = 0 ] && echo 0 || echo 1)" "C=$C"
+r PATCH /me/notification-preferences '{"enabled":false}' "$NPK"; check "NP05 same key, other body -> 409" "$(is 409)" "C=$C code=$(j .code)"
+r PATCH /me/notification-preferences '{"quietHours":{"end":"23:00"}}' "$(uid)"
+check "NP06 start == end after merge -> 400 VALIDATION_FAILED quietHours" "$([ "$(code_is 400 VALIDATION_FAILED)" = 0 ] && [ "$(j '.details.fields|has("quietHours")')" = true ] && echo 0 || echo 1)" "C=$C $(jq -c .details "$B" 2>/dev/null)"
+r PATCH /me/notification-preferences '{"enabled":false}' "$(uid)"
+check "NP07 master off keeps per-type values" "$([ "$C" = 200 ] && [ "$(npm "$(jq -c '.enabled=false' <<<"$NPE")")" = 0 ] && echo 0 || echo 1)" "C=$C"
+AS=B; r GET /me/notification-preferences; check "NP08 B still reads defaults (no leak from A)" "$([ "$C" = 200 ] && [ "$(npm "$NPD")" = 0 ] && echo 0 || echo 1)" "C=$C"
 AS=A
 
 # Delete both accounts now (trap also covers failures).
