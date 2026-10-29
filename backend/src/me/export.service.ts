@@ -112,6 +112,7 @@ export class ExportService {
     const xp = cap('xpLedger', await db.xPTransaction.findMany({ where: { userId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const badges = cap('badges', await db.userBadge.findMany({ where: { userId }, orderBy: [{ earnedAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const history = cap('targetHistory', await db.profileTargetHistory.findMany({ where: { userId }, orderBy: { effectiveFrom: 'desc' }, take: rows + 1 }), rows);
+    const corrections = cap('sessionCorrections', await db.sessionCorrection.findMany({ where: { userId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
     const challenges = cap('challenges', await db.userChallenge.findMany({ where: { userId }, orderBy: [{ joinedAt: 'desc' }, { id: 'desc' }], take: rows + 1 }), rows);
 
     return {
@@ -132,6 +133,8 @@ export class ExportService {
       challenges: challenges.map(toChallengeView),
       // Dated daily-target history, newest first (docs/specs/target-history.md).
       targetHistory: history.map(toEntry),
+      // Session corrections/discards; idempotencyKey is a request internal and is not exported.
+      sessionCorrections: corrections.map((c) => ({ id: c.id, sessionId: c.sessionId, kind: c.kind, xpDelta: c.xpDelta, createdAt: c.createdAt.toISOString() })),
       // Same shape as GET /me/notification-preferences, defaults included.
       notificationPreferences: await loadPreferences(db, userId),
       truncated,
