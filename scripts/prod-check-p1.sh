@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # QA API checks against prod for session corrections (#63), plan management (#65) and the
-# nutrition summary (#70), using TWO throwaway accounts (A = owner, B = other user).
+# nutrition summary (#70) and strength progress (#72), using TWO throwaway accounts (A = owner, B = other user).
 #   scripts/prod-check-p1.sh            # prod (or API=... for another origin)
 # Same safety pattern as scripts/prod-probe.sh: credentials only in per-run mode-600 state
 # files (umask 077); password/token never in argv or output; JSON built with jq; the EXIT trap
@@ -170,6 +170,59 @@ AS=B
 r GET "/nutrition/summary?from=$YDAY&to=$TMRW"; check "NS11 other user sees none of A's logs" "$([ "$C" = 200 ] && [ "$(j '[.points[]|select(.totals!=null or .waterMl!=null)]|length')" = 0 ] && echo 0 || echo 1)" "C=$C"
 AS=""
 r GET "/nutrition/summary?from=$YDAY&to=$TODAY"; check "NS12 unauthenticated -> 401" "$(is 401)" "C=$C"
+
+echo "== Strength progress (#72) =="
+AS=A
+r GET '/exercises?limit=5'; mapfile -t EXS < <(j '[.. | objects | select(has("id") and has("name")) | .id] | unique_by(.) | .[]' )
+EX2=""; EX3=""; for x in "${EXS[@]}"; do [ "$x" = "$EX" ] && continue; [ -z "$EX2" ] && { EX2=$x; continue; }; [ -z "$EX3" ] && EX3=$x; done
+r GET /xp/balance; XPS="$(j .total)"
+r POST /workout-sessions '{}' "$(uid)"; SID2="$(j .id)"; W1="$(uid)"; W2="$(uid)"
+WSET() { jq -nc --arg c "$1" --arg x "$EX2" --argjson i "$2" --argjson w "$3" --argjson n "$4" '{clientSetId:$c,exerciseId:$x,setIndex:$i,reps:$n,weightKg:$w,completed:true}'; }
+r POST "/workout-sessions/$SID2/sets" "$(WSET "$W1" 0 100 5)" "$(uid)"
+r POST "/workout-sessions/$SID2/sets" "$(WSET "$W2" 1 80 13)" "$(uid)"
+r POST "/workout-sessions/$SID2/complete" '{"perceivedDifficulty":3}' "$(uid)"; check "ST00 setup: weighted session (100x5, 80x13) completed" "$(is 200)" "C=$C"
+r GET /xp/balance; XPS="$(j .total)"
+pt() { j ".points[]|select(.period==\"$TODAY\")|$1"; }
+r GET "/progress/exercises?from=$YDAY&to=$TMRW"
+check "ST01 list 200: both exercises performed today, timezone echoed" "$([ "$C" = 200 ] && [ "$(j '.items|length')" = 2 ] && [ "$(j .timezone)" != null ] && echo 0 || echo 1)" "C=$C $(j -c '[.items[]|{exerciseId,sessions}]' | head -c 300)"
+check "ST02 list order lastPerformedAt DESC (weighted session first)" "$([ "$(j '.items[0].exerciseId')" = "$EX2" ] && echo 0 || echo 1)" "first=$(j '.items[0].exerciseId')"
+check "ST03 list pr all-time: maxWeightKg 100, maxReps 13, best1RmKg 116.7" "$(L=".items[]|select(.exerciseId==\"$EX2\")|.pr"; [ "$(j "$L.maxWeightKg")" = 100 ] && [ "$(j "$L.maxReps")" = 13 ] && [ "$(j "$L.best1RmKg")" = 116.7 ] && echo 0 || echo 1)" "$(j -c ".items[]|select(.exerciseId==\"$EX2\")|.pr")"
+r GET "/progress/exercises?from=$YDAY&to=$TMRW&limit=1"; CUR="$(j .nextCursor)"; FIRST1="$(j '.items[0].exerciseId')"
+check "ST04 limit=1 gives 1 item + nextCursor" "$([ "$(j '.items|length')" = 1 ] && [ -n "$CUR" ] && [ "$CUR" != null ] && echo 0 || echo 1)" "cursor=$CUR"
+r GET "/progress/exercises?from=$YDAY&to=$TMRW&limit=1&cursor=$(python3 -c 'import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))' "$CUR")"
+check "ST05 page 2 = the other exercise, then no cursor" "$([ "$C" = 200 ] && [ "$(j '.items[0].exerciseId')" != "$FIRST1" ] && [ "$(j '.items|length')" = 1 ] && [ "$(j .nextCursor)" = null ] && echo 0 || echo 1)" "C=$C $(j -c '{items:[.items[].exerciseId],nextCursor}')"
+r GET "/progress/exercises/$EX2?from=$YDAY&to=$TMRW"
+check "ST06 detail day: 3 points, default bucket day, name/trackingType present" "$([ "$C" = 200 ] && [ "$(j '.points|length')" = 3 ] && [ "$(j .bucket)" = day ] && [ "$(j .name)" != null ] && [ "$(j .trackingType)" != null ] && echo 0 || echo 1)" "C=$C"
+check "ST07 today: sessions 1, sets 2, volume 1540, reps 18, top 100, 1RM 116.7 (13-rep set no 1RM)" "$([ "$(pt .sessions)" = 1 ] && [ "$(pt .sets)" = 2 ] && python3 -c "import sys;sys.exit(0 if float(sys.argv[1])==1540 else 1)" "$(pt .volumeKg)" && [ "$(pt .totalReps)" = 18 ] && [ "$(pt .topSetWeightKg)" = 100 ] && [ "$(pt .best1RmKg)" = 116.7 ] && echo 0 || echo 1)" "$(j -c ".points[]|select(.period==\"$TODAY\")")"
+check "ST08 empty day: sessions 0, sets 0, volume/reps null; duration/distance null for weighted" "$(Y=".points[]|select(.period==\"$YDAY\")"; [ "$(j "$Y.sessions")" = 0 ] && [ "$(j "$Y.sets")" = 0 ] && [ "$(j "$Y.volumeKg")" = null ] && [ "$(j "$Y.totalReps")" = null ] && [ "$(pt .totalDurationSec)" = null ] && [ "$(pt .maxSetDistanceM)" = null ] && echo 0 || echo 1)" "$(j -c ".points[]|select(.period==\"$YDAY\")")"
+r GET "/progress/exercises/$EX2?from=$WFROM&to=$TODAY&bucket=week"
+check "ST09 week bucket: Mondays after the first, first clipped to from" "$(python3 -c "
+import json,sys,datetime;p=json.load(open(sys.argv[1]))['points']
+sys.exit(0 if p and p[0]['period']==sys.argv[2] and all(datetime.date.fromisoformat(x['period']).weekday()==0 for x in p[1:]) else 1)" "$B" "$WFROM" && echo 0 || echo 1)" "$(j -c '[.points[].period]')"
+r GET "/progress/exercises/$EX2?from=2025-01-01&to=2025-01-31"
+check "ST10 PR outside the range still shown (all-time)" "$([ "$C" = 200 ] && [ "$(j .pr.maxWeightKg)" = 100 ] && [ "$(j '[.points[].sessions]|add')" = 0 ] && echo 0 || echo 1)" "C=$C pr=$(j -c .pr)"
+r GET "/progress/exercises/$EX3?from=$YDAY&to=$TMRW"
+check "ST11 never-performed exercise: 200, all-null pr" "$([ "$C" = 200 ] && [ "$(j '[.pr|to_entries[]|select(.value!=null)]|length')" = 0 ] && echo 0 || echo 1)" "C=$C pr=$(j -c .pr)"
+r GET "/progress/exercises/00000000-0000-4000-8000-000000000000?from=$YDAY&to=$TODAY"; check "ST12 unknown exercise -> 404" "$(is 404)" "C=$C"
+r GET "/progress/exercises/not-a-uuid?from=$YDAY&to=$TODAY"; check "ST13 malformed exercise id -> 404" "$(is 404)" "C=$C"
+r GET "/progress/exercises?from=$TMRW&to=$YDAY"; check "ST14 list from > to -> 400" "$(is 400)" "C=$C"
+r GET "/progress/exercises?to=$TODAY"; check "ST15 list missing from -> 400" "$(is 400)" "C=$C"
+r GET "/progress/exercises?from=$YDAY&to=$TODAY&cursor=garbage"; check "ST16 list bad cursor -> 400" "$(is 400)" "C=$C"
+r GET "/progress/exercises/$EX2?from=2025-01-01&to=2026-01-02&bucket=month"; check "ST17 detail 367 days with bucket=month -> 400" "$(is 400)" "C=$C"
+r GET "/progress/exercises/$EX2?from=2025-01-01&to=2026-01-01&bucket=month"; check "ST18 detail 366 days with bucket=month -> 200" "$(is 200)" "C=$C"
+r GET "/progress/exercises/$EX2?from=$YDAY&to=$TODAY&bucket=year"; check "ST19 detail bad bucket -> 400" "$(is 400)" "C=$C"
+r GET "/progress/exercises/$EX2?from=2026-02-30&to=$TODAY"; check "ST20 detail bad date -> 400" "$(is 400)" "C=$C"
+r PUT "/workout-sessions/$SID2/corrections/sets/$W1" "$(WSET "$W1" 0 50 5)" "$(uid)"; XPS="$(j .xpBalance.total)"
+r GET "/progress/exercises/$EX2?from=$YDAY&to=$TMRW"
+check "ST21 correction 100->50 kg lowers the record to 80 (recomputed)" "$([ "$(j .pr.maxWeightKg)" = 80 ] && [ "$(pt .topSetWeightKg)" = 80 ] && echo 0 || echo 1)" "pr=$(j -c .pr) top=$(pt .topSetWeightKg)"
+r GET /xp/balance; check "ST22 progress reads don't change XP" "$([ "$(j .total)" = "$XPS" ] && echo 0 || echo 1)" "now=$(j .total) expected=$XPS"
+AS=B
+r GET "/progress/exercises?from=$YDAY&to=$TMRW"; check "ST23 other user list: 200, no items" "$([ "$C" = 200 ] && [ "$(j '.items|length')" = 0 ] && echo 0 || echo 1)" "C=$C $(j -c '.items|map(.exerciseId)')"
+r GET "/progress/exercises/$EX2?from=$YDAY&to=$TMRW"
+check "ST24 other user detail of same exercise: 0 sessions, null pr (no leak of A's sets)" "$([ "$C" = 200 ] && [ "$(j '[.points[].sessions]|add')" = 0 ] && [ "$(j '[.pr|to_entries[]|select(.value!=null)]|length')" = 0 ] && echo 0 || echo 1)" "C=$C pr=$(j -c .pr)"
+AS=""
+r GET "/progress/exercises?from=$YDAY&to=$TODAY"; check "ST25 list unauthenticated -> 401" "$(is 401)" "C=$C"
+r GET "/progress/exercises/$EX2?from=$YDAY&to=$TODAY"; check "ST26 detail unauthenticated -> 401" "$(is 401)" "C=$C"
 
 # Delete both accounts now (trap also covers failures).
 for a in A B; do AS=$a; r DELETE /me "$(cred $a '{password:$p}')" "$(uid)"; [ "$C" = 204 ] && DELETED[$a]=1; done
