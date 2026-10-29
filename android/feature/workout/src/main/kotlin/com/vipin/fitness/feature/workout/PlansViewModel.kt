@@ -140,7 +140,11 @@ class PlansViewModel @Inject constructor(
             if (action == PlanAction.UNARCHIVE && r is ApiResult.Success) {
                 // The 200 plan says where it went (paused or inactive): update the row, no reload.
                 val u = r.value as PlanRowUpdate
-                _state.update { s -> s.copy(items = s.items.map { if (it.id == planId) it.applying(u) else it }) }
+                _state.update { s ->
+                    // Under the Archived filter the restored plan no longer belongs in the list.
+                    if (s.filter != null && s.filter != u.status) s.copy(items = s.items.filter { it.id != planId })
+                    else s.copy(items = s.items.map { if (it.id == planId) it.applying(u) else it })
+                }
                 return@launch
             }
             when (r) {
