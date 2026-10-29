@@ -635,6 +635,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /workout-plans/{planId}/progression-suggestions:
+    parameters:
+      - $ref: '#/components/parameters/PlanId'
+    get:
+      tags: [workout-plans]
+      operationId: getProgressionSuggestions
+      summary: Rule-based progression suggestions for a plan (read-only, never applied automatically)
+      description: |
+        No AI. One suggestion per planned exercise of the latest plan version, from the last 3 completed
+        sessions that followed this plan and logged that exercise (docs/specs/adaptive-progression.md).
+        `increase` only when every session met the prescription with `perceivedDifficulty` below 4 and no
+        progression was applied in the last 7 days; one step, at most +10%. `deload` after two consecutive
+        misses or two sessions at difficulty 5. Nothing is written: the client applies a suggestion with
+        `PATCH /workout-plans/{planId}` and `baseVersion = planVersion` (stale → `409 VERSION_CONFLICT`).
+        Fewer than 3 sessions → every item `hold` / `NOT_ENOUGH_HISTORY`.
+      responses:
+        '200':
+          description: Suggestions in plan order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProgressionSuggestions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`PLAN_ARCHIVED`'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /workout-sessions:
     post:
       tags: [workout-sessions]
@@ -2010,6 +2038,54 @@ components:
           required: [baseVersion]
           properties:
             baseVersion: { type: integer, minimum: 1 }
+    PrescriptionValues:
+      type: object
+      required: [targetWeightKg, repsMin, repsMax, durationSeconds]
+      properties:
+        targetWeightKg: { type: [number, 'null'], minimum: 0, maximum: 1000 }
+        repsMin: { type: [integer, 'null'], minimum: 1, maximum: 100 }
+        repsMax: { type: [integer, 'null'], minimum: 1, maximum: 100 }
+        durationSeconds: { type: [integer, 'null'], minimum: 1, maximum: 7200 }
+    ProgressionBasis:
+      type: object
+      required: [sessionId, completedAt, perceivedDifficulty, completedSets, plannedSets, metTarget, bestReps, bestWeightKg, bestDurationSeconds, bestDistanceM]
+      properties:
+        sessionId: { $ref: '#/components/schemas/Id' }
+        completedAt: { type: string, format: date-time }
+        perceivedDifficulty: { type: [integer, 'null'], minimum: 1, maximum: 5 }
+        completedSets: { type: integer, minimum: 0 }
+        plannedSets: { type: integer, minimum: 1 }
+        metTarget: { type: boolean, description: 'Met the prescription of the plan version that session followed' }
+        bestReps: { type: [integer, 'null'] }
+        bestWeightKg: { type: [number, 'null'] }
+        bestDurationSeconds: { type: [integer, 'null'] }
+        bestDistanceM: { type: [number, 'null'] }
+    ProgressionSuggestion:
+      type: object
+      required: [plannedWorkoutId, exerciseId, trackingType, action, reason, current, suggested, cooldownUntil, basedOn]
+      properties:
+        plannedWorkoutId: { $ref: '#/components/schemas/Id' }
+        exerciseId: { $ref: '#/components/schemas/Id' }
+        trackingType: { $ref: '#/components/schemas/TrackingType' }
+        action: { type: string, enum: [increase, hold, deload] }
+        reason:
+          type: string
+          enum: [ALL_SETS_COMPLETED, NO_TARGET_SET, NOT_ENOUGH_HISTORY, MISSED_TARGET, HIGH_EFFORT, COOLDOWN, CAP_REACHED, REP_CEILING, REPEATED_MISSES, VERY_HARD]
+        current: { $ref: '#/components/schemas/PrescriptionValues' }
+        suggested:
+          oneOf: [{ $ref: '#/components/schemas/PrescriptionValues' }, { type: 'null' }]
+          description: Null for `hold`; otherwise only the changed fields differ from `current`
+        cooldownUntil: { type: [string, 'null'], format: date-time }
+        basedOn: { type: array, maxItems: 3, items: { $ref: '#/components/schemas/ProgressionBasis' }, description: Newest first }
+    ProgressionSuggestions:
+      type: object
+      required: [planId, planVersion, generatedAt, windowSessions, suggestions]
+      properties:
+        planId: { $ref: '#/components/schemas/Id' }
+        planVersion: { type: integer, minimum: 1, description: Use as `baseVersion` when applying }
+        generatedAt: { type: string, format: date-time }
+        windowSessions: { type: integer, const: 3 }
+        suggestions: { type: array, items: { $ref: '#/components/schemas/ProgressionSuggestion' } }
     PlanStatus:
       type: string
       enum: [active, paused, inactive, archived]
