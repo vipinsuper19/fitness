@@ -384,4 +384,35 @@ describeDb('progression suggestions (HTTP + Postgres)', () => {
       [a, 'ALL_SETS_COMPLETED'], // Push a: unchanged, moved from position 0 to 1
     ]);
   });
+
+  const wkOf = (name: string, day: number, exs: [string, number][]) => ({
+    dayOfWeek: day, name, exercises: exs.map(([id, kg], i) => ({ exerciseId: id, order: i, sets: 2, repsMin: 8, repsMax: 10, targetWeightKg: kg, durationSeconds: null, restSeconds: 90 })),
+  });
+  const twoVersions = async (v1: object[], v2: object[]) => {
+    const u = await signUp();
+    const body = (workouts: object[]) => ({ name: 'Match', weeks: 4, generator: 'custom', workouts });
+    const plan = (await as(u.token).post('/api/v1/workout-plans').send(body(v1)).expect(201)).body.id as string;
+    await as(u.token).patch(`/api/v1/workout-plans/${plan}`).send({ ...body(v2), baseVersion: 1 }).expect(200);
+    const v = await prisma.workoutPlanVersion.findUniqueOrThrow({ where: { planId_version: { planId: plan, version: 2 } } });
+    await prisma.workoutPlanVersion.update({ where: { id: v.id }, data: { createdAt: new Date(NOW.getTime() - 2 * DAY) } });
+    return { u, plan };
+  };
+
+  it('cooldown matches the k-th occurrence of a repeated exercise to the k-th', async () => {
+    const a = await mkEx();
+    const b = await mkEx();
+    const { u, plan } = await twoVersions([wkOf('Push', 1, [[a, 40], [b, 20], [a, 30]])], [wkOf('Push', 1, [[a, 30], [a, 42.5], [b, 20]])]);
+    for (const d of [1.5, 1.2, 1]) await session(u.id, plan, d, { [a]: rep(2, { reps: 10, kg: 43 }), [b]: rep(2, { reps: 10, kg: 20 }) }, { v: 2 });
+    const s = await suggest(u.token, plan);
+    expect(s.suggestions.map((x) => [x.exerciseId, x.reason === 'COOLDOWN'])).toEqual([[a, false], [a, true], [b, false]]);
+  });
+
+  it('an added workout does not inherit the raise of a workout matched by day and name', async () => {
+    const a = await mkEx();
+    // v2 inserts Legs at order 0 (where Push was); Push moves to order 1 and is matched by day+name.
+    const { u, plan } = await twoVersions([wkOf('Push', 1, [[a, 40]])], [wkOf('Legs', 2, [[a, 45]]), wkOf('Push', 1, [[a, 40]])]);
+    for (const d of [1.5, 1.2, 1]) await session(u.id, plan, d, { [a]: rep(2, { reps: 10, kg: 45 }) }, { v: 2 });
+    const s = await suggest(u.token, plan);
+    expect(s.suggestions.map((x) => x.reason === 'COOLDOWN')).toEqual([false, false]);
+  });
 });

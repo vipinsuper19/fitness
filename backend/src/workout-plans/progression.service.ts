@@ -62,15 +62,19 @@ export class ProgressionService {
     /**
      * The entry in `prev` that corresponds to `at` in `cur`. Workouts have no id that is stable across
      * versions (each version gets new rows), so the workout is matched by its unique (dayOfWeek, name),
-     * falling back to the same order. Within it the exercise is matched by exerciseId; when an exercise
+     * falling back to the same order unless that workout is uniquely matched by another current workout. Within it the exercise is matched by exerciseId; when an exercise
      * appears more than once in a workout, the k-th occurrence (by exercise order) matches the k-th.
      */
     const matchEntry = (cur: Version, prev: Version, at: Entry): Entry | undefined => {
       const cw = cur.workouts[at.wi]!;
       const exerciseId = cw.exercises[at.ei]!.exerciseId;
       const k = cw.exercises.slice(0, at.ei).filter((e) => e.exerciseId === exerciseId).length;
-      const same = prev.workouts.flatMap((w, i) => (w.dayOfWeek === cw.dayOfWeek && w.name === cw.name ? [i] : []));
-      const wi = same.length === 1 ? same[0]! : at.wi < prev.workouts.length ? at.wi : -1;
+      const sameKey = (w: { dayOfWeek: number; name: string }) => (p: { dayOfWeek: number; name: string }) => p.dayOfWeek === w.dayOfWeek && p.name === w.name;
+      const same = prev.workouts.flatMap((w, i) => (sameKey(cw)(w) ? [i] : []));
+      // Order fallback: never land on a previous workout that another current workout matched by key,
+      // so an added workout can't inherit another workout's raise.
+      const claimed = (i: number) => cur.workouts.some((w) => w !== cw && prev.workouts.filter(sameKey(w)).length === 1 && sameKey(w)(prev.workouts[i]!));
+      const wi = same.length === 1 ? same[0]! : at.wi < prev.workouts.length && !claimed(at.wi) ? at.wi : -1;
       if (wi < 0) return undefined;
       const idx = prev.workouts[wi]!.exercises.flatMap((e, i) => (e.exerciseId === exerciseId ? [i] : []));
       return idx[k] === undefined ? undefined : { wi, ei: idx[k]! };
