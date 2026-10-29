@@ -86,10 +86,10 @@ describe('contracts/openapi.yaml', () => {
     }
   });
 
-  it('requires a bearer token everywhere except register, login and refresh', () => {
+  it('requires a bearer token everywhere except register, login, refresh and the deep health check', () => {
     expect(spec.security).toEqual([{ bearerAuth: [] }]);
     const open = operations().filter(({ op }) => Array.isArray(op.security) && op.security.length === 0);
-    expect(open.map(({ op }) => op.operationId).sort()).toEqual(['login', 'refreshTokens', 'register']);
+    expect(open.map(({ op }) => op.operationId).sort()).toEqual(['healthDeep', 'login', 'refreshTokens', 'register']);
   });
 
   it('never stores or replays token-bearing responses, and binds keys to method and path', () => {

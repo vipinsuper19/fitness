@@ -65,6 +65,8 @@ servers:
 security:
   - bearerAuth: []
 tags:
+  - name: health
+    description: Service and database checks (unprefixed, outside /api/v1)
   - name: auth
     description: Email and password sign-in with self-issued JWTs
   - name: me
@@ -89,6 +91,39 @@ tags:
     description: Personal and weekly challenges from built-in templates (join, leave, progress). No leaderboards or social
 
 paths:
+  /health/deep:
+    # Served at the origin root, not under /api/v1 (GET /health itself stays outside the contract).
+    servers:
+      - url: https://fitness-api-6pcc.onrender.com
+        description: Render (production)
+      - url: http://localhost:3000
+        description: Local
+    get:
+      tags: [health]
+      operationId: healthDeep
+      summary: Deep health check (database and latest migration)
+      description: |
+        One `SELECT 1` and a read of the latest applied migration name from
+        `_prisma_migrations`, within about 2 s each. The body only ever holds
+        `status`, `db` and `migration`: no versions, hosts, error messages or
+        stack traces. `200 ok`: both read. `200 degraded`: database up but the
+        migration name could not be read. `503`: database down or timed out
+        (body is `HealthDeep`, not `Error`, so monitors can read it).
+        Plain `GET /health` is unchanged and never touches the database.
+        Rate-limited per IP (`HEALTH_DEEP_RATE_LIMIT_PER_MINUTE`, default 12).
+      security: []
+      responses:
+        '200':
+          description: Database reachable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthDeep' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: Database down or timed out
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthDeep' }
   /auth/register:
     post:
       tags: [auth]
@@ -2170,6 +2205,18 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
 
   schemas:
+    HealthDeep:
+      type: object
+      additionalProperties: false
+      required: [status, db, migration]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        db: { type: string, enum: [up, down] }
+        migration:
+          type: [string, 'null']
+          pattern: '^[A-Za-z0-9_.-]{1,255}$'
+          description: Latest applied Prisma migration name; null when unreadable or the database is down
+          example: 20261020000000_request_log
     Id:
       type: string
       format: uuid
