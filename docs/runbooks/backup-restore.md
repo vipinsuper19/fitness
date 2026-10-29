@@ -107,7 +107,7 @@ cd backend && DATABASE_URL="$SCRATCH_DB_URL" DIRECT_URL="$SCRATCH_DB_URL" npx pr
 ```
 
 Optionally run the API against scratch (`DATABASE_URL=$SCRATCH_DB_URL npm run start:dev`) and check
-`GET /health?deep=1`, which reports `migration`, plus a login with a test account.
+`GET /health/deep`, which reports `migration`, plus a login with a test account.
 
 When you're done, `unset SCRATCH_DB_URL`. Pause or delete the scratch project; it holds a copy of user data.
 
@@ -118,7 +118,7 @@ When you're done, `unset SCRATCH_DB_URL`. Pause or delete the scratch project; i
 3. Restore with the same `pg_restore` command, using `--dbname "$PROD_DB_URL"`. `--single-transaction` means a failure leaves prod untouched.
 4. Verify with the section 3 queries against prod.
 5. Make sure the code you resume matches the restored `_prisma_migrations` (see the DEPLOY.md rollback checklist). If prod was restored to *before* migration N, the deployed commit must not include N, or the next start re-applies it.
-6. Resume the service. Check `GET /health` and `GET /health?deep=1` (it should show the expected migration), then watch the logs.
+6. Resume the service. Check `GET /health` and `GET /health/deep` (it should show the expected migration), then watch the logs.
 
 Data written between the dump and the restore is lost unless you replay it from the step 2 dump. Record the window.
 

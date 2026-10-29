@@ -115,7 +115,7 @@ and restores are covered in [runbooks/backup-restore.md](runbooks/backup-restore
 **Before a risky migration** (drops, renames, data rewrites, new constraints on existing rows, backfills):
 - [ ] Write it **expand/contract**: add first, deploy code that works with both shapes, and drop in a *later* release. Then the previous deploy keeps working against the new schema, and a Render rollback is safe.
 - [ ] Take and verify a manual dump ([runbook §2](runbooks/backup-restore.md#2-manual-dump-before-risky-migrations)); on Supabase Free it is the only backup. Note the dump file and the last applied migration in the PR.
-- [ ] Check the migration on a scratch copy restored from that dump ([§3](runbooks/backup-restore.md#3-restore-to-a-scratch-project-first-always)): `migrate deploy`, then `GET /health?deep=1`.
+- [ ] Check the migration on a scratch copy restored from that dump ([§3](runbooks/backup-restore.md#3-restore-to-a-scratch-project-first-always)): `migrate deploy`, then `GET /health/deep`.
 - [ ] Write down the forward-fix SQL you would use if it goes wrong.
 
 **If a deploy goes wrong, decide in this order:**
@@ -131,7 +131,7 @@ and restores are covered in [runbooks/backup-restore.md](runbooks/backup-restore
 - A dashboard rollback **disables auto-deploy**. Re-enable it in Settings once the fix is merged; otherwise the next push won't deploy. A rollback through the API does *not* disable it.
 - **A rollback does not touch the database.** The old build runs its own `migrate deploy` on start. It sees the newer migrations in `_prisma_migrations` that aren't in its `prisma/migrations` folder, applies nothing, and starts against the **newer schema**. That is safe only if the new schema is backward-compatible with the old code (expand/contract). If the migration dropped or renamed something the old code uses, the rollback boots but fails at runtime: forward-fix or restore instead.
 - If you restore the DB to before migration N, deploy (or roll back to) a commit **without** N. Otherwise the next start re-applies N.
-- After any rollback or fix, check `GET /health?deep=1`. Its `migration` must match what you expect.
+- After any rollback or fix, check `GET /health/deep`. Its `migration` must match what you expect.
 
 ## Free-tier notes
 - **Cold starts (accepted):** Render Free spins down after ~15 min idle, so the first request after that takes **about 50 s**. **No keep-alive pinger is used**, by choice, to stay within the free plan; the app should show a loading state and retry.
