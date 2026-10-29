@@ -119,4 +119,19 @@
     <string name="macro_failed">Couldn\'t load your macro targets.</string>
     <string name="macro_suggest_failed">Couldn\'t get a suggestion.</string>
     <string name="macro_apply_failed">Couldn\'t save your macro targets.</string>
+    <!-- Manual macro targets -->
+    <string name="macro_edit">Edit targets</string>
+    <string name="macro_edit_title">Edit macro targets</string>
+    <string name="macro_grams_unit">g</string>
+    <string name="macro_edit_hint">Whole grams. Leave empty or enter 0 to clear a target.</string>
+    <string name="macro_edit_note">New targets apply from today onward. Earlier days keep the targets they had.</string>
+    <string name="macro_edit_not_whole">Enter a whole number of grams</string>
+    <string name="macro_edit_too_large">At most %1$s g</string>
+    <string name="macro_save">Save</string>
+    <string name="macro_cancel">Cancel</string>
+    <string name="macro_saved">Targets saved. They apply from today.</string>
+    <string name="macro_save_failed">Couldn\'t save your targets. Nothing was changed.</string>
+    <string name="macro_save_invalid">The server didn\'t accept these values. Check them and try again.</string>
+    <string name="macro_rate_limited">Too many changes. Try again in %1$s s.</string>
+    <string name="macro_rate_limited_unknown">Too many changes. Try again shortly.</string>
 </resources>
