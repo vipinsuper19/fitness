@@ -110,6 +110,21 @@ class StrengthViewModelTest {
         assertEquals("Bench", vm.state.value.detail!!.progress!!.name)
     }
 
+    @Test fun openingAnExerciseAlwaysStartsOnWeek() {
+        repo.pages[null] = page("a", "b")
+        repo.detail = { _, _, _, b -> ApiResult.Success(progress(b)) }
+        val vm = vm()
+        vm.open("a")
+        vm.setBucket(SummaryBucket.MONTH)
+        vm.open("b")
+        assertEquals(SummaryBucket.WEEK, vm.state.value.detail!!.bucket)
+        assertEquals("b:2026-05-01:2026-10-29:week", repo.detailCalls.last())
+        vm.setBucket(SummaryBucket.DAY)
+        vm.closeDetail()
+        vm.open("a")
+        assertEquals(SummaryBucket.WEEK, vm.state.value.detail!!.bucket)
+    }
+
     @Test fun unitsFollowThePreference() {
         repo.pages[null] = page("a")
         val vm = vm()

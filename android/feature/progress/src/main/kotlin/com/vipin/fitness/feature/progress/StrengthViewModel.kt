@@ -125,8 +125,9 @@ class StrengthViewModel @Inject constructor(
         }
     }
 
+    /** Opening an exercise always starts on the Week bucket. */
     fun open(exerciseId: String) {
-        _state.update { it.copy(detail = StrengthDetailState(exerciseId, bucket = it.detail?.bucket ?: SummaryBucket.WEEK)) }
+        _state.update { it.copy(detail = StrengthDetailState(exerciseId, bucket = SummaryBucket.WEEK)) }
         loadDetail()
     }
 
