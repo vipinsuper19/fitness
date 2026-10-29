@@ -71,7 +71,7 @@ export class PlannedWorkoutDto {
   @ApiProperty({ minLength: 1, maxLength: 80 }) @IsString() @MinLength(1) @MaxLength(80)
   name!: string;
 
-  @ApiProperty({ type: [PlannedExerciseDto] })
+  @ApiProperty({ type: [PlannedExerciseDto], minItems: 1, maxItems: 30 })
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(30) @ValidateNested({ each: true }) @Type(() => PlannedExerciseDto)
   exercises!: PlannedExerciseDto[];
 }
@@ -90,7 +90,7 @@ export class WorkoutPlanDraftDto {
   @ApiPropertyOptional({ type: String, nullable: true, maxLength: 1000 }) @IsOptional() @IsString() @MaxLength(1000)
   rationale?: string | null;
 
-  @ApiProperty({ type: [PlannedWorkoutDto] })
+  @ApiProperty({ type: [PlannedWorkoutDto], minItems: 1, maxItems: 7 })
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(7) @ValidateNested({ each: true }) @Type(() => PlannedWorkoutDto)
   workouts!: PlannedWorkoutDto[];
 }
@@ -101,7 +101,7 @@ export class WorkoutPlanDraftDto {
  * the latest version's name. Rename with PUT /workout-plans/{planId}/name.
  */
 export class WorkoutPlanUpdateDto extends OmitType(WorkoutPlanDraftDto, ['name'] as const) {
-  @ApiPropertyOptional({ deprecated: true, description: 'Ignored; the new version copies the latest name' }) @Allow()
+  @ApiPropertyOptional({ type: String, deprecated: true, description: 'Ignored and never validated; the new version copies the latest name' }) @Allow()
   name?: unknown;
 
   @ApiProperty({ minimum: 1 }) @IsInt() @Min(1)

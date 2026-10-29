@@ -1,6 +1,7 @@
 import { RequestMethod } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
+import type { SchemaObject } from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 import helmet from 'helmet';
 
 import { connectionCloseWhileDraining } from './common/graceful-shutdown';
@@ -38,7 +39,35 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
 
   const swagger = env.SWAGGER_ENABLED ?? env.NODE_ENV !== 'production';
   if (swagger) {
-    const config = new DocumentBuilder().setTitle('Fitness API').setVersion('v1').addBearerAuth().build();
+    const config = swaggerConfig();
     SwaggerModule.setup('docs', app, () => SwaggerModule.createDocument(app, config));
   }
+}
+
+/** Error body (contract `Error`) and the error responses any operation may return; per-operation codes are in contracts/openapi.yaml. */
+const ERROR_SCHEMA = {
+  type: 'object',
+  required: ['code', 'message', 'requestId'],
+  properties: {
+    code: { type: 'string', description: 'Stable machine code (UPPER_SNAKE_CASE), e.g. VALIDATION_FAILED, NOT_FOUND, RATE_LIMITED' },
+    message: { type: 'string', description: 'Human-readable, safe to show' },
+    details: { type: 'object', additionalProperties: true },
+    requestId: { type: 'string', description: 'Same as the X-Request-Id response header' },
+  },
+} as const;
+
+export function swaggerConfig(): Omit<OpenAPIObject, 'paths'> {
+  const error = (status: number, description: string) => ({ status, description, schema: ERROR_SCHEMA as unknown as SchemaObject });
+  return new DocumentBuilder()
+    .setTitle('Fitness API')
+    .setVersion('v1')
+    .addBearerAuth()
+    .addGlobalResponse(
+      error(400, 'VALIDATION_FAILED (details.fields) or another 400 code'),
+      error(401, 'UNAUTHENTICATED (routes that need a bearer token)'),
+      error(413, 'PAYLOAD_TOO_LARGE: JSON body over the size cap'),
+      error(429, 'RATE_LIMITED, with Retry-After'),
+      error(500, 'INTERNAL'),
+    )
+    .build();
 }
