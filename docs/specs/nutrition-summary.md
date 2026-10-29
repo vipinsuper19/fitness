@@ -28,7 +28,7 @@
   - `waterPct` = `avgWaterMlPerLoggedDay / targets.waterMl`
 
   `kcalPct`, `proteinPct`, `carbsPct` and `fatPct` are `null` when no food was logged in the period or their target is `null`. `waterPct` is `null` when no water was logged or `targets.waterMl` is `null`. A target of 0 is treated as `null`. `adherence` is `null` only when every pct is `null`.
-- **Macro targets:** `targets.proteinG`, `carbsG` and `fatG` come from the profile's `dailyProteinTargetG`, `dailyCarbsTargetG` and `dailyFatTargetG` (see [macro-targets.md](macro-targets.md)); the macro pcts follow the rules above (0 or null target → null pct).
+- **Macro targets:** `targets.proteinG`, `carbsG` and `fatG` come from the profile's `dailyProteinTargetG`, `dailyCarbsTargetG` and `dailyFatTargetG` (see [macro-targets.md](macro-targets.md)); the macro pcts follow the rules above (each pct is null when its own target is null, independently; PATCH 0 is stored as null; current targets apply to every period, including past ones).
 - If targets are stored with history later, each day should use the target in effect that day. That would be an additive change, documented then.
 
 ## Rounding
