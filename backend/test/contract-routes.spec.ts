@@ -3,7 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 
 import { createTestApp } from './helpers';
-import { API_PREFIX, HTTP_METHODS, INTERNAL_ROUTES, openapi, registeredRoutes, responseValidator, violations } from './support/openapi';
+import { API_PREFIX, HTTP_METHODS, INTERNAL_ROUTES, ROOT_PATHS, openapi, registeredRoutes, responseValidator, violations } from './support/openapi';
 
 /**
  * Contract drift (both directions): every route the real app registers must be in
@@ -45,6 +45,7 @@ describe('routes ↔ contracts/openapi.yaml', () => {
   const apiRoutes = () =>
     routes.filter((r) => !NOT_IN_CONTRACT.has(r) && !isSwaggerUi(r)).map((r) => {
       const [method, path] = r.split(' ');
+      if ((ROOT_PATHS as readonly string[]).includes(path!)) return r; // documented at the origin root
       expect({ route: r, prefixed: path!.startsWith(`${API_PREFIX}/`) }).toEqual({ route: r, prefixed: true });
       return `${method} ${path!.slice(API_PREFIX.length)}`;
     });
@@ -52,6 +53,14 @@ describe('routes ↔ contracts/openapi.yaml', () => {
   it('finds the routes (sanity: the enumeration works)', () => {
     expect(apiRoutes().length).toBeGreaterThan(50);
     expect(routes).toContain('get /health');
+  });
+
+  it('root-level operations (/health/deep) are registered and documented with a root servers override', () => {
+    expect(routes).toContain('get /health/deep');
+    for (const p of ROOT_PATHS) {
+      const servers = (openapi.paths[p] as unknown as { servers?: { url: string }[] } | undefined)?.servers ?? [];
+      expect({ p, servers: servers.length > 0 && servers.every((s) => !s.url.includes(API_PREFIX)) }).toEqual({ p, servers: true });
+    }
   });
 
   it('documents every registered route', () => {

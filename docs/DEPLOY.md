@@ -32,6 +32,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
    - `TARGET_HISTORY_RATE_LIMIT_PER_MINUTE` (60, per user)
    - `NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE` (60, per user, for each of GET and PATCH `/me/notification-preferences`)
    - Per-user write limits (requests per minute; every write route has exactly one named throttle, see `backend/src/common/rate-limit.ts` and `test/rate-limits.spec.ts`): `PROFILE_RATE_LIMIT_PER_MINUTE` (60, PUT `/me/profile`), `GOALS_RATE_LIMIT_PER_MINUTE` (60, goal writes), `PLANS_RATE_LIMIT_PER_MINUTE` (60, plan writes; `POST /workout-plans/generate` stays on the per-IP `AUTH_RATE_LIMIT_PER_MINUTE`), `WORKOUT_SESSIONS_RATE_LIMIT_PER_MINUTE` (300, session, set and correction writes), `NUTRITION_RATE_LIMIT_PER_MINUTE` (300, food, food-log and water-log writes), `BODY_MEASUREMENTS_RATE_LIMIT_PER_MINUTE` (60), `CHALLENGES_RATE_LIMIT_PER_MINUTE` (60, join and leave). Counters are in memory per instance; a 429 returns `RATE_LIMITED` with `Retry-After`.
+   - `HEALTH_DEEP_RATE_LIMIT_PER_MINUTE` (12, per IP): `GET /health/deep`, which queries the database.
    - `NOTIFICATION_DEVICES_RATE_LIMIT_PER_MINUTE` (30, per user, for each of POST and DELETE `/me/notification-devices`), `NOTIFICATIONS_TICK_MAX_ROWS` (500)
    - `EXPORT_RATE_LIMIT_PER_HOUR` (5), `EXPORT_MAX_ROWS` (5000), `EXPORT_MAX_SESSIONS` (2000), `EXPORT_MAX_PLAN_VERSIONS` (200), `EXPORT_MAX_SETS_TOTAL` (20000), `EXPORT_MAX_PLAN_EXERCISES_TOTAL` (10000)
    - `PORT` is set by Render.
@@ -69,6 +70,7 @@ This is config only. Nothing here creates resources; Vipin runs both dashboards.
 ## 3. Verify
 - `curl https://<service>.onrender.com/health` → `{"status":"ok",...}`
 - `curl 'https://<service>.onrender.com/health?db=true'` → `"db":"up"`
+- `curl -i https://<service>.onrender.com/health/deep` → `200 {"status":"ok","db":"up","migration":"<latest migration>"}`; the migration should be the newest folder in `backend/prisma/migrations`. `503` with `"db":"down"` means the database is unreachable or slower than ~2 s (e.g. Supabase paused). Use it for manual checks and external monitors, **not** as Render's health check path (keep `/health`, so a paused DB doesn't restart-loop the service). Spec: [docs/specs/health-deep.md](specs/health-deep.md).
 - API base: `https://<service>.onrender.com/api/v1/`
 
 ## 4. Android staging URL

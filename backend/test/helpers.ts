@@ -26,6 +26,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     NUTRITION_RATE_LIMIT_PER_MINUTE: '1000',
     BODY_MEASUREMENTS_RATE_LIMIT_PER_MINUTE: '1000',
     CHALLENGES_RATE_LIMIT_PER_MINUTE: '1000',
+    HEALTH_DEEP_RATE_LIMIT_PER_MINUTE: '1000',
     LOGIN_MAX_FAILURES_PER_ACCOUNT: '1000',
     // Off by default so specs asserting exact XP stay deterministic; achievements.int-spec turns it on.
     ACHIEVEMENTS_HOOKS: 'off',

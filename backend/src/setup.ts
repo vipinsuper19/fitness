@@ -24,7 +24,10 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: false });
   app.useGlobalPipes(globalValidationPipe());
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.setGlobalPrefix('api/v1', { exclude: [{ path: 'health', method: RequestMethod.GET }] });
+  app.setGlobalPrefix('api/v1', { exclude: [
+      { path: 'health', method: RequestMethod.GET },
+      { path: 'health/deep', method: RequestMethod.GET },
+    ] });
   app.enableShutdownHooks();
   const origins = env.CORS_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean);
   if (origins && origins.length > 0) app.enableCors({ origin: origins });
