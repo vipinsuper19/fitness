@@ -108,15 +108,51 @@ class DeleteAccountViewModelTest {
         assertFalse(vm.state.value.canConfirm) // another try would just 401 again
         assertEquals(0, session.signOuts)
         assertEquals(0, consent.forgets) // not known to be deleted: keep consent
+        vm.onPassword("p2") // typing doesn't hide the ambiguity or re-enable Confirm
+        assertEquals(DeleteAccountError.MAYBE_DELETED, vm.state.value.error)
+        assertFalse(vm.state.value.canConfirm)
         vm.signInToCheck()
-        vm.signInToCheck()
-        assertEquals(1, session.signOuts)
+        // Like a session expiry: tokens only. No server logout, so no UserScopedState (outbox,
+        // unsynced workouts) is cleared, and consent is kept.
+        assertEquals(1, session.localSignOuts)
+        assertEquals(0, session.signOuts)
+        assertEquals(0, consent.forgets)
+        assertFalse(session.isSignedIn())
         assertTrue(vm.state.value.signedOutToCheck)
+    }
+
+    @Test fun signInToCheckIgnoresADoubleTap() {
+        repo.deleteResult = ApiResult.Failure(ApiError.Network)
+        vm.onPassword("p")
+        vm.delete()
+        repo.deleteResult = ApiResult.Failure(ApiError.Http(401, "UNAUTHENTICATED", "", null))
+        vm.delete()
+        session.gate = CompletableDeferred()
+        vm.signInToCheck()
+        assertTrue(vm.state.value.signingOutToCheck)
+        vm.signInToCheck() // second tap while the first is in flight
+        session.gate!!.complete(Unit)
+        assertEquals(1, session.localSignOuts)
+        assertTrue(vm.state.value.signedOutToCheck)
+        vm.signInToCheck()
+        assertEquals(1, session.localSignOuts)
+    }
+
+    @Test fun unauthorizedAfterARateLimitIsNotMaybeDeleted() {
+        repo.deleteResult = ApiResult.Failure(ApiError.Http(429, "RATE_LIMITED", "", null))
+        vm.onPassword("p")
+        vm.delete()
+        repo.deleteResult = ApiResult.Failure(ApiError.Http(401, "UNAUTHENTICATED", "", null))
+        vm.delete()
+        assertEquals(2, repo.deleteCalls.size)
+        assertEquals(repo.deleteCalls[0].second, repo.deleteCalls[1].second) // key kept across the 429
+        assertEquals(DeleteAccountError.FAILED, vm.state.value.error)
     }
 
     @Test fun signInToCheckDoesNothingWithoutTheAmbiguousError() {
         vm.signInToCheck()
         assertEquals(0, session.signOuts)
+        assertEquals(0, session.localSignOuts)
     }
 
     @Test fun unauthorizedOnAFirstAttemptIsNotTreatedAsDeleted() {
@@ -219,7 +255,8 @@ class DeleteAccountScreenTest {
         assertEquals(0, session.signOuts)
         compose.onNodeWithTag(DeleteAccountTags.SIGN_IN_TO_CHECK).performClick()
         compose.waitForIdle()
-        assertEquals(1, session.signOuts)
+        assertEquals(0, session.signOuts)
+        assertEquals(1, session.localSignOuts)
         assertEquals(1, left)
     }
 }

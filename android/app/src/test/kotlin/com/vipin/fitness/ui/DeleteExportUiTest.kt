@@ -219,7 +219,8 @@ class DeleteExportUiTest {
         waitText("New here? Create an account")
         assertEquals(2, account.deleteCalls.size)
         assertEquals(account.deleteCalls[0].second, account.deleteCalls[1].second)
-        assertEquals(1, session.signOuts)
+        assertEquals(0, session.signOuts) // local end only: outbox and user state kept
+        assertEquals(1, session.localSignOuts)
         scenario!!.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
         assertTrue(absent(DeleteAccountTags.SCREEN))

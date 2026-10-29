@@ -78,7 +78,7 @@ fun DeleteAccountContent(
                 modifier = Modifier.testTag(DeleteAccountTags.ERROR),
             )
             if (it == DeleteAccountError.MAYBE_DELETED) {
-                Button(onClick = onSignInToCheck, enabled = !s.signedOutToCheck, modifier = Modifier.fillMaxWidth().testTag(DeleteAccountTags.SIGN_IN_TO_CHECK)) {
+                Button(onClick = onSignInToCheck, enabled = !s.signingOutToCheck && !s.signedOutToCheck, modifier = Modifier.fillMaxWidth().testTag(DeleteAccountTags.SIGN_IN_TO_CHECK)) {
                     Text(stringResource(R.string.delete_account_sign_in_to_check))
                 }
             }
