@@ -73,13 +73,23 @@ class RealAppE2eTest {
         waitText("New here? Create an account", net)
     }
 
+    /** Consent gate shows after auth for users without the current consent version. */
+    private fun passConsentThen(next: SemanticsMatcher) {
+        compose.waitUntil(net) { present(hasTestTag("consent_screen")) || present(next) }
+        if (present(hasTestTag("consent_screen"))) {
+            shot("01a-consent")
+            clickTag("consent_agree"); clickTag("consent_continue")
+        }
+        waitFor(next, net)
+    }
+
     @Test fun signUpSignInTodayWaterSignOut() {
         step("01-signup") {
             waitText("New here? Create an account", net)
             click("New here? Create an account")
             type("Email", email); type("Password", password)
             click("Create account")
-            waitText("Step 1 of 4", net)
+            passConsentThen(hasText("Step 1 of 4"))
             for (n in 1..4) { waitText("Step $n of 4", net); click("Skip") }
             waitText("Today's plan", net)
         }
@@ -87,7 +97,7 @@ class RealAppE2eTest {
             signOut()
             type("Email", email); type("Password", password)
             click("Sign in")
-            waitText("Today's plan", net)
+            passConsentThen(hasText("Today's plan"))
         }
         step("03-today") {
             waitTag("home_list", net)
