@@ -124,6 +124,39 @@ class PlanBuilderStore @Inject constructor() : UserScopedState {
     }
 }
 
+/** One editable number on an exercise row. */
+enum class ExerciseField { SETS, REPS_MIN, REPS_MAX, DURATION }
+
+/** Why one number is invalid; shown inline under its field. */
+enum class ExerciseFieldError { SETS_RANGE, REPS_RANGE, REPS_ORDER, DURATION_RANGE }
+
+/** Contract `PlannedExercise` limits (openapi.yaml): sets 1–20, reps 1–100, durationSeconds 1–7200. */
+object ExerciseLimits {
+    val SETS = 1..20
+    val REPS = 1..100
+    val DURATION_SECONDS = 1..7200
+}
+
+/** Per-field errors for the fields this exercise shows (reps or duration by tracking type). Empty = valid. */
+fun CustomExercise.fieldErrors(): Map<ExerciseField, ExerciseFieldError> = buildMap {
+    if (sets !in ExerciseLimits.SETS) put(ExerciseField.SETS, ExerciseFieldError.SETS_RANGE)
+    if (exercise.trackingType.usesDuration) {
+        if (durationSeconds == null || durationSeconds !in ExerciseLimits.DURATION_SECONDS) put(ExerciseField.DURATION, ExerciseFieldError.DURATION_RANGE)
+    } else {
+        val lo = repsMin
+        val hi = repsMax
+        if (lo == null || lo !in ExerciseLimits.REPS) put(ExerciseField.REPS_MIN, ExerciseFieldError.REPS_RANGE)
+        if (hi == null || hi !in ExerciseLimits.REPS) {
+            put(ExerciseField.REPS_MAX, ExerciseFieldError.REPS_RANGE)
+        } else if (lo != null && lo in ExerciseLimits.REPS && hi < lo) {
+            put(ExerciseField.REPS_MAX, ExerciseFieldError.REPS_ORDER)
+        }
+    }
+}
+
+/** Any exercise number out of range: Preview (the step before Save) stays disabled. */
+fun CustomPlan.hasFieldErrors(): Boolean = days.values.any { d -> d.exercises.any { it.fieldErrors().isNotEmpty() } }
+
 /** Validates against the draft schema's limits. */
 fun CustomPlan.errors(): Set<CustomPlanError> = buildSet {
     if (name.isBlank()) add(CustomPlanError.NAME)
@@ -132,13 +165,14 @@ fun CustomPlan.errors(): Set<CustomPlanError> = buildSet {
         if (d.name.isBlank()) add(CustomPlanError.NAME)
         if (d.exercises.isEmpty()) add(CustomPlanError.EMPTY_DAY)
         d.exercises.forEach { e ->
-            if (e.sets !in 1..20) add(CustomPlanError.BAD_SETS)
-            if (e.exercise.trackingType.usesDuration) {
-                if (e.durationSeconds == null || e.durationSeconds !in 1..7200) add(CustomPlanError.BAD_DURATION)
-            } else {
-                val lo = e.repsMin
-                val hi = e.repsMax
-                if (lo == null || hi == null || lo !in 1..100 || hi !in 1..100 || lo > hi) add(CustomPlanError.BAD_REPS)
+            e.fieldErrors().forEach { (f, _) ->
+                add(
+                    when (f) {
+                        ExerciseField.SETS -> CustomPlanError.BAD_SETS
+                        ExerciseField.DURATION -> CustomPlanError.BAD_DURATION
+                        ExerciseField.REPS_MIN, ExerciseField.REPS_MAX -> CustomPlanError.BAD_REPS
+                    },
+                )
             }
         }
     }
