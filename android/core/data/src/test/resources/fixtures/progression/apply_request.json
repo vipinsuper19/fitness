@@ -1,0 +1,46 @@
+{
+  "baseVersion": 4,
+  "weeks": 8,
+  "generator": "rule_based",
+  "workouts": [
+    {
+      "dayOfWeek": 1,
+      "name": "Push",
+      "exercises": [
+        {
+          "exerciseId": "5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13",
+          "order": 0,
+          "sets": 3,
+          "repsMin": 8,
+          "repsMax": 10,
+          "targetWeightKg": 41,
+          "durationSeconds": null,
+          "restSeconds": 90,
+          "notes": null
+        },
+        {
+          "exerciseId": "8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81",
+          "order": 1,
+          "sets": 3,
+          "repsMin": null,
+          "repsMax": null,
+          "targetWeightKg": null,
+          "durationSeconds": 65,
+          "restSeconds": 60,
+          "notes": null
+        },
+        {
+          "exerciseId": "e4b6d8f0-2a4c-4e6a-9b1d-3f5a7c9e0b42",
+          "order": 2,
+          "sets": 3,
+          "repsMin": 8,
+          "repsMax": 10,
+          "targetWeightKg": 27,
+          "durationSeconds": null,
+          "restSeconds": 90,
+          "notes": null
+        }
+      ]
+    }
+  ]
+}

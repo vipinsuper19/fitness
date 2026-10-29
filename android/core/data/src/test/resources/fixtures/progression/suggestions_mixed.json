@@ -1,0 +1,233 @@
+{
+  "planId": "3c7e9a1b-5d2f-4a6c-8e0b-1f3d5a7c9e24",
+  "planVersion": 4,
+  "generatedAt": "2026-10-29T09:00:00+05:30",
+  "windowSessions": 3,
+  "suggestions": [
+    {
+      "plannedWorkoutId": "0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01",
+      "exerciseId": "5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13",
+      "order": 0,
+      "trackingType": "reps_weight",
+      "action": "increase",
+      "reason": "ALL_SETS_COMPLETED",
+      "reasonText": "You completed every prescribed set in your last 3 sessions.",
+      "current": {
+        "sets": 3,
+        "repsMin": 8,
+        "repsMax": 10,
+        "targetWeightKg": 40,
+        "durationSeconds": null
+      },
+      "suggested": {
+        "sets": 3,
+        "repsMin": 8,
+        "repsMax": 10,
+        "targetWeightKg": 41,
+        "durationSeconds": null
+      },
+      "cooldownUntil": null,
+      "basedOn": [
+        {
+          "sessionId": "c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51",
+          "completedAt": "2026-10-28T07:40:00+05:30",
+          "perceivedDifficulty": 3,
+          "completedSets": 3,
+          "plannedSets": 3,
+          "metTarget": true,
+          "bestReps": 10,
+          "bestWeightKg": 40,
+          "bestDurationSeconds": null,
+          "bestDistanceM": null
+        },
+        {
+          "sessionId": "c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52",
+          "completedAt": "2026-10-26T07:40:00+05:30",
+          "perceivedDifficulty": 3,
+          "completedSets": 3,
+          "plannedSets": 3,
+          "metTarget": true,
+          "bestReps": 10,
+          "bestWeightKg": 40,
+          "bestDurationSeconds": null,
+          "bestDistanceM": null
+        },
+        {
+          "sessionId": "c1a2b3d4-0003-4e5f-8a9b-0c1d2e3f4a53",
+          "completedAt": "2026-10-24T07:40:00+05:30",
+          "perceivedDifficulty": 2,
+          "completedSets": 3,
+          "plannedSets": 3,
+          "metTarget": true,
+          "bestReps": 10,
+          "bestWeightKg": 40,
+          "bestDurationSeconds": null,
+          "bestDistanceM": null
+        }
+      ],
+      "inputs": {
+        "sessionsRequired": 3,
+        "sessionsConsidered": 3,
+        "sessionsMetTarget": 3,
+        "maxPerceivedDifficulty": 3,
+        "cooldown": {
+          "active": false,
+          "lastRaisedAt": "2026-10-12T10:00:00+05:30",
+          "until": null,
+          "days": 7
+        },
+        "step": {
+          "field": "targetWeightKg",
+          "rule": "percent_increase",
+          "percent": 2.5,
+          "capPercent": 10,
+          "capApplied": false,
+          "minStepApplied": false,
+          "rounding": "down_0_5_kg",
+          "limitApplied": false
+        }
+      }
+    },
+    {
+      "plannedWorkoutId": "0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01",
+      "exerciseId": "8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81",
+      "order": 1,
+      "trackingType": "duration",
+      "action": "hold",
+      "reason": "COOLDOWN",
+      "reasonText": "This exercise was progressed less than 7 days ago.",
+      "current": {
+        "sets": 3,
+        "repsMin": null,
+        "repsMax": null,
+        "targetWeightKg": null,
+        "durationSeconds": 65
+      },
+      "suggested": null,
+      "cooldownUntil": "2026-11-01T18:30:00+05:30",
+      "basedOn": [
+        {
+          "sessionId": "c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51",
+          "completedAt": "2026-10-28T07:40:00+05:30",
+          "perceivedDifficulty": 3,
+          "completedSets": 3,
+          "plannedSets": 3,
+          "metTarget": true,
+          "bestReps": null,
+          "bestWeightKg": null,
+          "bestDurationSeconds": 65,
+          "bestDistanceM": null
+        },
+        {
+          "sessionId": "c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52",
+          "completedAt": "2026-10-26T07:40:00+05:30",
+          "perceivedDifficulty": 3,
+          "completedSets": 3,
+          "plannedSets": 3,
+          "metTarget": true,
+          "bestReps": null,
+          "bestWeightKg": null,
+          "bestDurationSeconds": 65,
+          "bestDistanceM": null
+        },
+        {
+          "sessionId": "c1a2b3d4-0003-4e5f-8a9b-0c1d2e3f4a53",
+          "completedAt": "2026-10-24T07:40:00+05:30",
+          "perceivedDifficulty": 3,
+          "completedSets": 3,
+          "plannedSets": 3,
+          "metTarget": true,
+          "bestReps": null,
+          "bestWeightKg": null,
+          "bestDurationSeconds": 65,
+          "bestDistanceM": null
+        }
+      ],
+      "inputs": {
+        "sessionsRequired": 3,
+        "sessionsConsidered": 3,
+        "sessionsMetTarget": 3,
+        "maxPerceivedDifficulty": 3,
+        "cooldown": {
+          "active": true,
+          "lastRaisedAt": "2026-10-25T18:30:00+05:30",
+          "until": "2026-11-01T18:30:00+05:30",
+          "days": 7
+        },
+        "step": null
+      }
+    },
+    {
+      "plannedWorkoutId": "0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01",
+      "exerciseId": "e4b6d8f0-2a4c-4e6a-9b1d-3f5a7c9e0b42",
+      "order": 2,
+      "trackingType": "reps_weight",
+      "action": "deload",
+      "reason": "REPEATED_MISSES",
+      "reasonText": "Your last two sessions missed the target, so a lighter load is suggested.",
+      "current": {
+        "sets": 3,
+        "repsMin": 8,
+        "repsMax": 10,
+        "targetWeightKg": 30,
+        "durationSeconds": null
+      },
+      "suggested": {
+        "sets": 3,
+        "repsMin": 8,
+        "repsMax": 10,
+        "targetWeightKg": 27,
+        "durationSeconds": null
+      },
+      "cooldownUntil": null,
+      "basedOn": [
+        {
+          "sessionId": "c1a2b3d4-0001-4e5f-8a9b-0c1d2e3f4a51",
+          "completedAt": "2026-10-28T07:40:00+05:30",
+          "perceivedDifficulty": 4,
+          "completedSets": 2,
+          "plannedSets": 3,
+          "metTarget": false,
+          "bestReps": 8,
+          "bestWeightKg": 30,
+          "bestDurationSeconds": null,
+          "bestDistanceM": null
+        },
+        {
+          "sessionId": "c1a2b3d4-0002-4e5f-8a9b-0c1d2e3f4a52",
+          "completedAt": "2026-10-26T07:40:00+05:30",
+          "perceivedDifficulty": 4,
+          "completedSets": 3,
+          "plannedSets": 3,
+          "metTarget": false,
+          "bestReps": 7,
+          "bestWeightKg": 30,
+          "bestDurationSeconds": null,
+          "bestDistanceM": null
+        }
+      ],
+      "inputs": {
+        "sessionsRequired": 3,
+        "sessionsConsidered": 2,
+        "sessionsMetTarget": 0,
+        "maxPerceivedDifficulty": 4,
+        "cooldown": {
+          "active": false,
+          "lastRaisedAt": null,
+          "until": null,
+          "days": 7
+        },
+        "step": {
+          "field": "targetWeightKg",
+          "rule": "deload",
+          "percent": -10,
+          "capPercent": null,
+          "capApplied": false,
+          "minStepApplied": false,
+          "rounding": "down_0_5_kg",
+          "limitApplied": false
+        }
+      }
+    }
+  ]
+}

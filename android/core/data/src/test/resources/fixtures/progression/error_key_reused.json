@@ -1,0 +1,5 @@
+{
+  "code": "IDEMPOTENCY_KEY_REUSED",
+  "message": "This Idempotency-Key was used for a different request.",
+  "requestId": "7f3a9c1e-2b4d-4e6f-8a0c-1d3e5f7a9b22"
+}
