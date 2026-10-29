@@ -100,4 +100,11 @@ dependencies {
     kspTest(libs.hilt.compiler)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)
+
+    // Real-app emulator E2E (.github/workflows/android-e2e.yml): real Hilt modules, no fakes.
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 }
