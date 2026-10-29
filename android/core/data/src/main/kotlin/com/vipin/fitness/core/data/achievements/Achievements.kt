@@ -37,9 +37,6 @@ enum class ChallengeStatus(val wire: String) {
 
 data class BadgeProgress(val current: Int, val target: Int) {
     /** 0..1 for a progress bar. */
-    /** A water challenge: has a goal at join, or is the weekly water template. */
-    val isWater: Boolean get() = waterGoalMl != null || templateCode == WEEKLY_WATER_DAYS
-
     val fraction: Float get() = if (target <= 0) 0f else (current.toFloat() / target).coerceIn(0f, 1f)
 }
 
@@ -100,6 +97,9 @@ data class Challenge(
     /** Local date of joining, in [timezone]. Streak challenges count only days from it. */
     val joinDate: LocalDate? = null,
 ) {
+    /** A water challenge: has a goal at join, or is the weekly water template. */
+    val isWater: Boolean get() = waterGoalMl != null || templateCode == WEEKLY_WATER_DAYS
+
     val fraction: Float get() = if (target <= 0) 0f else (progress.toFloat() / target).coerceIn(0f, 1f)
 
     /** Days left including today, in the challenge's own timezone; null without a deadline. Never negative. */
