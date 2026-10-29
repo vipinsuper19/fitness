@@ -22,6 +22,7 @@ fun ProfileDto.toDomain() = Profile(
     experienceLevel = experienceLevel.toEnum<ExperienceLevel> { it.wire },
     dietPreference = dietPreference.toEnum<DietPreference> { it.wire },
     unitSystem = if (unitSystem == "imperial") UnitSystem.IMPERIAL else UnitSystem.METRIC,
+    timezone = timezone,
     dailyCalorieTargetKcal = dailyCalorieTargetKcal,
     dailyWaterTargetMl = dailyWaterTargetMl,
     onboardingCompleted = onboardingCompleted,

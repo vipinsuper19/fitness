@@ -99,13 +99,19 @@ export class NutritionSummaryService {
         _count: { _all: true, fiberG: true, sugarG: true, sodiumMg: true },
       }),
       this.prisma.waterLog.groupBy({ by: ['date'], where: { userId, date: range }, _sum: { amountMl: true } }),
-      this.prisma.userProfile.findUnique({ where: { userId }, select: { timezone: true, dailyCalorieTargetKcal: true, dailyWaterTargetMl: true } }),
+      this.prisma.userProfile.findUnique({ where: { userId }, select: { timezone: true, dailyCalorieTargetKcal: true, dailyWaterTargetMl: true, dailyProteinTargetG: true, dailyCarbsTargetG: true, dailyFatTargetG: true } }),
     ]);
 
     const kcal = target(profile?.dailyCalorieTargetKcal);
     const waterTarget = target(profile?.dailyWaterTargetMl);
-    // No macro targets in the profile yet (spec follow-up): always null.
-    const targets: NutritionTargets | null = kcal == null && waterTarget == null ? null : { kcal, proteinG: null, carbsG: null, fatG: null, waterMl: waterTarget };
+    // Current targets apply to every period (no target history). Each macro is independent.
+    const proteinT = target(profile?.dailyProteinTargetG);
+    const carbsT = target(profile?.dailyCarbsTargetG);
+    const fatT = target(profile?.dailyFatTargetG);
+    const targets: NutritionTargets | null =
+      [kcal, waterTarget, proteinT, carbsT, fatT].every((t) => t == null)
+        ? null
+        : { kcal, proteinG: proteinT, carbsG: carbsT, fatG: fatT, waterMl: waterTarget };
 
     const accs = new Map<string, Acc>();
     const byDay = new Map<string, Acc>();
@@ -154,7 +160,10 @@ export class NutritionSummaryService {
       const avgWater = a.waterDays ? new D(a.water).div(a.waterDays) : null;
       const adherence: NutritionAdherence = {
         kcalPct: pct(avgKcal, kcal),
-        proteinPct: null, carbsPct: null, fatPct: null, // no macro targets yet
+        // From the unrounded per-logged-day average, HALF_UP to one decimal.
+        proteinPct: pct(hasFood ? a.sums.proteinG.div(a.foodDays) : null, proteinT),
+        carbsPct: pct(hasFood ? a.sums.carbsG.div(a.foodDays) : null, carbsT),
+        fatPct: pct(hasFood ? a.sums.fatG.div(a.foodDays) : null, fatT),
         waterPct: pct(avgWater, waterTarget),
       };
       const anyPct = Object.values(adherence).some((v) => v != null);
