@@ -17,6 +17,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     AUTH_REFRESH_RATE_LIMIT_PER_MINUTE: '1000',
     EXPORT_RATE_LIMIT_PER_HOUR: '1000',
     TARGET_HISTORY_RATE_LIMIT_PER_MINUTE: '1000',
+    NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE: '1000',
     LOGIN_MAX_FAILURES_PER_ACCOUNT: '1000',
     // Off by default so specs asserting exact XP stay deterministic; achievements.int-spec turns it on.
     ACHIEVEMENTS_HOOKS: 'off',

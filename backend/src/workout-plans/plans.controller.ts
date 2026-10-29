@@ -26,7 +26,7 @@ export class PlansController {
   @Post('generate')
   @HttpCode(HttpStatus.OK)
   @UseGuards(ThrottlerGuard)
-  @SkipThrottle({ refresh: true, export: true, targetHistory: true })
+  @SkipThrottle({ refresh: true, export: true, targetHistory: true, notificationPrefs: true })
   generate(@Body() dto: PlanGenerateDto): Promise<WorkoutPlanDraft> {
     return this.plans.generate(dto);
   }

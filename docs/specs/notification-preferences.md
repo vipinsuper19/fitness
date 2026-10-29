@@ -36,7 +36,7 @@ One opt-in flag per type, each tied to an existing feature:
 - **No row means defaults.** A user who has never saved preferences reads the defaults above. `GET` never writes. New users get no row at sign-up.
 - Table `notification_preferences` (planned, not in this PR): `user_id` uuid PK, FK → users `ON DELETE CASCADE`; `enabled` bool; `types` jsonb (`{type: bool}`, only for the types the user has set); `quiet_enabled` bool; `quiet_start`, `quiet_end` time; `updated_at` timestamptz.
 - Reads merge the stored flags over the current defaults, so a type added later shows its default to everyone who hasn't set it.
-- **Export:** `GET /me/export` includes `notificationPreferences` (the same shape as `GET`, defaults included). It's optional in the schema until implemented. **Deletion:** removed with the account (cascade).
+- **Export:** `GET /me/export` includes `notificationPreferences` (the same shape as `GET`, defaults included). It's required in the `DataExport` schema. **Deletion:** removed with the account (cascade).
 
 ## API
 `GET /me/notification-preferences` → `200 NotificationPreferences`:
@@ -63,7 +63,7 @@ One opt-in flag per type, each tied to an existing feature:
 - **Unknown top-level or `quietHours` property** (including the read-only `timezone` and `updatedAt`) → rejected as unknown, like other request bodies.
 - **Empty body `{}`** is valid and is a no-op.
 
-Errors: 401 as usual, 409 for Idempotency-Key conflicts, and `429 RATE_LIMITED` on both GET and PATCH (per-user limit, like the other `/me` endpoints). There is no 404 (a missing row reads as defaults).
+Errors: 401 as usual, 409 for Idempotency-Key conflicts, and `429 RATE_LIMITED` on both GET and PATCH (per-user limit, counted separately for each route: `NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE`, default 60, like the other `/me` endpoints). There is no 404 (a missing row reads as defaults).
 
 ## Tests (for the implementation PR)
 - GET with no row returns the defaults and writes nothing; a new user has no row.

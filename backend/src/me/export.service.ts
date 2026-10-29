@@ -9,6 +9,7 @@ import { toGoalView } from '../goals/goals.service';
 import { toFoodView, toLogView, toWaterView, withFood } from '../nutrition/nutrition.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toProfileView } from '../profile/profile.service';
+import { loadPreferences } from '../notification-prefs/notification-prefs.service';
 import { toEntry } from '../targets/target-history';
 import { toMeasurementView } from '../progress/progress.service';
 import { toPlanView } from '../workout-plans/plans.service';
@@ -131,6 +132,8 @@ export class ExportService {
       challenges: challenges.map(toChallengeView),
       // Dated daily-target history, newest first (docs/specs/target-history.md).
       targetHistory: history.map(toEntry),
+      // Same shape as GET /me/notification-preferences, defaults included.
+      notificationPreferences: await loadPreferences(db, userId),
       truncated,
     };
   }

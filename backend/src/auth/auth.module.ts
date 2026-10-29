@@ -22,6 +22,7 @@ import { TokenService } from './token.service';
         { name: 'refresh', ttl: 60_000, limit: env.AUTH_REFRESH_RATE_LIMIT_PER_MINUTE },
         { name: 'export', ttl: 3_600_000, limit: env.EXPORT_RATE_LIMIT_PER_HOUR },
         { name: 'targetHistory', ttl: 60_000, limit: env.TARGET_HISTORY_RATE_LIMIT_PER_MINUTE },
+        { name: 'notificationPrefs', ttl: 60_000, limit: env.NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE },
       ],
     }),
   ],
