@@ -16,6 +16,10 @@ import okhttp3.ResponseBody
 import retrofit2.Response
 import android.util.Log
 import java.io.IOException
+import java.util.UUID
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -78,6 +82,8 @@ class OutboxProcessor @Inject constructor(
             when (w.method) {
                 "POST" -> api.post(path, w.idempotencyKey, body)
                 "PATCH" -> api.patch(path, w.idempotencyKey, body)
+                "PUT" -> api.put(path, w.idempotencyKey, body)
+                "DELETE" -> api.delete(path, w.idempotencyKey)
                 else -> return drop(w, localId, "UNSUPPORTED_METHOD")
             }
         } catch (e: IOException) {
@@ -122,6 +128,24 @@ class OutboxProcessor @Inject constructor(
                 pending.markFailed(w.id, "UNAUTHORIZED")
                 false
             }
+            // A set logged offline after the session completed (e.g. on another device): send it
+            // as a correction instead, which edits or adds that set by its clientSetId.
+            error == "SESSION_COMPLETED" && w.method == "POST" && w.path.endsWith(SETS_SUFFIX) -> {
+                val clientSetId = clientSetId(w.body) ?: return drop(w, localId, error)
+                val key = UUID.nameUUIDFromBytes("correction:${w.idempotencyKey}".toByteArray()).toString()
+                val corrected = w.copy(
+                    method = "PUT",
+                    path = w.path.removeSuffix(SETS_SUFFIX) + "/corrections/sets/" + clientSetId,
+                    idempotencyKey = key, attempts = 0, lastError = null,
+                )
+                pending.rewrite(w.id, corrected.method, corrected.path, key)
+                send(corrected)
+            }
+            // A correction delete of a set that is already gone: nothing left to do.
+            error == CORRECTION_SET_NOT_FOUND -> {
+                pending.delete(w.id)
+                true
+            }
             // Pause/resume or a set after the session completed elsewhere: nothing left to do.
             error == "SESSION_COMPLETED" -> {
                 pending.delete(w.id)
@@ -129,6 +153,10 @@ class OutboxProcessor @Inject constructor(
             }
             else -> drop(w, localId, error ?: "HTTP_$code")
         }
+    }
+
+    private fun clientSetId(body: String?): String? = body?.let {
+        runCatching { json.parseToJsonElement(it).jsonObject["clientSetId"]?.jsonPrimitive?.contentOrNull }.getOrNull()
     }
 
     private suspend fun drop(w: PendingWriteEntity, localId: String?, reason: String): Boolean {
@@ -157,6 +185,8 @@ class OutboxProcessor @Inject constructor(
 
     companion object {
         const val BAD_RESPONSE = "BAD_RESPONSE"
+        const val CORRECTION_SET_NOT_FOUND = "SET_NOT_FOUND"
+        private const val SETS_SUFFIX = "/sets"
         private const val TAG = "OutboxProcessor"
         const val START_PATH = "workout-sessions"
         private const val BATCH = 50

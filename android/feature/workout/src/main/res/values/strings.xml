@@ -164,4 +164,32 @@
     <string name="history_set_n">Set %1$d</string>
     <string name="history_skipped">skipped</string>
     <string name="history_no_sets">No sets were logged.</string>
+    <string name="correction_edit">Edit</string>
+    <string name="correction_edit_details">Edit time, difficulty or notes</string>
+    <string name="correction_discard">Discard workout</string>
+    <string name="correction_discard_title">Discard this workout?</string>
+    <string name="correction_discard_body">It will be removed from your history and the XP it earned is taken back. Badges you already earned stay.</string>
+    <string name="correction_cancel">Cancel</string>
+    <string name="correction_save">Save</string>
+    <string name="correction_ok">OK</string>
+    <string name="correction_saved">Saved. XP change: %1$s</string>
+    <plurals name="correction_new_badges">
+        <item quantity="one">New badge: %1$s</item>
+        <item quantity="other">New badges: %1$s</item>
+    </plurals>
+    <string name="correction_closed_hint">Workouts can be corrected on the day and the day after.</string>
+    <string name="correction_window_closed">This workout can no longer be corrected (only today\'s and yesterday\'s can).</string>
+    <string name="correction_session_empty">A workout needs at least one completed set. To remove it, discard the workout instead.</string>
+    <string name="correction_invalid_time">Use HH:mm, earlier than the current finish time, on the same day and after the start.</string>
+    <string name="correction_invalid">Those values aren\'t allowed. Please check and try again.</string>
+    <string name="correction_offline">You\'re offline. Connect to correct this workout.</string>
+    <string name="correction_failed">Couldn\'t save the correction. Please try again.</string>
+    <string name="correction_finished_at">Finished at</string>
+    <string name="correction_time_hint">HH:mm, same day, earlier only</string>
+    <string name="correction_difficulty">Difficulty (1–5)</string>
+    <string name="correction_notes">Notes</string>
+    <string name="correction_reps">Reps</string>
+    <string name="correction_weight">Weight (%1$s)</string>
+    <string name="correction_done">Completed</string>
+    <string name="correction_delete_set">Delete set</string>
 </resources>
