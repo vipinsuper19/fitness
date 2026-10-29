@@ -5,6 +5,8 @@ import Ajv2020 from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
 
+import { INTERNAL_ROUTES } from './support/openapi';
+
 type Operation = {
   operationId: string;
   security?: unknown[];
@@ -25,12 +27,9 @@ const draftSchema = JSON.parse(
 
 const WRITE_METHODS = ['post', 'put', 'patch', 'delete'];
 
-/**
- * x-internal allowlist: server routes that are deliberately NOT in openapi (not client APIs).
- * Anything that checks registered routes against the contract must exempt only these.
- * See docs/specs/notification-sending.md (internal tick endpoint).
- */
-export const INTERNAL_ROUTES = ['post /internal/notifications/tick'] as const;
+// x-internal allowlist, defined with the other contract helpers so specs can import it without
+// re-running this file's tests; re-exported here (#119).
+export { INTERNAL_ROUTES };
 
 function operations(): Array<{ path: string; method: string; op: Operation; pathItem: PathItem }> {
   return Object.entries(spec.paths).flatMap(([path, pathItem]) =>
@@ -45,36 +44,7 @@ function paramRefs(op: Operation, pathItem: PathItem): string[] {
 }
 
 describe('contracts/openapi.yaml', () => {
-  it('covers every MVP endpoint from the plan', () => {
-    const expected = [
-      'post /auth/register', 'post /auth/login', 'post /auth/refresh', 'post /auth/logout',
-      'delete /me', 'get /me/export', 'get /me/profile', 'put /me/profile',
-      'get /goals', 'post /goals', 'get /goals/{goalId}', 'patch /goals/{goalId}', 'delete /goals/{goalId}',
-      'get /exercises', 'get /exercises/{exerciseId}',
-      'post /workout-plans/generate', 'post /workout-plans', 'get /workout-plans/active',
-      'get /workout-plans/{planId}', 'patch /workout-plans/{planId}', 'post /workout-plans/{planId}/activate',
-      // P1: plan management (docs/specs/plan-management.md)
-      'get /workout-plans', 'post /workout-plans/{planId}/deactivate', 'delete /workout-plans/{planId}',
-      'post /workout-sessions', 'post /workout-sessions/{sessionId}/sets',
-      'patch /workout-sessions/{sessionId}', 'post /workout-sessions/{sessionId}/complete',
-      'get /workout-sessions/history',
-      'get /foods/search', 'post /foods', 'get /foods/{foodId}', 'patch /foods/{foodId}', 'delete /foods/{foodId}', 'get /food-logs', 'post /food-logs',
-      'patch /food-logs/{foodLogId}', 'delete /food-logs/{foodLogId}',
-      'get /water-logs', 'post /water-logs', 'patch /water-logs/{waterLogId}', 'delete /water-logs/{waterLogId}', 'get /nutrition/daily',
-      'get /body-measurements', 'post /body-measurements', 'get /progress/summary',
-      'get /progress/exercises', 'get /progress/exercises/{exerciseId}',
-      'get /xp/ledger', 'get /xp/balance',
-      // P1: badges & challenges (docs/specs/badges-challenges.md)
-      'get /badges', 'get /challenges/templates', 'get /challenges', 'post /challenges',
-      'get /challenges/{challengeId}', 'post /challenges/{challengeId}/leave',
-      // P1: notification preferences, storage only (docs/specs/notification-preferences.md)
-      'get /me/notification-preferences', 'patch /me/notification-preferences',
-      // P1: notification sending, device tokens (docs/specs/notification-sending.md)
-      'post /me/notification-devices', 'delete /me/notification-devices/{deviceId}',
-    ];
-    const actual = new Set(operations().map(({ method, path }) => `${method} ${path}`));
-    for (const route of expected) expect(actual).toContain(route);
-  });
+  // Route coverage (both directions) lives in contract-routes.spec.ts, generated from the app's own routes.
 
   it('keeps x-internal routes out of the contract, and only allowlists /internal routes', () => {
     for (const route of INTERNAL_ROUTES) {

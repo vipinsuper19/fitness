@@ -563,7 +563,10 @@ model XPTransaction {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, sourceType, sourceId])
-  @@index([userId, createdAt])
+  /// Key (user_id, created_at, id) INCLUDE (amount, source_type): ledger pages in index order and
+  /// index-only balance sums (docs/specs/index-audit.md). Prisma can't declare INCLUDE; it reads
+  /// included columns as trailing keys, so they are listed here to keep `migrate:check` clean.
+  @@index([userId, createdAt, id, amount, sourceType], map: "xp_transactions_user_id_created_at_id_idx")
   @@map("xp_transactions")
 }
 
