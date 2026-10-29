@@ -62,3 +62,93 @@ Source: `docs/specs/badges-challenges.md` §5 (weekly cap) and §9 (anti-abuse).
 | DA4 | 403 `INVALID_PASSWORD` | Error, stays signed in, Confirm enabled, next attempt new key | `delete_wrongPassword_showsError_staysSignedIn_andCanRetry` |
 
 Follow-up for Backend/contract: document the 401-after-delete retry in `openapi.yaml` (or replay 204 for that key) so clients don't rely on undocumented behaviour.
+
+## P1 API checks — prod (`scripts/prod-check-p1.sh`)
+
+Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 temp files, never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
+
+**Last prod run: 2026-10-29 ~11:00 IST — 59/59 PASS, both accounts deleted (login 401).**
+
+### Session corrections (#63)
+
+`PUT/DELETE /workout-sessions/{id}/corrections/sets/{clientSetId}`, `PATCH /workout-sessions/{id}/completion` — only on completed sessions, Idempotency-Key required, XP re-derived.
+
+| # | Check | Prod 2026-10-29 |
+|---|---|---|
+| SC01 | correct before complete -> 409 SESSION_NOT_COMPLETED | PASS |
+| SC02 | complete 200 | PASS |
+| SC03 | correction without Idempotency-Key -> 400 | PASS |
+| SC04 | body clientSetId != path -> 400 | PASS |
+| SC05 | correct set (reps 10->20) 200 with xpDelta | PASS |
+| SC06 | same-key replay -> same body | PASS |
+| SC07 | same key, different body -> 409 IDEMPOTENCY_KEY_REUSED | PASS |
+| SC08 | /xp/balance matches correction result | PASS |
+| SC09 | corrected set edited in place (2 sets, reps 20) | PASS |
+| SC10 | delete set 200 | PASS |
+| SC11 | delete again (new key) -> 404 SET_NOT_FOUND | PASS |
+| SC12 | delete last completed set -> 422 SESSION_EMPTY | PASS |
+| SC13 | PATCH completion difficulty 200 | PASS |
+| SC14 | completedAt later than current -> 400 | PASS |
+| SC15 | empty completion body -> 400 | PASS |
+| SC16 | other user correct set -> 404 | PASS |
+| SC17 | other user PATCH completion -> 404 | PASS |
+| SC18 | other user delete set -> 404 | PASS |
+| SC19 | other user's XP untouched (0) | PASS |
+| SC20 | unauthenticated -> 401 | PASS |
+
+### Plan management — list / pause / resume / archive (#65, #67)
+
+`GET /workout-plans?status=`, `POST …/deactivate` (pause), `POST …/activate {resume}`, `DELETE …` (archive = soft delete).
+
+| # | Check | Prod 2026-10-29 |
+|---|---|---|
+| PM01 | list (new user) 200, empty | PASS |
+| PM02 | list bad status -> 400 | PASS |
+| PM03 | save plan 201 | PASS |
+| PM04 | activate (no body) 200 isActive | PASS |
+| PM05 | list status=active has plan, status active | PASS |
+| PM06 | pause (deactivate) 204 | PASS |
+| PM07 | pause same-key replay 204 | PASS |
+| PM08 | GET /active after pause -> 204 | PASS |
+| PM09 | paused plan listed with pausedAt, isActive false, currentWeek null | PASS |
+| PM10 | pause again (new key) 204, pausedAt kept | PASS |
+| PM11 | activate bad resume type -> 400 | PASS |
+| PM12 | resume 200 isActive currentWeek 1 | PASS |
+| PM13 | resumed plan pausedAt cleared | PASS |
+| PM14 | other user GET plan -> 404 | PASS |
+| PM15 | other user pause -> 404 | PASS |
+| PM16 | other user activate -> 404 | PASS |
+| PM17 | other user archive -> 404 | PASS |
+| PM18 | other user list doesn't show A's plan | PASS |
+| PM19 | A's plan still active after B's attempts | PASS |
+| PM20 | archive active plan 204 | PASS |
+| PM21 | GET /active after archive -> 204 | PASS |
+| PM22 | default list hides archived | PASS |
+| PM23 | status=archived lists it with archivedAt | PASS |
+| PM24 | archive again 204, archivedAt kept | PASS |
+| PM25 | activate archived -> 409 PLAN_ARCHIVED | PASS |
+| PM26 | PATCH archived -> 409 PLAN_ARCHIVED | PASS |
+| PM27 | pause on archived: 204 no-op, pausedAt unchanged (archive of the active plan stamps it once) | PASS |
+
+### Nutrition summary (#70)
+
+`GET /nutrition/summary?from&to&bucket=day|week|month` — local (IST) dates, missing days are `null` not 0, max 366 days.
+
+| # | Check | Prod 2026-10-29 |
+|---|---|---|
+| NS01 | no logs: 200, 3 day points, totals/water null | PASS |
+| NS02 | log food 201 | PASS |
+| NS03 | day point for today: daysLogged 1, waterMl 750, entryCount 1 | PASS |
+| NS04 | yesterday stays null (missing != 0) | PASS |
+| NS05 | today's kcal equals the log's kcal | PASS |
+| NS06 | week bucket: periods after the first are Mondays, days sum to 14 | PASS |
+| NS07 | from > to -> 400 | PASS |
+| NS08 | range > 366 days -> 400 | PASS |
+| NS09 | bad bucket -> 400 | PASS |
+| NS10 | missing from -> 400 | PASS |
+| NS11 | other user sees none of A's logs | PASS |
+| NS12 | unauthenticated -> 401 | PASS |
+
+Notes:
+- Archiving the **active** plan pauses it first, so it gets `pausedAt` at archive time (contract: "same effect as pause"); a later pause on the archived plan leaves `pausedAt` unchanged (PM27).
+- Sets logged with `POST /workout-sessions/{id}/sets` need an `Idempotency-Key`; without one the session stays empty and `complete` returns 422.
