@@ -41,6 +41,7 @@ sealed interface WorkoutDestination {
     data class ExerciseDetail(val id: String) : WorkoutDestination
     data object ActiveSession : WorkoutDestination
     data object History : WorkoutDestination
+    data object Plans : WorkoutDestination
 }
 
 @Composable
@@ -120,6 +121,9 @@ fun WorkoutHomeRoute(
                 }
                 OutlinedButton(onClick = { onNavigate(WorkoutDestination.History) }, modifier = Modifier.fillMaxWidth().testTag("open_history")) {
                     Text(stringResource(R.string.workout_history))
+                }
+                OutlinedButton(onClick = { onNavigate(WorkoutDestination.Plans) }, modifier = Modifier.fillMaxWidth().testTag("open_plans")) {
+                    Text(stringResource(R.string.manage_plans))
                 }
             }
         }

@@ -171,7 +171,7 @@ fun PastSessionRoute(
             set, display.units,
             canDelete = (shown.session?.completedSets ?: 0) > 1 || !set.completed,
             onSave = { corrections.saveSet(it); editing = null },
-            onDelete = { corrections.deleteSet(set.clientSetId); editing = null },
+            onDelete = { corrections.deleteSet(set.clientSetId, shown.session); editing = null },
             onDismiss = { editing = null },
         )
     }

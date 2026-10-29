@@ -74,7 +74,19 @@ class SessionCorrectionViewModel @AssistedInject constructor(
 
     fun saveSet(set: PastSet) = run { repo.upsertSet(sessionId, set) }
 
-    fun deleteSet(clientSetId: String) = run { repo.deleteSet(sessionId, clientSetId) }
+    /**
+     * 404 SET_NOT_FOUND means the set is already gone (e.g. an earlier delete whose response was
+     * lost), so it counts as success: the set is dropped from the shown session ([current] until
+     * a correction has returned one), with no XP change.
+     */
+    fun deleteSet(clientSetId: String, current: PastSession? = null) = run(
+        onError = { e ->
+            if (e is ApiError.Http && e.status == 404 && e.code == CorrectionErrors.SET_NOT_FOUND) {
+                val shown = _state.value.session ?: current
+                shown?.let { s -> s.copy(sets = s.sets.filter { it.clientSetId != clientSetId }) }
+            } else null
+        },
+    ) { repo.deleteSet(sessionId, clientSetId) }
 
     /** [completedAt] must move earlier on the same local date and stay after the start. */
     fun correctCompletion(current: PastSession, completedAt: Instant?, perceivedDifficulty: Int?, notes: String?) {
@@ -99,11 +111,20 @@ class SessionCorrectionViewModel @AssistedInject constructor(
 
     fun dismissMessage() = _state.update { it.copy(outcome = null, error = null) }
 
-    private fun run(call: suspend () -> ApiResult<SessionCorrectionResult>) {
+    private fun run(
+        onError: (ApiError) -> PastSession? = { null },
+        call: suspend () -> ApiResult<SessionCorrectionResult>,
+    ) {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true, error = null, outcome = null) }
         viewModelScope.launch {
-            when (val r = call()) {
+            val r = call()
+            val recovered = (r as? ApiResult.Failure)?.let { onError(it.error) }
+            if (recovered != null) {
+                _state.update { it.copy(busy = false, session = recovered, outcome = CorrectionOutcome(0, emptyList())) }
+                return@launch
+            }
+            when (r) {
                 is ApiResult.Success -> _state.update {
                     it.copy(busy = false, session = r.value.session, outcome = CorrectionOutcome(r.value.xpDelta, r.value.newBadges))
                 }
