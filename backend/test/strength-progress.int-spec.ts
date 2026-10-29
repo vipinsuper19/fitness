@@ -42,7 +42,7 @@ describeDb('strength progress (HTTP + Postgres)', () => {
   const session = async (userId: string, at: string, sets: SetIn[], status: 'completed' | 'in_progress' = 'completed') => {
     const completedAt = new Date(at);
     const s = await prisma.workoutSession.create({
-      data: { userId, status, startedAt: new Date(completedAt.getTime() - 1_800_000), completedAt: status === 'completed' ? completedAt : null, activeSeconds: 1800 },
+      data: { userId, status, startedAt: new Date(completedAt.getTime() - 1_800_000), completedAt: status === 'completed' ? completedAt : null, activeSeconds: 1800, activeSince: status === 'in_progress' ? completedAt : null },
     });
     await prisma.exerciseSetLog.createMany({
       data: sets.map((x, i) => ({
