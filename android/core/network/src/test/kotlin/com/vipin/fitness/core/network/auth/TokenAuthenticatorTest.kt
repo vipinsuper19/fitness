@@ -38,6 +38,16 @@ class TokenAuthenticatorTest {
         override fun get() = synchronized(this) { tokens }
         override fun save(tokens: AuthTokens) = synchronized(this) { this.tokens = tokens }
         override fun clear() = synchronized(this) { tokens = null }
+        override fun compareAndSet(expectedRefresh: String, tokens: AuthTokens): Boolean = synchronized(this) {
+            if (this.tokens?.refreshToken != expectedRefresh) return false
+            this.tokens = tokens
+            true
+        }
+        override fun clearIf(expectedRefresh: String): Boolean = synchronized(this) {
+            if (tokens?.refreshToken != expectedRefresh) return false
+            tokens = null
+            true
+        }
     }
 
     private val server = MockWebServer()
@@ -138,6 +148,49 @@ class TokenAuthenticatorTest {
         assertEquals(401, response.code())
         assertEquals(1, refreshCalls.get())
         assertEquals(2, authHeaders.size)
+    }
+
+    @Test fun refreshFinishingAfterLogoutLeavesStoreEmptyAndDoesNotRetry() = runBlocking {
+        refreshResponse = { store.clear(); tokenPair("new-access", "new-refresh") } // logout lands mid-refresh
+        val signals = mutableListOf<Unit>()
+        val job = launch(Dispatchers.Unconfined) { events.expired.collect { signals += it } }
+
+        val response = withContext(Dispatchers.IO) { api.profile().execute() }
+        job.cancel()
+
+        assertEquals(401, response.code())
+        assertNull(store.tokens)
+        assertEquals(1, refreshCalls.get())
+        assertEquals(listOf("Bearer old-access"), authHeaders.toList())
+        assertEquals(0, signals.size)
+    }
+
+    @Test fun refreshFinishingAfterNewerLoginDoesNotOverwriteIt() {
+        val login = AuthTokens("login-access", "login-refresh", 5L)
+        validAccess = "login-access"
+        refreshResponse = { store.save(login); tokenPair("new-access", "new-refresh") }
+
+        val response = api.profile().execute()
+
+        assertEquals(200, response.code())
+        assertEquals(login, store.tokens)
+        assertEquals(listOf("Bearer old-access", "Bearer login-access"), authHeaders.toList())
+    }
+
+    @Test fun rejectedRefreshAfterLogoutDoesNotSignalExpiry() = runBlocking {
+        refreshResponse = {
+            store.clear()
+            MockResponse(code = 401, body = """{"code":"REFRESH_TOKEN_REUSED","message":"x","requestId":"r"}""")
+        }
+        val signals = mutableListOf<Unit>()
+        val job = launch(Dispatchers.Unconfined) { events.expired.collect { signals += it } }
+
+        val response = withContext(Dispatchers.IO) { api.profile().execute() }
+        job.cancel()
+
+        assertEquals(401, response.code())
+        assertNull(store.tokens)
+        assertEquals(0, signals.size)
     }
 
     @Test fun unauthenticatedCallsCarryNoBearer() {

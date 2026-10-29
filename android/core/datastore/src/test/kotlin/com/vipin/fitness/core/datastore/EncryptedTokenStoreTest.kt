@@ -14,6 +14,7 @@ import javax.crypto.AEADBadTagException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -53,6 +54,24 @@ class EncryptedTokenStoreTest {
         val raw = prefs.all.values.joinToString()
         assertFalse(raw.contains("access-123"))
         assertFalse(raw.contains("refresh-456"))
+    }
+
+    @Test fun compareAndSetOnlyReplacesMatchingSession() {
+        val store = EncryptedTokenStore(prefs, FakeCipher(), events)
+        val next = AuthTokens("a2", "r2", 7L)
+        assertFalse(store.compareAndSet("refresh-456", next)) // signed out: nothing to replace
+        assertNull(store.get())
+
+        store.save(tokens)
+        assertFalse(store.compareAndSet("other", next))
+        assertEquals(tokens, store.get())
+        assertTrue(store.compareAndSet("refresh-456", next))
+        assertEquals(next, EncryptedTokenStore(prefs, FakeCipher(), events).get())
+
+        assertFalse(store.clearIf("refresh-456"))
+        assertEquals(next, store.get())
+        assertTrue(store.clearIf("r2"))
+        assertNull(EncryptedTokenStore(prefs, FakeCipher(), events).get())
     }
 
     @Test fun clearRemovesTokens() {

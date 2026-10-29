@@ -68,6 +68,8 @@ abstract class FakeDataStoreModule {
             override fun get(): AuthTokens? = null
             override fun save(tokens: AuthTokens) = Unit
             override fun clear() = Unit
+            override fun compareAndSet(expectedRefresh: String, tokens: AuthTokens) = false
+            override fun clearIf(expectedRefresh: String) = false
         }
     }
 }

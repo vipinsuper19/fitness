@@ -30,20 +30,28 @@ class TokenAuthenticator @Inject constructor(
             val current = tokenStore.get() ?: return null // signed out meanwhile
             if (current.accessToken != sentToken) return request.withBearer(current.accessToken)
 
-            return when (val result = refresher.refresh(current.refreshToken)) {
-                is RefreshResult.Success -> {
-                    tokenStore.save(result.tokens)
-                    request.withBearer(result.tokens.accessToken)
-                }
-                RefreshResult.Rejected -> {
-                    tokenStore.clear()
-                    sessionEvents.notifyExpired()
-                    null
-                }
+            val presented = current.refreshToken
+            return when (val result = refresher.refresh(presented)) {
+                // Compare-and-save: if the user signed out (or signed in again) while the refresh was
+                // in flight, the result belongs to a dead session and must not overwrite the store.
+                is RefreshResult.Success ->
+                    if (tokenStore.compareAndSet(presented, result.tokens)) request.withBearer(result.tokens.accessToken)
+                    else retryWithCurrent(request)
+                RefreshResult.Rejected ->
+                    if (tokenStore.clearIf(presented)) {
+                        sessionEvents.notifyExpired()
+                        null
+                    } else {
+                        retryWithCurrent(request) // deliberate logout or newer login: no expiry signal
+                    }
                 RefreshResult.Failed -> null
             }
         }
     }
+
+    /** Store changed under us: retry once with a newer session's token, or give up if signed out. */
+    private fun retryWithCurrent(request: Request): Request? =
+        tokenStore.get()?.let { request.withBearer(it.accessToken) }
 
     private fun Response.priorCount(): Int {
         var n = 0

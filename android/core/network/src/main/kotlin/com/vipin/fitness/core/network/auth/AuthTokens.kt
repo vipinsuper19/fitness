@@ -19,4 +19,15 @@ interface TokenStore {
     fun get(): AuthTokens?
     fun save(tokens: AuthTokens)
     fun clear()
+
+    /**
+     * Atomically (under the same lock as [save] and [clear]) replaces the session with [tokens] only
+     * if the stored refresh token is still [expectedRefresh]. Returns false, changing nothing, if the
+     * user signed out or a newer session was saved meanwhile. Used by [TokenAuthenticator] so a
+     * refresh that finishes late can never resurrect a logged-out session or clobber a newer login.
+     */
+    fun compareAndSet(expectedRefresh: String, tokens: AuthTokens): Boolean
+
+    /** Atomically clears the session only if the stored refresh token is still [expectedRefresh]. */
+    fun clearIf(expectedRefresh: String): Boolean
 }
