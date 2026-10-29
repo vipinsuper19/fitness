@@ -67,7 +67,7 @@ Follow-up for Backend/contract: document the 401-after-delete retry in `openapi.
 
 Run: `scripts/prod-check-p1.sh` (or `API=… scripts/prod-check-p1.sh`). Only runs against `https://fitness-api-6pcc.onrender.com/api/v1` (host allowlist; the only Fitness API server, used as prod). `--self-test` checks the register-timeout recovery, INT/TERM cleanup and the allowlist against a local stub. Uses two throwaway accounts (A owner, B other user) with the `prod-probe.sh` safety pattern: credentials only in mode-600 state files under `~/.cache/p1-state` (outside /tmp, so a reboot mid-run cannot lose them; override with `P1_STATE_DIR`), never printed or in argv; the EXIT trap deletes both accounts and confirms login → 401.
 
-**Stale state (killed runs):** every run starts by sweeping `$P1_STATE_DIR` (default `~/.cache/p1-state`); `scripts/prod-check-p1.sh --cleanup-stale` does only the sweep and exits (non-zero if any file is kept).
+**Stale state (killed runs):** every run starts by sweeping `$P1_STATE_DIR` (default `~/.cache/p1-state`); `scripts/prod-check-p1.sh --cleanup-stale` does only the sweep and exits (non-zero if any file is kept). Only one run per state dir: each run (and `--cleanup-stale`) takes `flock -n` on `$P1_STATE_DIR/.lock` before touching anything, and a second concurrent run exits 3 with “another prod-check run holds …” instead of sweeping the first run's live accounts (`--self-test` case “concurrent-run lock”).
 
 | # | Check | Self-test 2026-10-29 |
 |---|---|---|
