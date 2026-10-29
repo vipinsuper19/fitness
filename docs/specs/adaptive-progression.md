@@ -98,7 +98,7 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
 - Two consecutive misses → deload −10% (weight rounded down to 0.5 kg; duration 65 s → 55 s, rounded down to 5 s); two sessions at difficulty 5 → `VERY_HARD` deload.
 - Off-grid targets: 40.3 kg → 41.5 kg; 9.8 kg → 10.5 kg (never below current + min step).
 - Cooldown survives reordering: workouts swapped and exercises reordered in the raising version still give `COOLDOWN` for the raised entry only.
-- Duplicate exercise: v1 Push [a 40, b 20, a 30], v2 Push [a 30, a 42.5, b 20] → only the 2nd `a` is `COOLDOWN`.
+- Duplicate exercise: v1 Push [a 40, b 20, a 30], v2 Push [a 35, a 32.5, b 20] → only the 2nd `a` is `COOLDOWN` (it was raised 30 → 32.5; the 1st `a` dropped 40 → 35). First- or last-occurrence matching would get this wrong.
 - Added workout: a new workout inserted at the order of an existing workout that is matched by day and name gets no cooldown from it.
 - Cooldown by entry: the same exercise in two workouts, only one entry raised 2 days ago → that entry `COOLDOWN`, the other `increase`; both share the same `basedOn`.
 - Cooldown: a version raising the load 3 days ago → `COOLDOWN` with `cooldownUntil`; 8 days ago → increase (faked clock, Date only).

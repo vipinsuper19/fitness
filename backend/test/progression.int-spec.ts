@@ -401,7 +401,7 @@ describeDb('progression suggestions (HTTP + Postgres)', () => {
   it('cooldown matches the k-th occurrence of a repeated exercise to the k-th', async () => {
     const a = await mkEx();
     const b = await mkEx();
-    const { u, plan } = await twoVersions([wkOf('Push', 1, [[a, 40], [b, 20], [a, 30]])], [wkOf('Push', 1, [[a, 30], [a, 42.5], [b, 20]])]);
+    const { u, plan } = await twoVersions([wkOf('Push', 1, [[a, 40], [b, 20], [a, 30]])], [wkOf('Push', 1, [[a, 35], [a, 32.5], [b, 20]])]);
     for (const d of [1.5, 1.2, 1]) await session(u.id, plan, d, { [a]: rep(2, { reps: 10, kg: 43 }), [b]: rep(2, { reps: 10, kg: 20 }) }, { v: 2 });
     const s = await suggest(u.token, plan);
     expect(s.suggestions.map((x) => [x.exerciseId, x.reason === 'COOLDOWN'])).toEqual([[a, false], [a, true], [b, false]]);
