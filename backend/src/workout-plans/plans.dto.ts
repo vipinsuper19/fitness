@@ -1,7 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import {
-  ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID,
+  Allow, ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID,
   Max, MaxLength, Min, MinLength, ValidateNested,
 } from 'class-validator';
 
@@ -95,10 +95,25 @@ export class WorkoutPlanDraftDto {
   workouts!: PlannedWorkoutDto[];
 }
 
-/** WorkoutPlanUpdate: a full draft plus the version it was edited from. */
-export class WorkoutPlanUpdateDto extends WorkoutPlanDraftDto {
+/**
+ * WorkoutPlanUpdate: a full draft plus the version it was edited from. `name` is
+ * accepted for compatibility but ignored (never validated); the new version copies
+ * the latest version's name. Rename with PUT /workout-plans/{planId}/name.
+ */
+export class WorkoutPlanUpdateDto extends OmitType(WorkoutPlanDraftDto, ['name'] as const) {
+  @ApiPropertyOptional({ deprecated: true, description: 'Ignored; the new version copies the latest name' }) @Allow()
+  name?: unknown;
+
   @ApiProperty({ minimum: 1 }) @IsInt() @Min(1)
   baseVersion!: number;
+}
+
+/** PlanRename (contract): body of PUT /workout-plans/{planId}/name. Trimmed, then 1–80 characters. */
+export class PlanRenameDto {
+  @ApiProperty({ minLength: 1, maxLength: 80 })
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString() @MinLength(1) @MaxLength(80)
+  name!: string;
 }
 
 export class PlanVersionQuery {

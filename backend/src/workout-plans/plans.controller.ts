@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
@@ -8,7 +8,7 @@ import { IdempotencyKeyHeader } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
 import type { WorkoutPlanDraft } from './generator';
-import { PlanActivateDto, PlanGenerateDto, PlanListQuery, PlanVersionQuery, WorkoutPlanDraftDto, WorkoutPlanUpdateDto } from './plans.dto';
+import { PlanActivateDto, PlanGenerateDto, PlanListQuery, PlanRenameDto, PlanVersionQuery, WorkoutPlanDraftDto, WorkoutPlanUpdateDto } from './plans.dto';
 import { PlansService, PlanSummary, PlanView } from './plans.service';
 import { ProgressionService, ProgressionSuggestions } from './progression.service';
 
@@ -80,6 +80,32 @@ export class PlansController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<PlanView | undefined> {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.update(userId, id, dto) });
+  }
+
+  @Put(':planId/name')
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  rename(
+    @CurrentUserId() userId: string,
+    @Param('planId', IdParamPipe) id: string,
+    @Body() dto: PlanRenameDto,
+    @IdempotencyKeyHeader() key: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<PlanView | undefined> {
+    return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.rename(userId, id, dto.name) });
+  }
+
+  @Post(':planId/unarchive')
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader({ name: 'Idempotency-Key', required: false })
+  unarchive(
+    @CurrentUserId() userId: string,
+    @Param('planId', IdParamPipe) id: string,
+    @IdempotencyKeyHeader() key: string | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<PlanView | undefined> {
+    return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.plans.unarchive(userId, id) });
   }
 
   @Post(':planId/activate')

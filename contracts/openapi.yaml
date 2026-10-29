@@ -2112,7 +2112,7 @@ components:
         the latest version's name. Renaming is only possible with `PUT /workout-plans/{planId}/name`.
       required: [weeks, workouts, generator, baseVersion]
       properties:
-        name: { type: string, minLength: 1, maxLength: 80, deprecated: true, description: 'Ignored; accepted for compatibility. The new version copies the latest name.' }
+        name: { type: string, deprecated: true, description: 'Ignored and never validated (any length, even empty); accepted for compatibility. The new version copies the latest name.' }
         weeks: { $ref: './schemas/workout-plan-draft.schema.json#/properties/weeks' }
         generator: { $ref: './schemas/workout-plan-draft.schema.json#/properties/generator' }
         rationale: { $ref: './schemas/workout-plan-draft.schema.json#/properties/rationale' }
