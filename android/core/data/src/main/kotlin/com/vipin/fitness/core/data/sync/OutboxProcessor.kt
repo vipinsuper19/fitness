@@ -1,5 +1,6 @@
 package com.vipin.fitness.core.data.sync
 
+import com.vipin.fitness.core.database.outbox.OutboxRateLimitEntity
 import com.vipin.fitness.core.database.outbox.PendingWriteDao
 import com.vipin.fitness.core.database.outbox.PendingWriteEntity
 import com.vipin.fitness.core.database.session.WorkoutSessionDao
@@ -46,15 +47,45 @@ class OutboxProcessor @Inject constructor(
 ) {
     private val mutex = Mutex()
 
-    /** Epoch ms before which nothing is sent, set by a 429's Retry-After (or a default backoff). */
+    /**
+     * Epoch ms before which nothing is sent, set by a 429's Retry-After (or a default backoff).
+     * Mirrors the current user's outbox_rate_limit row, which is the source of truth: it is
+     * reloaded on every drain so the window survives a process restart.
+     */
     @Volatile private var notBeforeMs = 0L
 
     /** After [DrainResult.Retry]: ms to wait if the server rate-limited us, else null (normal backoff). */
     fun rateLimitDelayMs(): Long? = (notBeforeMs - clock.millis()).takeIf { it > 0 }
 
     suspend fun drain(): DrainResult = mutex.withLock {
+        val owner = owner()
+        notBeforeMs = loadNotBefore(owner)
         // Rate-limited: don't send anything until the server's Retry-After has passed.
-        if (rateLimitDelayMs() != null) DrainResult.Retry else drainLocked()
+        if (rateLimitDelayMs() != null) return@withLock DrainResult.Retry
+        drainLocked().also {
+            if (it == DrainResult.Done) {
+                notBeforeMs = 0L
+                pending.clearNotBefore(owner)
+            }
+        }
+    }
+
+    /** Whose window applies: the signed-in account, or "" when none is known. */
+    private suspend fun owner(): String = sessions.currentUserId() ?: ""
+
+    /**
+     * The stored window, or 0. A value further ahead than the longest window we ever set can only
+     * come from clock skew (the clock was ahead when it was saved, then corrected): ignore and drop
+     * it rather than park the queue.
+     */
+    private suspend fun loadNotBefore(owner: String): Long {
+        val stored = pending.notBefore(owner) ?: return 0L
+        if (stored - clock.millis() > MAX_RATE_LIMIT_WAIT_MS) {
+            Log.w(TAG, "Ignoring outbox Retry-After window too far ahead (clock skew?)")
+            pending.clearNotBefore(owner)
+            return 0L
+        }
+        return stored
     }
 
     private suspend fun drainLocked(): DrainResult {
@@ -133,6 +164,7 @@ class OutboxProcessor @Inject constructor(
             code == 429 -> {
                 val wait = parseRetryAfter(r.headers()["Retry-After"], clock.millis()) ?: DEFAULT_RATE_LIMIT_WAIT_MS
                 notBeforeMs = clock.millis() + wait.coerceIn(MIN_RATE_LIMIT_WAIT_MS, MAX_RATE_LIMIT_WAIT_MS)
+                pending.setNotBefore(OutboxRateLimitEntity(owner(), notBeforeMs))
                 pending.markFailed(w.id, error ?: "RATE_LIMITED")
                 false
             }
