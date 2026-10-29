@@ -161,6 +161,19 @@ class StartWorkoutTest {
         listOf(PlannedWorkout(DayOfWeek.WEDNESDAY, "Legs", listOf(PlannedExercise("squat", 3, 8, 12), PlannedExercise("gone", 2)), id = "w1")),
     ).asPlan("p1", true)
 
+    @Test fun noPlanResumeAndRefreshClearLoading() { // #87
+        val vm = WorkoutHomeViewModel(repo, clock, sessions)
+        assertFalse(vm.state.value.loading)
+        repeat(2) {
+            vm.onResume()
+            assertFalse(vm.state.value.loading)
+            assertTrue(vm.state.value.hasNoPlan)
+            vm.refresh()
+            assertFalse(vm.state.value.loading)
+            assertTrue(vm.state.value.hasNoPlan)
+        }
+    }
+
     @Test fun startsTodaysWorkoutWithCatalogDetails() {
         repo.refreshResult = { ApiResult.Success(ActivePlan.Some(plan)) }
         val vm = WorkoutHomeViewModel(repo, clock, sessions)
