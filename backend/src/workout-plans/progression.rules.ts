@@ -38,6 +38,8 @@ export const REASON_TEXT: Record<Reason, string> = {
 
 /** Rounds down to a multiple of 0.5 (kg). */
 export const floorHalf = (v: number) => Math.floor(v * 2 + 1e-9) / 2;
+/** Rounds up to a multiple of 0.5 (kg). */
+export const ceilHalf = (v: number) => Math.ceil(v * 2 - 1e-9) / 2;
 /** Rounds down to a multiple of 5 (seconds). */
 export const floor5 = (v: number) => Math.floor(v / 5 + 1e-9) * 5;
 
@@ -70,8 +72,9 @@ export function increase(t: TrackingType, p: Prescription, primaryMuscle: string
     const pct = LOWER_BODY.has(primaryMuscle) ? 0.05 : 0.025;
     const minStep = w < 10 ? 0.5 : 1;
     const step = Math.min(Math.max(w * pct, minStep), Math.max(w * 0.1, minStep)); // cap 10%, min step wins
+    // Round down to 0.5 kg, but never below current + min step (targets off the 0.5 grid, e.g. 40.3 -> 41.5).
     let next = floorHalf(w + step);
-    if (next <= w) next = floorHalf(w) + 0.5;
+    if (next < w + minStep - 1e-9) next = ceilHalf(w + minStep);
     return { action: 'increase', reason: 'ALL_SETS_COMPLETED', suggested: { ...p, targetWeightKg: Math.min(next, LIMITS.weight) } };
   }
   if (t === 'reps') {

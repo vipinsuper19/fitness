@@ -14,6 +14,9 @@ describe('progression rules (pure)', () => {
     expect(increase('reps_weight', p({ targetWeightKg: 100 }), 'back', null).suggested!.targetWeightKg).toBe(102.5);
     expect(increase('reps_weight', p({ targetWeightKg: 8 }), 'biceps', null).suggested!.targetWeightKg).toBe(8.5);
     expect(increase('reps_weight', p({ targetWeightKg: 61 }), 'glutes', null).suggested!.targetWeightKg).toBe(64); // 64.05 -> 64
+    // Off-grid targets: rounding down would undercut the min step, so round up to >= current + min step.
+    expect(increase('reps_weight', p({ targetWeightKg: 40.3 }), 'chest', null).suggested!.targetWeightKg).toBe(41.5); // not 41.0 (+0.7)
+    expect(increase('reps_weight', p({ targetWeightKg: 9.8 }), 'chest', null).suggested!.targetWeightKg).toBe(10.5); // not 10.0 (+0.2)
   });
 
   it('min load step overrides the 10% cap; rep steps are exempt', () => {

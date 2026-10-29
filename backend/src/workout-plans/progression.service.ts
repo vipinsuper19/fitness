@@ -57,18 +57,29 @@ export class ProgressionService {
       return pe ? presc(pe) : undefined;
     };
 
+    /** Prescription at an entry position (workout index, exercise index) in a version, if it is the same exercise. */
+    const prescAt = (v: (typeof versions)[number] | undefined, wi: number, ei: number, exerciseId: string): Prescription | undefined => {
+      const pe = v?.workouts[wi]?.exercises[ei];
+      return pe && pe.exerciseId === exerciseId ? presc(pe) : undefined;
+    };
+
     const exerciseIds = [...new Set(latest.workouts.flatMap((w) => w.exercises.map((e) => e.exerciseId)))];
-    const [exercises, sessions] = await Promise.all([
-      this.prisma.exercise.findMany({ where: { id: { in: exerciseIds } } }),
+    // Only the newest N completed sessions per exercise (that logged a completed set of it).
+    const historyFor = (exerciseId: string) =>
       this.prisma.workoutSession.findMany({
-        where: { userId, status: 'completed', completedAt: { not: null }, planVersion: { planId } },
+        where: { userId, status: 'completed', completedAt: { not: null }, planVersion: { planId }, sets: { some: { exerciseId, completed: true } } },
         orderBy: [{ completedAt: 'desc' }, { id: 'asc' }],
+        take: WINDOW,
         select: {
           id: true, completedAt: true, perceivedDifficulty: true, planVersionId: true, plannedWorkoutId: true,
-          sets: { where: { completed: true, exerciseId: { in: exerciseIds } }, select: { exerciseId: true, reps: true, weightKg: true, durationSeconds: true, distanceM: true } },
+          sets: { where: { completed: true, exerciseId }, select: { exerciseId: true, reps: true, weightKg: true, durationSeconds: true, distanceM: true } },
         },
-      }),
+      });
+    const [exercises, histories] = await Promise.all([
+      this.prisma.exercise.findMany({ where: { id: { in: exerciseIds } } }),
+      Promise.all(exerciseIds.map(async (id) => [id, await historyFor(id)] as const)),
     ]);
+    const historyBy = new Map(histories);
     const exById = new Map(exercises.map((e) => [e.id, e]));
     const needsCatalog = exercises.some((e) => e.trackingType === 'reps');
     const catalog = needsCatalog
@@ -76,15 +87,12 @@ export class ProgressionService {
       : [];
 
     const suggestions: ProgressionSuggestion[] = [];
-    for (const w of latest.workouts) {
-      for (const pe of w.exercises) {
+    for (const [wi, w] of latest.workouts.entries()) {
+      for (const [ei, pe] of w.exercises.entries()) {
         const ex = exById.get(pe.exerciseId)!;
         const t = ex.trackingType as TrackingType;
         const current = presc(pe);
-        const window = sessions
-          .map((s) => ({ s, sets: s.sets.filter((x) => x.exerciseId === pe.exerciseId) }))
-          .filter((x) => x.sets.length > 0)
-          .slice(0, WINDOW);
+        const window = (historyBy.get(pe.exerciseId) ?? []).map((s) => ({ s, sets: s.sets }));
         const basedOn: ProgressionBasis[] = window.map(({ s, sets }) => {
           const p = prescIn(s.planVersionId, pe.exerciseId, s.plannedWorkoutId) ?? current;
           const rows: SetRow[] = sets.map((x) => ({ reps: x.reps, weightKg: num(x.weightKg), durationSeconds: x.durationSeconds, distanceM: num(x.distanceM) }));
@@ -96,10 +104,10 @@ export class ProgressionService {
           };
         });
 
-        // Cooldown: newest version that raised this exercise's load over the previous version.
+        // Cooldown: newest version that raised this entry's load (same workout and exercise position) over the previous version.
         let raisedAt: Date | null = null;
         for (let i = versions.length - 1; i > 0 && !raisedAt; i--) {
-          if (raisedLoad(prescIn(versions[i - 1]!.id, pe.exerciseId), prescIn(versions[i]!.id, pe.exerciseId))) raisedAt = versions[i]!.createdAt;
+          if (raisedLoad(prescAt(versions[i - 1], wi, ei, pe.exerciseId), prescAt(versions[i], wi, ei, pe.exerciseId))) raisedAt = versions[i]!.createdAt;
         }
         const cooldownUntil = raisedAt && now.getTime() - raisedAt.getTime() < COOLDOWN_MS ? new Date(raisedAt.getTime() + COOLDOWN_MS) : null;
 

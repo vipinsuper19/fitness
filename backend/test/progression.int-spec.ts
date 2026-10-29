@@ -170,6 +170,14 @@ describeDb('progression suggestions (HTTP + Postgres)', () => {
     expect(byEx(s, small).suggested!.targetWeightKg).toBe(8.5); // min step 0.5 kg beats 2.5% and the cap
     expect(byEx(s, noTarget)).toMatchObject({ action: 'increase', reason: 'NO_TARGET_SET', suggested: { targetWeightKg: 37, repsMin: 8, repsMax: 8 } });
     for (const x of s.suggestions) expect(((x.suggested!.targetWeightKg as number) * 2) % 1).toBe(0);
+    // Off-grid targets never undercut the min step.
+    const off = await mkEx({ muscle: 'chest' });
+    const tiny = await mkEx({ muscle: 'chest' });
+    const plan2 = await mkPlan(u.token, [{ ex: off, repsMax: 10, targetWeightKg: 40.3 }, { ex: tiny, repsMax: 10, targetWeightKg: 9.8 }]);
+    await three(u.id, plan2, { [off]: rep(2, { reps: 10, kg: 40.5 }), [tiny]: rep(2, { reps: 10, kg: 10 }) });
+    const s2 = await suggest(u.token, plan2);
+    expect(byEx(s2, off).suggested!.targetWeightKg).toBe(41.5);
+    expect(byEx(s2, tiny).suggested!.targetWeightKg).toBe(10.5);
     expect(byEx(s, upper).basedOn).toHaveLength(3);
   });
 
@@ -328,5 +336,30 @@ describeDb('progression suggestions (HTTP + Postgres)', () => {
     s = await suggest(u.token, plan);
     expect(byEx(s, a).basedOn[0]).toMatchObject({ sessionId: sid, metTarget: true, bestReps: 10 });
     expect(byEx(s, a)).toMatchObject({ action: 'increase', reason: 'ALL_SETS_COMPLETED', suggested: { targetWeightKg: 41 } });
+  });
+
+  it('cooldown compares by entry: same exercise in two workouts, only one raised', async () => {
+    const u = await signUp();
+    const a = await mkEx();
+    const two = (wA: number, wB: number) => ({
+      name: 'Two workouts', weeks: 4, generator: 'custom',
+      workouts: [
+        { dayOfWeek: 1, name: 'A', exercises: [{ exerciseId: a, order: 0, sets: 2, repsMin: 8, repsMax: 10, targetWeightKg: wA, durationSeconds: null, restSeconds: 90 }] },
+        { dayOfWeek: 3, name: 'B', exercises: [{ exerciseId: a, order: 0, sets: 2, repsMin: 8, repsMax: 10, targetWeightKg: wB, durationSeconds: null, restSeconds: 90 }] },
+      ],
+    });
+    const plan = (await as(u.token).post('/api/v1/workout-plans').send(two(40, 30)).expect(201)).body.id as string;
+    // v2 raises only workout B (30 -> 31); workout A is unchanged.
+    await as(u.token).patch(`/api/v1/workout-plans/${plan}`).send({ ...two(40, 31), baseVersion: 1 }).expect(200);
+    const v2 = await prisma.workoutPlanVersion.findUniqueOrThrow({ where: { planId_version: { planId: plan, version: 2 } } });
+    await prisma.workoutPlanVersion.update({ where: { id: v2.id }, data: { createdAt: new Date(NOW.getTime() - 2 * DAY) } });
+    for (const d of [1.5, 1.2, 1]) await session(u.id, plan, d, { [a]: rep(2, { reps: 10, kg: 41 }) }, { v: 2 });
+    const s = await suggest(u.token, plan);
+    expect(s.suggestions).toHaveLength(2);
+    const [first, second] = s.suggestions;
+    expect(first).toMatchObject({ exerciseId: a, action: 'increase', reason: 'ALL_SETS_COMPLETED', cooldownUntil: null, suggested: { targetWeightKg: 41 } });
+    expect(second).toMatchObject({ exerciseId: a, action: 'hold', reason: 'COOLDOWN', suggested: null });
+    expect(first!.plannedWorkoutId).not.toBe(second!.plannedWorkoutId);
+    expect(first!.basedOn.map((x) => x.sessionId)).toEqual(second!.basedOn.map((x) => x.sessionId)); // shared history
   });
 });
