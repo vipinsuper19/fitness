@@ -2174,6 +2174,7 @@ components:
         badges: { type: array, items: { $ref: '#/components/schemas/ExportedBadge' }, description: Earned badges }
         challenges: { type: array, items: { $ref: '#/components/schemas/Challenge' }, description: 'All challenges, any status' }
         targetHistory: { type: array, items: { $ref: '#/components/schemas/TargetHistoryEntry' }, description: 'Dated daily-target history, newest first.' }
+        sessionCorrections: { type: array, items: { $ref: '#/components/schemas/ExportedSessionCorrection' }, description: 'Corrections and discards of completed sessions, newest first. Each id is the sourceId of its `session_correction` xpLedger row. Optional: absent in exports from older servers.' }
         truncated:
           type: array
           items: { type: string }
@@ -3172,6 +3173,17 @@ components:
       type: string
       enum: [workout_session, adjustment, badge, challenge, session_correction]
       description: '`adjustment` is a server-side reversal or correction, never a client write. `badge` and `challenge` are bonus XP (`sourceId` = the earned badge or the challenge id); challenge bonus XP is capped at 150 per ISO week (Monday start, profile timezone), so an award can be smaller than the template''s `bonusXp`, or 0. `session_correction` is a server-side XP change from correcting or discarding a completed session (positive or negative); its `sourceId` is a `session_corrections` row id, not the session or award id (see docs/specs/session-correction.md). Clients must accept unknown values.'
+    ExportedSessionCorrection:
+      type: object
+      required: [id, sessionId, kind, xpDelta, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        sessionId:
+          allOf: [{ $ref: '#/components/schemas/Id' }]
+          description: The corrected or discarded session. After a discard it no longer appears in workoutSessions.
+        kind: { type: string, enum: [correction, discard] }
+        xpDelta: { type: integer, description: XP change written to the ledger (may be 0 or negative) }
+        createdAt: { type: string, format: date-time }
     XpTransaction:
       type: object
       required: [id, sourceType, sourceId, amount, reason, createdAt]
