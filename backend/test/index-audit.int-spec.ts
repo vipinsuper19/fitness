@@ -62,6 +62,9 @@ const SEED = [
           k, 8, 40 + k, true, w.completed_at, now()
    FROM workout_sessions w JOIN users x ON x.id = w.user_id AND x.email LIKE 'index-audit-%', generate_series(0, 5) k
    ORDER BY w.completed_at, w.id, k`,
+  // One live (in_progress) session per user (after the set logs, which only completed sessions have), as the app has at most one at a time.
+  `INSERT INTO workout_sessions (id, user_id, status, started_at, active_since, updated_at)
+   SELECT gen_random_uuid(), u.id, 'in_progress', TIMESTAMPTZ '2026-10-29 05:30Z', TIMESTAMPTZ '2026-10-29 05:30Z', now() FROM ${users} u ORDER BY u.n`,
 ];
 
 const SET_JOIN = `FROM exercise_set_logs l JOIN workout_sessions w ON w.id = l.session_id
@@ -82,6 +85,12 @@ const QUERIES: Record<string, string> = {
   'target history: newest row': `SELECT * FROM profile_target_history WHERE user_id = '${U}' ORDER BY effective_from DESC LIMIT 1`,
   'target history: resolver up to a date': `SELECT * FROM profile_target_history WHERE user_id = '${U}' AND effective_from <= '2026-10-29' ORDER BY effective_from`,
   'target history: list (GET /me/target-history)': `SELECT * FROM profile_target_history WHERE user_id = '${U}' ORDER BY effective_from DESC LIMIT 101`,
+  // (user_id, status[, completed_at]) lookups, served by workout_sessions_user_id_status_completed_at_idx since its
+  // (user_id, status) prefix duplicate was dropped (migration 20261029001500).
+  'sessions: active session (user, in_progress)': `SELECT * FROM workout_sessions WHERE user_id = '${U}' AND status = 'in_progress' ORDER BY started_at DESC LIMIT 1`,
+  'sessions: completed for badges (user, completed, not null)': `SELECT completed_at, active_seconds FROM workout_sessions WHERE user_id = '${U}' AND status = 'completed' AND completed_at IS NOT NULL`,
+  'sessions: completed in a range (GET /progress/summary, streak)': `SELECT id, completed_at, active_seconds FROM workout_sessions WHERE user_id = '${U}' AND status = 'completed' AND completed_at >= '2026-09-01' AND completed_at < '2026-10-30'`,
+  'sessions: history page (GET /workout-sessions/history)': `SELECT * FROM workout_sessions WHERE user_id = '${U}' AND status = 'completed' AND completed_at IS NOT NULL ORDER BY completed_at DESC, id DESC LIMIT 21`,
   'strength: exercise list (GET /progress/exercises)': `SELECT l.exercise_id, COUNT(DISTINCT w.id), MAX(w.completed_at) AS last ${SET_JOIN} AND ${RANGE} GROUP BY l.exercise_id ORDER BY last DESC, l.exercise_id DESC LIMIT 21`,
   'strength: points for one exercise (GET /progress/exercises/{id})': `SELECT (w.completed_at AT TIME ZONE 'Asia/Kolkata')::date AS d, max(l.weight_kg), count(*) ${SET_JOIN} AND l.exercise_id = '${EX(3)}' AND ${RANGE} GROUP BY 1`,
   'strength: personal records': `SELECT l.exercise_id, max(l.weight_kg), min(w.completed_at) ${SET_JOIN} AND l.exercise_id = ANY('{${EX(3)},${EX(4)}}'::uuid[]) GROUP BY 1`,
@@ -164,10 +173,23 @@ describeDb('index audit: hot read paths (EXPLAIN ANALYZE on seeded data)', () =>
     for (const [title, plan] of plans) if (title.startsWith('target history')) expect(plan).toContain('profile_target_history_pkey');
   });
 
+  it('(user_id, status) session lookups use the composite index; the dropped prefix duplicate is gone', async () => {
+    const left = await prisma.$queryRawUnsafe<Array<{ indexname: string }>>(
+      `SELECT indexname FROM pg_indexes WHERE tablename = 'workout_sessions' AND indexname = 'workout_sessions_user_id_status_idx'`,
+    );
+    expect(left).toEqual([]);
+    for (const [title, plan] of plans) {
+      if (!title.startsWith('sessions:')) continue;
+      expect({ title, composite: /workout_sessions_user_id_status_completed_at_idx/.test(plan) }).toEqual({ title, composite: true });
+      expect({ title, seqScan: /Seq Scan/.test(plan) }).toEqual({ title, seqScan: false });
+    }
+  });
+
   it('strength reads go through the user\'s completed sessions and the set-log session index', () => {
     for (const [title, plan] of plans) {
       if (!title.startsWith('strength')) continue;
-      expect(plan).toMatch(/workout_sessions_user_id_status(_completed_at)?_idx/);
+      // Either composite works: (user_id, status, completed_at), or (user_id, completed_at) for date ranges.
+      expect(plan).toMatch(/workout_sessions_user_id_(status_)?completed_at_idx/);
       expect(plan).toContain('exercise_set_logs_session_id_idx');
     }
   });
