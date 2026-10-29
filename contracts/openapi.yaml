@@ -528,7 +528,7 @@ paths:
       tags: [workout-plans]
       operationId: updateWorkoutPlan
       summary: Edit a plan by creating a new version
-      description: Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
+      description: The new version keeps the latest version's name (`name` in the body is ignored; rename with `PUT .../name`). Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -570,6 +570,47 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /workout-plans/{planId}/name:
+    put:
+      tags: [workout-plans]
+      operationId: renameWorkoutPlan
+      summary: Rename a plan without creating a new version
+      description: |
+        Sets the name of the plan's latest version in place. `version` does not change and
+        no new version is created; older versions keep the names they were saved with
+        (`GET /workout-plans/{planId}?version=N` shows the old name). The name is trimmed;
+        after trimming it must be 1–80 characters, otherwise `400 VALIDATION_FAILED`
+        (empty after trimming, including blank or whitespace-only, is `400 VALIDATION_FAILED`). Renaming to the current name (after
+        trimming) is a no-op that returns 200. `PUT` is idempotent by itself; an
+        `Idempotency-Key` is also accepted as on other writes. Works for active, paused
+        and inactive plans; archived plans are read-only, so any rename, even to the same name, is `409 PLAN_ARCHIVED`. Status,
+        `activatedAt`, `pausedAt` and `currentWeek` are unchanged. The new name shows in
+        `GET /workout-plans` (`WorkoutPlanSummary.name`), `GET /workout-plans/active` and
+        `GET /workout-plans/{planId}` straight away. `PATCH` ignores `name` and copies the
+        latest name, so this is the only way to rename. There is no version check; the
+        last write wins.
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlanRename' }
+      responses:
+        '200':
+          description: Renamed (or already had this name); the latest version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: '`PLAN_ARCHIVED` (archived plans are read-only), or an idempotency conflict'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /workout-plans/{planId}/deactivate:
     post:
       tags: [workout-plans]
@@ -2036,12 +2077,19 @@ components:
     WorkoutPlanDraft:
       $ref: './schemas/workout-plan-draft.schema.json'
     WorkoutPlanUpdate:
-      allOf:
-        - $ref: '#/components/schemas/WorkoutPlanDraft'
-        - type: object
-          required: [baseVersion]
-          properties:
-            baseVersion: { type: integer, minimum: 1 }
+      type: object
+      description: |
+        A `WorkoutPlanDraft` plus `baseVersion`. `name` is **ignored**: it is still accepted
+        (optional, any valid draft name) for compatibility, but the new version always copies
+        the latest version's name. Renaming is only possible with `PUT /workout-plans/{planId}/name`.
+      required: [weeks, workouts, generator, baseVersion]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, deprecated: true, description: 'Ignored; accepted for compatibility. The new version copies the latest name.' }
+        weeks: { $ref: './schemas/workout-plan-draft.schema.json#/properties/weeks' }
+        generator: { $ref: './schemas/workout-plan-draft.schema.json#/properties/generator' }
+        rationale: { $ref: './schemas/workout-plan-draft.schema.json#/properties/rationale' }
+        workouts: { $ref: './schemas/workout-plan-draft.schema.json#/properties/workouts' }
+        baseVersion: { type: integer, minimum: 1 }
     PrescriptionValues:
       type: object
       required: [sets, targetWeightKg, repsMin, repsMax, durationSeconds]
@@ -2107,6 +2155,12 @@ components:
         Derived from stored fields, in this order: `archived` = `archivedAt` set; `active` =
         the profile's active plan; `paused` = `pausedAt` set; else `inactive`. New values
         may be added; treat unknown values as `inactive`.
+    PlanRename:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80, description: 'Trimmed by the server; must be 1–80 characters after trimming' }
     PlanActivate:
       type: object
       additionalProperties: false
