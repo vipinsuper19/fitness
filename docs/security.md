@@ -43,6 +43,12 @@ Dependabot (`github-actions`) understands this format: it updates both the SHA a
 
 To bump an action by hand, resolve the tag's commit with `gh api repos/<owner>/<repo>/commits/<tag> -q .sha`.
 
-## Not done (yet)
+## CodeQL
 
-CodeQL / code scanning was left out for now, because the repository may be private and code scanning on a private repo needs GitHub Advanced Security.
+`.github/workflows/codeql.yml` runs CodeQL for `javascript-typescript` with the default query suite. It covers the backend and any other JS/TS code in the repo.
+
+It runs on every pull request, on pushes to `main` and weekly (Mondays 09:00 IST). It needs no build (`build-mode: none`).
+
+Results appear under the repository's Security → Code scanning tab. The job has only `security-events: write`, plus read access to contents and actions.
+
+The init and analyze actions are pinned to a SHA, like every other action.
