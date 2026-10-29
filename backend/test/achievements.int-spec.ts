@@ -13,6 +13,7 @@ import { AchievementsService } from '../src/achievements/achievements.service';
 import { backfillAll } from '../src/achievements/backfill';
 import { localDate, startOfLocalDay } from '../src/common/time';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { NO_TARGETS, upsertRow } from '../src/targets/target-history';
 import { createTestApp } from './helpers';
 
 const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
@@ -116,8 +117,9 @@ describeDb('badges & challenges engine (Postgres)', () => {
       expect(await prisma.userChallenge.findUniqueOrThrow({ where: { id: c.id } })).toMatchObject({ status: 'active', progress: 0 });
     });
 
-    it('uses the profile water goal, else 2000 ml', async () => {
+    it('uses the dated water goal (target history), else 2000 ml', async () => {
       const withGoal = await user({ dailyWaterTargetMl: 3000 });
+      await upsertRow(prisma, withGoal, '1900-01-01', { ...NO_TARGETS, waterMl: 3000 });
       const noGoal = await user();
       for (const u of [withGoal, noGoal]) {
         for (const day of days('2026-10-13', 7)) await prisma.waterLog.create({ data: { userId: u, date: d(day), amountMl: 2500, createdAt: at(day, 20) } });
@@ -324,6 +326,81 @@ describeDb('badges & challenges engine (Postgres)', () => {
       } finally {
         spy.mockRestore();
       }
+    });
+  });
+
+  describe('water challenges use dated targets', () => {
+    const water = (userId: string, date: string, amountMl: number) =>
+      prisma.waterLog.create({ data: { userId, date: d(date), amountMl, createdAt: at(date, 9) } });
+    const goal = (userId: string, date: string, waterMl: number | null, kcal: number | null = null) =>
+      upsertRow(prisma, userId, date, { ...NO_TARGETS, waterMl, kcal });
+    const waterChallenge = (userId: string, target: number) =>
+      challenge(userId, { templateCode: 'WEEKLY_WATER_DAYS', target, waterGoalMl: 3000 });
+    const reload = (id: string) => prisma.userChallenge.findUniqueOrThrow({ where: { id } });
+
+    it('a goal changed mid-week: each day is judged against its own goal, not the join or current one', async () => {
+      const u = await user({ dailyWaterTargetMl: 3000 });
+      await goal(u, '1900-01-01', 2000);
+      await goal(u, '2026-10-21', 3000); // raised on Wednesday
+      await water(u, '2026-10-19', 2500); // Mon: 2500 >= 2000
+      await water(u, '2026-10-20', 2000); // Tue: 2000 >= 2000
+      await water(u, '2026-10-21', 2500); // Wed: 2500 < 3000
+      const c = await waterChallenge(u, 3);
+      await engine.evaluate(u, NOW);
+      expect(await reload(c.id)).toMatchObject({ status: 'active', progress: 2, waterGoalMl: 3000 });
+      await water(u, '2026-10-21', 500); // Wed reaches 3000
+      await engine.evaluate(u, NOW);
+      expect(await reload(c.id)).toMatchObject({ status: 'completed', progress: 3 });
+    });
+
+    it('a day before the first target, or with water unset, uses 2000 ml', async () => {
+      const u = await user({ dailyWaterTargetMl: 3000 });
+      await goal(u, '2026-10-20', 3000); // first target ever: Tuesday
+      await goal(u, '2026-10-21', null, 1800); // Wednesday: water cleared, kcal set
+      await water(u, '2026-10-19', 2000); // Mon, before the first target: 2000 >= 2000
+      await water(u, '2026-10-20', 2500); // Tue: 2500 < 3000
+      await water(u, '2026-10-21', 2000); // Wed, water unset: 2000 >= 2000
+      const c = await waterChallenge(u, 5);
+      await engine.evaluate(u, NOW);
+      expect(await reload(c.id)).toMatchObject({ status: 'active', progress: 2 });
+    });
+
+    const hydrated = async (userId: string) => (await prisma.userBadge.findMany({ where: { userId, badgeCode: 'HYDRATED_7' } })).length;
+
+    it('HYDRATED_7: a goal raised in the middle of a streak judges each day against its own goal', async () => {
+      const u = await user({ dailyWaterTargetMl: 3000 });
+      await goal(u, '1900-01-01', 2000);
+      await goal(u, '2026-10-16', 3000); // raised on day 4 of a 7-day run (10-13..10-19)
+      for (const day of days('2026-10-13', 7)) await water(u, day, 2500);
+      await engine.evaluate(u, NOW);
+      expect(await hydrated(u)).toBe(0); // only 10-13..10-15 reach their goal (2000); 2500 < 3000 after
+      // Old days stay judged at 2000 (the current 3000 would fail them); topping up the later days earns it.
+      for (const day of days('2026-10-16', 4)) await water(u, day, 500);
+      await engine.evaluate(u, NOW);
+      expect(await hydrated(u)).toBe(1);
+    });
+
+    it('HYDRATED_7: an already-awarded badge stays awarded when dated goals would no longer meet it', async () => {
+      const u = await user();
+      await goal(u, '1900-01-01', 2000);
+      for (const day of days('2026-10-13', 7)) await water(u, day, 2000);
+      await engine.evaluate(u, NOW);
+      expect(await hydrated(u)).toBe(1);
+      const xp = (await ledger(u, 'badge')).length;
+      await prisma.profileTargetHistory.updateMany({ where: { userId: u }, data: { dailyWaterTargetMl: 9000 } });
+      await engine.evaluate(u, NOW);
+      expect(await hydrated(u)).toBe(1);
+      expect((await ledger(u, 'badge')).length).toBe(xp);
+    });
+
+    it('already-completed challenges are never revoked when dated targets would no longer meet them', async () => {
+      const u = await user();
+      await goal(u, '1900-01-01', 9000);
+      await water(u, '2026-10-19', 2500);
+      const c = await waterChallenge(u, 3);
+      await prisma.userChallenge.update({ where: { id: c.id }, data: { status: 'completed', progress: 3, completedAt: at('2026-10-20'), xpAwarded: 30 } });
+      await engine.evaluate(u, NOW);
+      expect(await reload(c.id)).toMatchObject({ status: 'completed', progress: 3, xpAwarded: 30 });
     });
   });
 });

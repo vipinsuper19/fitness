@@ -3,7 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 
 import { createTestApp } from './helpers';
-import { API_PREFIX, HTTP_METHODS, openapi, registeredRoutes, responseValidator, violations } from './support/openapi';
+import { API_PREFIX, HTTP_METHODS, INTERNAL_ROUTES, openapi, registeredRoutes, responseValidator, violations } from './support/openapi';
 
 /**
  * Contract drift (both directions): every route the real app registers must be in
@@ -16,6 +16,17 @@ describe('routes ↔ contracts/openapi.yaml', () => {
     'get /health', // Render health check, unprefixed (docs/DEPLOY.md)
   ]);
   const isSwaggerUi = (route: string) => / \/docs(-json|-yaml)?(\/|$)/.test(route); // non-prod only (SWAGGER_ENABLED)
+
+  /**
+   * Documented in openapi ahead of the implementation (docs/specs/notification-sending.md, device
+   * tokens), so clients can build against them. Exempt only from 'serves every documented
+   * operation'. Remove each entry when its route is implemented.
+   */
+  const DOCUMENTED_NOT_YET_IMPLEMENTED = new Set([
+    'post /me/notification-devices',
+    'delete /me/notification-devices/{deviceId}',
+  ]);
+  const internal = new Set<string>(INTERNAL_ROUTES);
 
   let app: NestExpressApplication;
   let routes: string[];
@@ -45,12 +56,14 @@ describe('routes ↔ contracts/openapi.yaml', () => {
 
   it('documents every registered route', () => {
     const documented = new Set(contractOps());
-    expect(apiRoutes().filter((r) => !documented.has(r))).toEqual([]);
+    expect(apiRoutes().filter((r) => !documented.has(r) && !internal.has(r))).toEqual([]);
   });
 
   it('serves every documented operation', () => {
     const served = new Set(apiRoutes());
-    expect(contractOps().filter((op) => !served.has(op))).toEqual([]);
+    expect(contractOps().filter((op) => !served.has(op) && !DOCUMENTED_NOT_YET_IMPLEMENTED.has(op))).toEqual([]);
+    // The list stays honest: every entry is documented and not served yet.
+    for (const op of DOCUMENTED_NOT_YET_IMPLEMENTED) expect({ op, documented: contractOps().includes(op), served: served.has(op) }).toEqual({ op, documented: true, served: false });
   });
 
   it('registers each route once', () => {

@@ -5,6 +5,8 @@ import Ajv2020 from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import { parse } from 'yaml';
 
+import { INTERNAL_ROUTES } from './support/openapi';
+
 type Operation = {
   operationId: string;
   security?: unknown[];
@@ -24,6 +26,11 @@ const draftSchema = JSON.parse(
 );
 
 const WRITE_METHODS = ['post', 'put', 'patch', 'delete'];
+
+// x-internal allowlist, defined with the other contract helpers so specs can import it without
+// re-running this file's tests; re-exported here (#119).
+export { INTERNAL_ROUTES };
+
 function operations(): Array<{ path: string; method: string; op: Operation; pathItem: PathItem }> {
   return Object.entries(spec.paths).flatMap(([path, pathItem]) =>
     Object.entries(pathItem)
@@ -38,6 +45,15 @@ function paramRefs(op: Operation, pathItem: PathItem): string[] {
 
 describe('contracts/openapi.yaml', () => {
   // Route coverage (both directions) lives in contract-routes.spec.ts, generated from the app's own routes.
+
+  it('keeps x-internal routes out of the contract, and only allowlists /internal routes', () => {
+    for (const route of INTERNAL_ROUTES) {
+      const [method = '', path = ''] = route.split(' ');
+      expect(path.startsWith('/internal/')).toBe(true);
+      expect(spec.paths[path]?.[method]).toBeUndefined();
+    }
+    expect(Object.keys(spec.paths).filter((p) => p.startsWith('/internal'))).toEqual([]);
+  });
 
   it('accepts Idempotency-Key on every write except token and pure-compute calls', () => {
     const exempt = new Set(['login', 'refreshTokens', 'logout', 'generateWorkoutPlan']);

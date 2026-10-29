@@ -2,7 +2,7 @@
 
 Users choose **which kinds of notification** they want and a **quiet-hours** window. This spec covers **storage and the API only**. Implemented in #116 (migration `20261029001300_notification_preferences`).
 
-**Out of scope (explicitly):** sending anything. No FCM, no device tokens or registration, no scheduler, no delivery, no in-app inbox, no email or SMS. Nothing in the backend reads these preferences yet. A later sending spec will consume them and will define per-type settings such as reminder times, the water interval and workout days (decision 3). Until then, storing a preference has no visible effect besides `GET` returning it.
+**Out of scope (explicitly):** sending anything (now specified in [notification-sending.md](notification-sending.md), which also adds `reminders`). No FCM, no device tokens or registration, no scheduler, no delivery, no in-app inbox, no email or SMS. Nothing in the backend reads these preferences yet. A later sending spec will consume them and will define per-type settings such as reminder times, the water interval and workout days (decision 3). Until then, storing a preference has no visible effect besides `GET` returning it.
 
 ## Types
 One opt-in flag per type, each tied to an existing feature:

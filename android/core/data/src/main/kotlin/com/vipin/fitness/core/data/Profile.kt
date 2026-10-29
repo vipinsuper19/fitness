@@ -22,6 +22,10 @@ data class Profile(
     val unitSystem: UnitSystem = UnitSystem.METRIC,
     val dailyCalorieTargetKcal: Int? = null,
     val dailyWaterTargetMl: Int? = null,
+    /** Explicit macro targets in grams; null = not set (the server stores 0 as null). */
+    val dailyProteinTargetG: Int? = null,
+    val dailyCarbsTargetG: Int? = null,
+    val dailyFatTargetG: Int? = null,
     val onboardingCompleted: Boolean = false,
     /** IANA zone id from the profile; null when unknown. Read-only here (not part of ProfileChanges). */
     val timezone: String? = null,
@@ -41,5 +45,8 @@ data class ProfileChanges(
     val unitSystem: UnitSystem? = null,
     val dailyCalorieTargetKcal: Field<Int> = Field.Unchanged,
     val dailyWaterTargetMl: Field<Int> = Field.Unchanged,
+    val dailyProteinTargetG: Field<Int> = Field.Unchanged,
+    val dailyCarbsTargetG: Field<Int> = Field.Unchanged,
+    val dailyFatTargetG: Field<Int> = Field.Unchanged,
     val onboardingCompleted: Boolean? = null,
 )

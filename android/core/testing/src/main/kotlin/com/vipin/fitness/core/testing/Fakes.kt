@@ -85,6 +85,10 @@ fun Profile.apply(c: ProfileChanges): Profile {
         unitSystem = c.unitSystem ?: unitSystem,
         dailyCalorieTargetKcal = c.dailyCalorieTargetKcal.or(dailyCalorieTargetKcal),
         dailyWaterTargetMl = c.dailyWaterTargetMl.or(dailyWaterTargetMl),
+        // Like the server: 0 is stored as null.
+        dailyProteinTargetG = c.dailyProteinTargetG.or(dailyProteinTargetG)?.takeIf { it > 0 },
+        dailyCarbsTargetG = c.dailyCarbsTargetG.or(dailyCarbsTargetG)?.takeIf { it > 0 },
+        dailyFatTargetG = c.dailyFatTargetG.or(dailyFatTargetG)?.takeIf { it > 0 },
         onboardingCompleted = c.onboardingCompleted ?: onboardingCompleted,
     )
 }

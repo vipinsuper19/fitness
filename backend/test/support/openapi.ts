@@ -14,6 +14,13 @@ export const OPENAPI_FILE = join(CONTRACTS_DIR, 'openapi.yaml');
 const OPENAPI_ID = 'https://github.com/vipinsuper19/fitness/contracts/openapi.yaml';
 export const openapi = parse(readFileSync(OPENAPI_FILE, 'utf8')) as Spec;
 
+/**
+ * x-internal allowlist: server routes that are deliberately NOT in openapi (not client APIs).
+ * Anything that checks registered routes against the contract must exempt only these.
+ * See docs/specs/notification-sending.md (internal tick endpoint).
+ */
+export const INTERNAL_ROUTES = ['post /internal/notifications/tick'] as const;
+
 export const API_PREFIX = '/api/v1';
 export const HTTP_METHODS = ['get', 'put', 'post', 'patch', 'delete'] as const;
 

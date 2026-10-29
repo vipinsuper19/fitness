@@ -27,7 +27,10 @@ Out of scope: leaderboards, friends, shared or group challenges, sponsored rewar
 
 **Local day** means the profile timezone (`user_profiles.timezone`, default `Asia/Kolkata`), with the same helpers as the summary (`localDate`, `startOfLocalDay`). A **week** is ISO Monday 00:00 to Sunday 24:00 in that timezone (decided). The tz is snapshotted on the challenge row at join, so a later tz change doesn't move an open window.
 
-**Water goal** = `user_profiles.dailyWaterTargetMl` (the existing profile field, API `dailyWaterTargetMl`, 250–10 000) when set, otherwise **2000 ml**. Badges use the goal at evaluation time. A weekly challenge snapshots it at join (`waterGoalMl` on the row), so editing the goal mid-week doesn't change that week's target.
+**Water goal (dated)** = for each local date, the `dailyWaterTargetMl` in force on that date ([target-history.md](target-history.md)) when set, otherwise **2000 ml**. This is the original rule (the user's own goal, else 2 L), applied per day. Both the `HYDRATED_7` badge and the `WEEKLY_WATER_DAYS` challenge judge each date against its own goal, so a goal changed mid-week or mid-streak applies from the day it changed and earlier days keep theirs. A date with no water target in force (before the first target, or water unset) uses 2000 ml.
+- **`waterGoalMl` on a challenge** is the goal in force at join, kept **for information only**; it does not drive progress.
+- **Already-awarded badges:** awards are never revoked (§13.4). A badge already earned stays earned, with its XP, even if dated goals would not reach it now; only badges not yet earned are judged by the dated rule.
+- **Already-awarded challenges:** awards are never revoked (§13.4), so completed challenges, their XP and expired rows stay as they are. Only future evaluations of **active** challenges change: the first evaluation after release recomputes their progress from dated targets, which can move progress up or down and may complete a challenge.
 
 ## 3. Starter badge catalog
 
@@ -47,7 +50,7 @@ Codes are stable identifiers (UPPER_SNAKE). Titles and descriptions live server-
 | `LONG_SESSION_60` | one completed session with `activeSeconds` ≥ 3 600 | 20 |
 | `FIRST_FOOD_LOG` | count(food_logs) ≥ 1 | 5 |
 | `FOOD_LOG_7_DAYS` | ≥ 7 distinct `food_logs.date` within any 7 consecutive local dates ending ≤ today | 20 |
-| `HYDRATED_7` | 7 distinct dates with SUM(`amountMl`) ≥ the water goal (§2), each date ≤ today | 20 |
+| `HYDRATED_7` | 7 distinct dates with SUM(`amountMl`) ≥ that date's own water goal (§2, dated), each date ≤ today | 20 |
 | `FIRST_MEASUREMENT` | count(body_measurements) ≥ 1 | 5 |
 | `MEASURE_4_WEEKS` | measurements in 4 distinct ISO weeks | 20 |
 | `LEVEL_5` | `balanceFor(net XP).level` ≥ 5, computed **excluding badge/challenge bonus XP** | 0 |
@@ -115,7 +118,7 @@ user_challenges
   window_start date, window_end date? -- local dates, inclusive; personal: end = start + deadlineDays[i] - 1; NULL = no end date
   join_date date                      -- local day of joining; PERSONAL_STREAK_N counts only streak days on or after it
   timezone varchar(64)                -- snapshot at join
-  water_goal_ml int?                  -- snapshot at join (water templates only)
+  water_goal_ml int?                  -- goal at join, display only (water templates); progress uses dated targets
   status enum(active, completed, expired, left)
   progress int default 0
   xp_awarded int default 0           -- after the weekly cap; ledger row only when > 0
@@ -238,7 +241,7 @@ Each PR stays small and additive, and the backend PRs merge in order.
 3. **Backdating:** a client-dated food, water or measurement entry counts if it was created **on the same local day or the next one** (`createdAt < startOfLocalDay(date + 2)`), with `date ≤ today` (§9).
 4. **Revocation:** **never.** Earned badges and completed challenges stay, even if the underlying data is deleted or a session is discarded.
 5. **Backfill:** **at release**, for existing users, via the lazy check on `GET /badges` plus the locally run script (§6). Existing history counts, subject to the backdating rule.
-6. **Water goal:** the profile's `dailyWaterTargetMl` if set, else 2000 ml (§2).
+6. **Water goal:** each day's own dated `dailyWaterTargetMl`, else 2000 ml, for both badges and challenges (§2). Same fallback as the original rule.
 7. **Week:** starts **Monday** in the profile timezone (default `Asia/Kolkata`).
 
 ## 14. Risks

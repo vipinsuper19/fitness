@@ -25,6 +25,10 @@ fun ProfileDto.toDomain() = Profile(
     timezone = timezone,
     dailyCalorieTargetKcal = dailyCalorieTargetKcal,
     dailyWaterTargetMl = dailyWaterTargetMl,
+    // 0 is normalized to null by the server; also treat a stray 0 as "not set".
+    dailyProteinTargetG = dailyProteinTargetG?.takeIf { it > 0 },
+    dailyCarbsTargetG = dailyCarbsTargetG?.takeIf { it > 0 },
+    dailyFatTargetG = dailyFatTargetG?.takeIf { it > 0 },
     onboardingCompleted = onboardingCompleted,
 )
 
@@ -43,6 +47,9 @@ fun ProfileChanges.toJson(): JsonObject = buildJsonObject {
     unitSystem?.let { put("unitSystem", JsonPrimitive(it.wire())) }
     field("dailyCalorieTargetKcal", dailyCalorieTargetKcal) { JsonPrimitive(it) }
     field("dailyWaterTargetMl", dailyWaterTargetMl) { JsonPrimitive(it) }
+    field("dailyProteinTargetG", dailyProteinTargetG) { JsonPrimitive(it) }
+    field("dailyCarbsTargetG", dailyCarbsTargetG) { JsonPrimitive(it) }
+    field("dailyFatTargetG", dailyFatTargetG) { JsonPrimitive(it) }
     onboardingCompleted?.let { put("onboardingCompleted", JsonPrimitive(it)) }
 }
 
