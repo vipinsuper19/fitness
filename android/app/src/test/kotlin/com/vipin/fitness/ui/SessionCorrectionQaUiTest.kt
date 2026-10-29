@@ -23,11 +23,9 @@ import com.vipin.fitness.core.testing.FakeSessionCorrectionRepository
 import com.vipin.fitness.core.testing.FakeSessionRepository
 import com.vipin.fitness.core.testing.FakeWorkoutHistoryRepository
 import com.vipin.fitness.core.testing.FakeWorkoutRepository
-import com.vipin.fitness.core.testing.testBadge
 import com.vipin.fitness.core.testing.testExercise
 import com.vipin.fitness.core.testing.testPastSession
 import com.vipin.fitness.core.testing.testPastSet
-import com.vipin.fitness.core.testing.windowClosedFailure
 import com.vipin.fitness.feature.workout.CorrectionTags
 import com.vipin.fitness.feature.workout.HistoryTags
 import dagger.hilt.android.testing.HiltAndroidRule
@@ -136,12 +134,12 @@ class SessionCorrectionQaUiTest {
         corrections.failure = ApiResult.Failure(ApiError.Network)
         openSession("s1"); editSet("cs-e1-0")
         tag(CorrectionTags.REPS).performTextReplacement("8"); tag(CorrectionTags.SAVE).performClick()
-        scrollTo(CorrectionTags.ERROR); waitTag(CorrectionTags.ERROR)
+        waitTag(CorrectionTags.ERROR); scrollTo(CorrectionTags.ERROR)
         assertTrue(shows("offline"))
         assertTrue("offline is not a closed window", present(CorrectionTags.editSet("cs-e1-0")))
         corrections.failure = null
         editSet("cs-e1-0"); tag(CorrectionTags.REPS).performTextReplacement("8"); tag(CorrectionTags.SAVE).performClick()
-        scrollTo(CorrectionTags.RESULT); waitTag(CorrectionTags.RESULT)
+        waitTag(CorrectionTags.RESULT); scrollTo(CorrectionTags.RESULT)
         assertFalse(present(CorrectionTags.ERROR))
         assertEquals(listOf("put:cs-e1-0", "put:cs-e1-0"), corrections.calls)
     }
@@ -149,7 +147,7 @@ class SessionCorrectionQaUiTest {
     @Test fun sessionEmptyFromServer_showsDiscardHint() {
         corrections.failure = ApiResult.Failure(ApiError.Http(409, CorrectionErrors.SESSION_EMPTY, "empty", null))
         openSession("s1"); editSet("cs-e1-1"); tag(CorrectionTags.DELETE).performClick()
-        scrollTo(CorrectionTags.ERROR); waitTag(CorrectionTags.ERROR)
+        waitTag(CorrectionTags.ERROR); scrollTo(CorrectionTags.ERROR)
         assertTrue(shows("discard the workout instead"))
         assertTrue("still editable", present(CorrectionTags.editSet("cs-e1-1")))
     }
@@ -158,7 +156,7 @@ class SessionCorrectionQaUiTest {
         corrections.xpDelta = 5
         openSession("s1"); editSet("cs-e1-0")
         tag(CorrectionTags.REPS).performTextReplacement("12"); tag(CorrectionTags.SAVE).performClick()
-        scrollTo(CorrectionTags.RESULT); waitTag(CorrectionTags.RESULT)
+        waitTag(CorrectionTags.RESULT); scrollTo(CorrectionTags.RESULT)
         assertTrue(shows("+5 XP")); assertFalse(present(CorrectionTags.BADGES))
     }
 
@@ -193,7 +191,17 @@ class SessionCorrectionQaUiTest {
         corrections.discardFailure = ApiResult.Failure(ApiError.Network)
         openSession("s1"); scrollTo(CorrectionTags.DISCARD); tag(CorrectionTags.DISCARD).performClick()
         waitTag(CorrectionTags.DISCARD_CONFIRM); tag(CorrectionTags.DISCARD_CONFIRM).performClick()
-        scrollTo(CorrectionTags.ERROR); waitTag(CorrectionTags.ERROR)
+        waitTag(CorrectionTags.ERROR); scrollTo(CorrectionTags.ERROR)
         assertTrue(present(HistoryTags.DETAIL)); assertEquals(listOf("discard"), corrections.calls)
+    }
+
+    @Test fun oldSession_outsideWindow_canStillBeDiscarded() {
+        openSession("old")
+        scrollTo(CorrectionTags.CLOSED); assertTrue(present(CorrectionTags.CLOSED))
+        assertFalse(present(CorrectionTags.editSet("cs-e1-0")))
+        scrollTo(CorrectionTags.DISCARD); tag(CorrectionTags.DISCARD).performClick()
+        waitTag(CorrectionTags.DISCARD_CONFIRM); tag(CorrectionTags.DISCARD_CONFIRM).performClick()
+        waitTag(HistoryTags.LIST)
+        assertEquals(listOf("discard"), corrections.calls)
     }
 }
