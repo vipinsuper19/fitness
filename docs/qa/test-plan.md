@@ -304,3 +304,25 @@ Robolectric, through the real MainActivity (Nutrition → Macro targets) with `F
 | SM13 | Vegetarian + no active goal | Veg protein hint; "no active goal, so maintain" | `vegetarianHintAndDefaultGoal` |
 | SM14 | Back | Returns to the diary | `backReturnsToTheDiary` |
 | SM15 | Suggestion held in flight | Only a spinner: no Not now / Apply / Suggest to tap while held; on release the card appears, nothing saved, 1 call. (Not now can't be tapped mid-request from the UI; the late-after-dismiss drop is covered by `MacroTargetsTest.aLateSuggestionAfterDismissIsDropped`.) | `aHeldSuggestionOffersNoNotNowAndSavesNothingWhenReleased` |
+
+### Notification settings UI (#127) — `android/app/src/test/.../ui/NotificationSettingsUiTest.kt`
+Robolectric through `MainActivity` with `FakeNotificationPreferencesRepository` (`@TestInstallIn`) and `NotificationSettingsTags`. Times are picked on the Material3 clock face by its hour content description.
+
+| ID | Case | Expected | Test |
+|---|---|---|---|
+| NT1 | Open screen | Server values shown: master on, water/food off, quiet 22:00 – 07:00 next day, Asia/Kolkata | `showsTheServerValues` |
+| NT2 | Toggle one type, Save | PATCH carries only that type, no other field | `patchSendsOnlyTheChangedType` |
+| NT3 | Toggle a type on and back off | Nothing to save, no PATCH | `togglingBackAndForthSendsNothing` |
+| NT4 | Change only start to 23 | PATCH quietHours start and end as a pair ("23:00","07:00") | `changingOnlyTheStartSendsStartAndEndAsAPair` |
+| NT5 | Change only end to 6 | Pair ("22:00","06:00") | `changingOnlyTheEndSendsStartAndEndAsAPair` |
+| NT6 | Quiet-hours switch only | PATCH quietHours.enabled, no times | `quietSwitchAloneSendsNoTimes` |
+| NT7 | Master off | Per-type values kept (shown and not sent) | `masterOffKeepsEachTypeValue` |
+| NT8 | End == start (22) | "Start and end must be different.", no Retry, no PATCH; end 7 clears it | `startEqualToEndIsBlockedAndNeverSent` |
+| NT9 | Save offline, Retry | Edits kept, offline message, Retry reuses the same Idempotency-Key | `offlineSaveKeepsEditsAndRetryReusesTheKey` |
+| NT10 | Different change set after a failure | New Idempotency-Key | `aDifferentChangeSetAfterAFailureGetsANewKey` |
+| NT11 | Save gets 400 | Key dropped, "Those settings weren't accepted. Showing what's saved.", refetch | `a400DropsTheKeyShowsTheErrorAndRefetches` |
+| NT12 | Load offline, Retry | Offline error then values after Retry | `loadOfflineThenRetry` |
+| NT13 | User switch | Screen reloads for the new user, edits dropped | `switchingUserResetsTheScreenAndDropsEdits` |
+| NT14 | Save in flight across user switch | Previous user's result dropped, never shown | `aSaveInFlightForThePreviousUserIsDropped` |
+
+Prod check (`scripts/prod-check-p1.sh`, NP01–NP08): GET defaults shape, 401 unauthenticated, PATCH partial merge, idempotent replay, 409 on key reuse with another body, start == end 400, master off keeps types, no leak to user B.
