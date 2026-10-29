@@ -103,6 +103,36 @@ Nest's `enableShutdownHooks()` is deliberately not used: it disconnects Prisma w
 
 **Signal delivery:** `startCommand` is `npm run migrate:deploy && exec node dist/main.js`. `exec` replaces the `sh` that Render starts with `node` itself, so node is the process that receives Render's `SIGTERM` and the handler above runs. With the old `... && npm start`, `sh` (and `npm`) stayed as the parent and the signal might never reach node, ending in `SIGKILL` / exit 137. After a deploy, the old instance's logs should show `shutdown complete`, not exit 137. If the Render service's start command is set in the dashboard rather than synced from this Blueprint, it must be changed there to match.
 
+## Migration rollback checklist
+
+Prisma Migrate has **no down migrations**. `prisma migrate deploy` only applies pending migrations forward, and
+the history in `_prisma_migrations` is what it compares against
+([Prisma: down migrations](https://www.prisma.io/docs/orm/prisma-migrate/workflows/generating-down-migrations),
+[patching and hotfixing](https://www.prisma.io/docs/orm/prisma-migrate/workflows/patching-and-hotfixing)).
+Here migrations run on every start (`startCommand`), so a deploy and its migrations go out together. Backups
+and restores are covered in [runbooks/backup-restore.md](runbooks/backup-restore.md).
+
+**Before a risky migration** (drops, renames, data rewrites, new constraints on existing rows, backfills):
+- [ ] Write it **expand/contract**: add first, deploy code that works with both shapes, and drop in a *later* release. Then the previous deploy keeps working against the new schema, and a Render rollback is safe.
+- [ ] Take and verify a manual dump ([runbook §2](runbooks/backup-restore.md#2-manual-dump-before-risky-migrations)); on Supabase Free it is the only backup. Note the dump file and the last applied migration in the PR.
+- [ ] Check the migration on a scratch copy restored from that dump ([§3](runbooks/backup-restore.md#3-restore-to-a-scratch-project-first-always)): `migrate deploy`, then `GET /health/deep`.
+- [ ] Write down the forward-fix SQL you would use if it goes wrong.
+
+**If a deploy goes wrong, decide in this order:**
+
+1. **The code is bad, and the migration is additive or there is none:** roll back on Render (below). The old code ignores the new columns or tables.
+2. **The migration is bad, but no data was lost** (wrong index, bad default, a constraint too strict, slow): **forward-fix**. Add a *new* migration that corrects it (for example `DROP INDEX`, `ALTER ... DROP CONSTRAINT`, re-add a column), merge it and deploy. Never edit or delete a migration that has already been applied: the checksum changes and `migrate deploy`/`migrate:check` fail.
+3. **A migration failed halfway** (the start fails with `P3009`, failed migrations found): the app won't boot until it is resolved. Inspect what was applied, finish or undo it by hand on the DB (test on scratch first), then mark it with `npx prisma migrate resolve --rolled-back <name>` (it will re-run) or `--applied <name>` (you completed it by hand), and redeploy. Run this locally with `DATABASE_URL`/`DIRECT_URL` from your shell, never committed.
+4. **Data was destroyed or corrupted** (dropped column or table, bad `UPDATE`/`DELETE`) and can't be rebuilt from what remains: **restore** from the pre-migration dump, scratch first, then prod ([runbook §4](runbooks/backup-restore.md#4-restore-into-prod-only-after-section-3-passed-and-the-decision-in-section-5)). Accept, and record, the loss of writes since the dump.
+
+**Render rollback, and migrations that are already applied**
+([Render: Rollbacks](https://render.com/docs/rollbacks)):
+- Deploys page → a previous successful deploy → **Rollback**. It reuses that deploy's build artifact, start command and environment variables, so it is fast, but only while the artifact is retained (that depends on the workspace plan).
+- A dashboard rollback **disables auto-deploy**. Re-enable it in Settings once the fix is merged; otherwise the next push won't deploy. A rollback through the API does *not* disable it.
+- **A rollback does not touch the database.** The old build runs its own `migrate deploy` on start. It sees the newer migrations in `_prisma_migrations` that aren't in its `prisma/migrations` folder, applies nothing, and starts against the **newer schema**. That is safe only if the new schema is backward-compatible with the old code (expand/contract). If the migration dropped or renamed something the old code uses, the rollback boots but fails at runtime: forward-fix or restore instead.
+- If you restore the DB to before migration N, deploy (or roll back to) a commit **without** N. Otherwise the next start re-applies N.
+- After any rollback or fix, check `GET /health/deep`. Its `migration` must match what you expect.
+
 ## Free-tier notes
 - **Cold starts (accepted):** Render Free spins down after ~15 min idle, so the first request after that takes **about 50 s**. **No keep-alive pinger is used**, by choice, to stay within the free plan; the app should show a loading state and retry.
 - Render Free has 512 MB RAM. argon2 (19 MiB per hash) fits.
