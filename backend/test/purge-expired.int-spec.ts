@@ -45,9 +45,11 @@ describeDb('purge:expired', () => {
       },
       select: { id: true },
     });
+  // Keys are created 24 h before they expire (the TTL; the table checks expires_at > created_at).
   const key = (userId: string, expiresInHours: number) =>
     prisma.idempotencyKey.create({
       data: {
+        createdAt: new Date(Date.now() + (expiresInHours - 24) * 3_600_000),
         scope: `user:${userId}`, key: randomUUID(), userId, method: 'POST', path: '/api/v1/goals', requestHash: '0'.repeat(64),
         expiresAt: new Date(Date.now() + expiresInHours * 3_600_000),
       },
