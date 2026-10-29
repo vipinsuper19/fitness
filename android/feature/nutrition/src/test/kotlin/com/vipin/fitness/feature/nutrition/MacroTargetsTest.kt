@@ -32,7 +32,8 @@ class MacroTargetsViewModelTest {
     private val suggestions = FakeMacroSuggestionRepository()
     private val units = FakeUnitPreference()
     private var keys = 0
-    private fun vm() = MacroTargetsViewModel(profiles, suggestions, units).also { it.newKey = { "k${++keys}" } }
+    private val zone = com.vipin.fitness.core.data.ProfileZone { profiles }
+    private fun vm() = MacroTargetsViewModel(profiles, suggestions, units, zone).also { it.newKey = { "k${++keys}" } }
 
     @Test fun loadsTargetsAndRetriesAfterOffline() {
         profiles.getResult = { FAKE_NETWORK_FAILURE }
@@ -124,6 +125,150 @@ class MacroTargetsViewModelTest {
         assertEquals(2, vm.state.value.suggestion!!.suggestion!!.proteinG)
     }
 
+    // --- Manual editing (P/C/F) ---
+
+    private fun editing(): MacroTargetsViewModel = vm().also { it.edit() }
+
+    @Test fun editStartsFromTheCurrentTargets() {
+        val vm = editing()
+        assertEquals(MacroEdit("90", "", ""), vm.state.value.edit)
+        assertFalse(vm.state.value.canSave) // nothing changed yet
+    }
+
+    @Test fun saveSendsOnlyTheChangedMacroFields() {
+        val vm = editing()
+        vm.onField(MacroField.CARBS, "250")
+        vm.onField(MacroField.FAT, " 60 ")
+        assertTrue(vm.state.value.canSave)
+        vm.save()
+        val (c, key) = profiles.updates.single()
+        assertEquals(Field.Unchanged, c.dailyProteinTargetG)
+        assertEquals(Field.Set(250), c.dailyCarbsTargetG)
+        assertEquals(Field.Set(60), c.dailyFatTargetG)
+        assertEquals(com.vipin.fitness.core.data.ProfileChanges(dailyCarbsTargetG = Field.Set(250), dailyFatTargetG = Field.Set(60)), c)
+        assertEquals("k1", key)
+        val s = vm.state.value
+        assertTrue(s.saved); assertNull(s.edit); assertFalse(s.saving)
+        assertEquals(MacroTargets(90, 250, 60, 2000), s.targets)
+    }
+
+    @Test fun emptyOrZeroClears() {
+        val vm = editing()
+        vm.onField(MacroField.PROTEIN, "0")
+        vm.save()
+        assertEquals(Field.Clear, profiles.updates.single().first.dailyProteinTargetG)
+        assertNull(vm.state.value.targets!!.proteinG)
+        vm.edit(); vm.onField(MacroField.FAT, "40"); vm.save()
+        vm.edit(); vm.onField(MacroField.FAT, ""); vm.save()
+        assertEquals(Field.Clear, profiles.updates.last().first.dailyFatTargetG)
+    }
+
+    @Test fun invalidInputBlocksSaveWithPerFieldErrors() {
+        val vm = editing()
+        vm.onField(MacroField.PROTEIN, "12.5")
+        vm.onField(MacroField.CARBS, "1001")
+        assertEquals(mapOf(MacroField.PROTEIN to GramsError.NOT_WHOLE, MacroField.CARBS to GramsError.TOO_LARGE), vm.state.value.editErrors)
+        assertFalse(vm.state.value.canSave)
+        vm.save()
+        assertTrue(profiles.updates.isEmpty())
+    }
+
+    @Test fun offlineRetryReusesTheKeyAndAChangedValueGetsANewOne() {
+        val vm = editing()
+        vm.onField(MacroField.FAT, "55")
+        profiles.failUpdates = ApiResult.Failure(ApiError.Network)
+        vm.save()
+        assertEquals(MacroError.OFFLINE, vm.state.value.saveError)
+        assertEquals(MacroEdit("90", "", "55"), vm.state.value.edit) // kept for retry
+        vm.save()
+        vm.onField(MacroField.FAT, "56")
+        vm.save()
+        assertEquals(listOf("k1", "k1", "k2"), profiles.updates.map { it.second })
+    }
+
+    @Test fun rateLimitedKeepsTheKeyAndTheRetryAfter() {
+        val vm = editing()
+        vm.onField(MacroField.FAT, "55")
+        profiles.failUpdates = ApiResult.Failure(ApiError.Http(429, "RATE_LIMITED", "x", null, retryAfterMs = 12_000))
+        vm.save()
+        assertEquals(MacroError.RATE_LIMITED, vm.state.value.saveError)
+        assertEquals(12_000L, vm.state.value.retryAfterMs)
+        profiles.failUpdates = null
+        vm.save()
+        assertEquals(listOf("k1", "k1"), profiles.updates.map { it.second })
+        assertNull(vm.state.value.retryAfterMs)
+        assertTrue(vm.state.value.saved)
+    }
+
+    @Test fun a400IsInvalidAndTheNextSaveGetsANewKey() {
+        val vm = editing()
+        vm.onField(MacroField.FAT, "55")
+        profiles.failUpdates = ApiResult.Failure(ApiError.Http(400, "VALIDATION_ERROR", "x", null))
+        vm.save()
+        assertEquals(MacroError.INVALID, vm.state.value.saveError)
+        profiles.failUpdates = null
+        vm.save()
+        assertEquals(listOf("k1", "k2"), profiles.updates.map { it.second })
+    }
+
+    @Test fun cancelDiscardsTheEditAndTheKey() {
+        val vm = editing()
+        vm.onField(MacroField.FAT, "55")
+        profiles.failUpdates = ApiResult.Failure(ApiError.Network)
+        vm.save()
+        vm.cancelEdit()
+        assertNull(vm.state.value.edit); assertNull(vm.state.value.saveError)
+        profiles.failUpdates = null
+        vm.edit(); vm.onField(MacroField.FAT, "55"); vm.save()
+        assertEquals(listOf("k1", "k2"), profiles.updates.map { it.second })
+    }
+
+    @Test fun editAndSuggestAreExclusive() {
+        suggestions.result = { ApiResult.Success(testMacroSuggestion()) }
+        val vm = vm()
+        vm.suggest()
+        vm.edit()
+        assertNull(vm.state.value.suggestion) // editing closes the suggestion
+        vm.suggest()
+        assertEquals(1, suggestions.calls) // no suggestion while editing
+    }
+
+    @Test fun typingIsIgnoredWhileSavingAndALateSaveForAnotherUserIsDropped() = kotlinx.coroutines.test.runTest {
+        val gate = CompletableDeferred<Unit>()
+        profiles.gate = gate
+        val vm = editing()
+        vm.onField(MacroField.FAT, "55")
+        vm.save()
+        assertTrue(vm.state.value.saving)
+        vm.onField(MacroField.FAT, "99")
+        assertEquals("55", vm.state.value.edit!!.fat)
+        zone.clearUserState() // signed out / another user signed in
+        gate.complete(Unit)
+        assertFalse(vm.state.value.saved)
+        assertEquals(MacroTargets(90, null, null, 2000), vm.state.value.targets)
+    }
+
+    @Test fun parseGramsRules() {
+        assertEquals(GramsInput.Ok(null), parseGrams(""))
+        assertEquals(GramsInput.Ok(null), parseGrams("  "))
+        assertEquals(GramsInput.Ok(null), parseGrams("0"))
+        assertEquals(GramsInput.Ok(null), parseGrams("000"))
+        assertEquals(GramsInput.Ok(7), parseGrams("007"))
+        assertEquals(GramsInput.Ok(1000), parseGrams("1000"))
+        assertEquals(GramsInput.Invalid(GramsError.TOO_LARGE), parseGrams("1001"))
+        assertEquals(GramsInput.Invalid(GramsError.TOO_LARGE), parseGrams("99999999999999"))
+        listOf("1.5", "-3", "1e3", "abc", "1,000", "+5").forEach {
+            assertEquals(it, GramsInput.Invalid(GramsError.NOT_WHOLE), parseGrams(it))
+        }
+    }
+
+    @Test fun changesIsNullWhenNothingDiffers() {
+        val t = MacroTargets(90, null, 50, 2000)
+        assertNull(MacroEdit("90", "", "50").changes(t))
+        assertNull(MacroEdit("090", "0", "50").changes(t)) // same values written differently
+        assertNull(MacroEdit("x", "", "50").changes(t))
+    }
+
     @Test fun unitsFollowThePreference() {
         val vm = vm()
         units.units.value = UnitSystem.IMPERIAL
@@ -154,6 +299,18 @@ class MacroFormatTest {
         assertEquals("• Daily calorie target", MacroFormat.missingItem(res, MacroInput.CALORIE_TARGET))
         assertEquals("• Weight", MacroFormat.missingItem(res, MacroInput.WEIGHT))
         assertEquals("• Other profile details", MacroFormat.missingItem(res, MacroInput.UNKNOWN))
+    }
+
+    @Test fun editAndSaveMessages() {
+        assertEquals("Enter a whole number of grams", MacroFormat.gramsError(res, GramsError.NOT_WHOLE))
+        assertEquals("At most 1,000 g", MacroFormat.gramsError(res, GramsError.TOO_LARGE))
+        assertEquals("Too many changes. Try again in 30 s.", MacroFormat.saveError(res, MacroError.RATE_LIMITED, 30_000))
+        assertEquals("Too many changes. Try again in 2 s.", MacroFormat.saveError(res, MacroError.RATE_LIMITED, 1_001))
+        assertEquals("Too many changes. Try again shortly.", MacroFormat.saveError(res, MacroError.RATE_LIMITED, null))
+        assertEquals("You're offline. Check your connection.", MacroFormat.saveError(res, MacroError.OFFLINE, null))
+        assertEquals("The server didn't accept these values. Check them and try again.", MacroFormat.saveError(res, MacroError.INVALID, null))
+        assertEquals("Couldn't save your targets. Nothing was changed.", MacroFormat.saveError(res, MacroError.FAILED, null))
+        assertEquals("Too many changes. Try again in 5 s.", MacroFormat.applyError(res, MacroError.RATE_LIMITED, 5_000))
     }
 
     @Test fun goalLabels() {
