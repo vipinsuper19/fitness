@@ -13,7 +13,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    defaultConfig {
+        // Placeholders until the real pages exist; override with -Pfitness.privacyUrl=... etc.
+        fun prop(name: String, default: String) = providers.gradleProperty(name).getOrElse(default)
+        buildConfigField("String", "PRIVACY_URL", "\"${prop("fitness.privacyUrl", "https://example.com/fitness/privacy")}\"")
+        buildConfigField("String", "TERMS_URL", "\"${prop("fitness.termsUrl", "https://example.com/fitness/terms")}\"")
+        buildConfigField("String", "HELP_URL", "\"${prop("fitness.helpUrl", "https://example.com/fitness/help")}\"")
+        buildConfigField("String", "FEEDBACK_EMAIL", "\"${prop("fitness.feedbackEmail", "feedback@example.com")}\"")
+    }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
@@ -31,4 +43,21 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(projects.core.testing)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
+
+// Release builds must not ship the example.com placeholders (debug builds may).
+val checkReleaseLegalUrls by tasks.registering {
+    val values = listOf("fitness.privacyUrl", "fitness.termsUrl", "fitness.helpUrl", "fitness.feedbackEmail")
+        .associateWith { providers.gradleProperty(it).orNull }
+    doLast {
+        val missing = values.filterValues { it == null || it.contains("example.com") }.keys
+        check(missing.isEmpty()) { "Release build needs real legal/help links; set -P${missing.joinToString(" -P") { "$it=..." }}" }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkReleaseLegalUrls) }

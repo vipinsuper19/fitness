@@ -5,7 +5,7 @@ Adds optional daily macro targets to the profile so `/nutrition/summary` can rep
 ## Fields
 - `dailyProteinTargetG`, `dailyCarbsTargetG`, `dailyFatTargetG`: `integer | null`, grams per day, range **0–1000**, on `Profile` (read) and `ProfileUpdate` (`PATCH /profile`).
 - Naming matches the existing `dailyCalorieTargetKcal` / `dailyWaterTargetMl`.
-- **PATCH semantics:** each field is optional. Leaving a field **out** of the body keeps the stored value; sending an explicit **`null`** clears it. Out of range or non-integer → 400 `VALIDATION_ERROR`.
+- **PATCH semantics:** each field is optional. Leaving a field **out** of the body keeps the stored value; sending an explicit **`null`** clears it. Out of range or non-integer → 400 `VALIDATION_FAILED`.
 - **0 is normalized to null.** A PATCH may send 0 (accepted range stays 0–1000), but it is stored as `null`. `GET /profile`, `GET /me` and `GET /me/export` therefore never return 0 for these fields; null is the only "no target" value.
 - Default for new and existing profiles: `null` (nullable columns, no backfill).
 
