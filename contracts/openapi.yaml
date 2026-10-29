@@ -570,6 +570,34 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+  /workout-plans/{planId}/unarchive:
+    post:
+      tags: [workout-plans]
+      operationId: unarchiveWorkoutPlan
+      summary: Restore an archived plan (it is not activated)
+      description: |
+        Clears `archivedAt`. The plan is never activated by this call. It comes back
+        `paused` if it was paused when archived (archive keeps `pausedAt`), so
+        `activate` with `resume: true` continues its week; otherwise it comes back
+        `inactive`. No version is created: `version` and every version's contents are
+        unchanged, and `activatedAt` keeps its value. Sessions and XP are untouched, and no
+        XP is awarded. Archiving an active plan pauses it first, so such a plan comes back
+        `paused`. Idempotent: a plan that is not archived (active, paused or inactive) also
+        returns 200 with the plan and nothing changes, so a retry after a lost response is
+        safe. Unlike archive and deactivate (which return 204), unarchive always returns the
+        plan, so the client can show the restored status.
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Restored, or already not archived (no change); the latest version, with `archivedAt` null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkoutPlan' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
   /workout-plans/{planId}/name:
     put:
       tags: [workout-plans]
