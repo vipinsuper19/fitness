@@ -25,7 +25,7 @@ The migration changes no data. It is a plain `CREATE INDEX` (Prisma migrations r
 
 ## Findings, not changed here
 
-- **XP ledger cursor pages**: the service's cursor is `created_at < t OR (created_at = t AND id < i)`. Postgres can't use that as an index range, so page *n* walks and discards every newer row (the plan shows `Rows Removed by Filter`). Cost grows with page depth. A row comparison `(created_at, id) < (t, i)` is an index range (the test prints that plan too). This would need raw SQL in `XpService.ledger`; it is a follow-up.
+- **XP ledger cursor pages** (fixed in the follow-up, branch `backend/xp-ledger-row-cursor`): the cursor used to be `created_at < t OR (created_at = t AND id < i)`. Postgres can't use that as an index range, so page *n* walked and discarded every newer row (`Rows Removed by Filter`), and cost grew with page depth. `XpService.ledger` now uses the row comparison `(created_at, id) < (t, i)` in parameterised raw SQL. That is a pure index range on `xp_transactions_user_id_created_at_id_idx`, and the audit asserts it. Response shape, order and cursor format are unchanged; `test/xp-ledger-paging.int-spec.ts` pages through same-`created_at` ties at several page sizes.
 - **Strength** reads visit each completed session in the range, then its set logs. That is linear in sessions, about 1 ms for 150 sessions. An `exercise_set_logs (user_id, exercise_id)` index was tried and not chosen by the planner, so it was not added.
 - **`workout_sessions_user_id_status_idx`** is a prefix of `workout_sessions_user_id_status_completed_at_idx`. It is redundant, but it was left alone: this PR only adds what helps.
 - **90-day nutrition summary** reads one heap page per log row (~360). That takes ~2 ms and was left as is.

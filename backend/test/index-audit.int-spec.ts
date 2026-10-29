@@ -74,9 +74,9 @@ const QUERIES: Record<string, string> = {
   'diary: water total for a day (GET /nutrition/daily)': `SELECT sum(amount_ml) FROM water_logs WHERE user_id = '${U}' AND date = '2026-06-01'`,
   'diary: 90-day food totals by date (GET /nutrition/summary)': `SELECT date, sum(energy_kcal) FROM food_logs WHERE user_id = '${U}' AND date BETWEEN '2026-08-01' AND '2026-10-29' GROUP BY date`,
   'xp: ledger first page (GET /xp/ledger)': `SELECT * FROM xp_transactions WHERE user_id = '${U}' ORDER BY created_at DESC, id DESC LIMIT 21`,
-  'xp: ledger next page (cursor)': `SELECT * FROM xp_transactions WHERE user_id = '${U}' AND (created_at < '2026-06-01' OR (created_at = '2026-06-01' AND id < 'ffffffff-ffff-4fff-bfff-ffffffffffff')) ORDER BY created_at DESC, id DESC LIMIT 21`,
-  // Finding, not used by the service yet: the same page as a row comparison is an index range.
-  'finding: ledger next page as a row comparison': `SELECT * FROM xp_transactions WHERE user_id = '${U}' AND (created_at, id) < ('2026-06-01', 'ffffffff-ffff-4fff-bfff-ffffffffffff') ORDER BY created_at DESC, id DESC LIMIT 21`,
+  'xp: ledger next page, old OR form (before the row cursor)': `SELECT * FROM xp_transactions WHERE user_id = '${U}' AND (created_at < '2026-06-01' OR (created_at = '2026-06-01' AND id < 'ffffffff-ffff-4fff-bfff-ffffffffffff')) ORDER BY created_at DESC, id DESC LIMIT 21`,
+  // What XpService.ledger runs since the row-cursor change: an index range.
+  'xp: ledger next page (cursor)': `SELECT * FROM xp_transactions WHERE user_id = '${U}' AND (created_at, id) < ('2026-06-01', 'ffffffff-ffff-4fff-bfff-ffffffffffff') ORDER BY created_at DESC, id DESC LIMIT 21`,
   'xp: balance (GET /xp/balance)': `SELECT sum(amount) FROM xp_transactions WHERE user_id = '${U}'`,
   'xp: achievements XP sum': `SELECT sum(amount) FROM xp_transactions WHERE user_id = '${U}' AND source_type IN ('workout_session', 'adjustment', 'session_correction')`,
   'target history: newest row': `SELECT * FROM profile_target_history WHERE user_id = '${U}' ORDER BY effective_from DESC LIMIT 1`,
@@ -154,9 +154,10 @@ describeDb('index audit: hot read paths (EXPLAIN ANALYZE on seeded data)', () =>
     }
   });
 
-  it('finding: the ledger cursor (OR form) filters every newer row; a row comparison would not', () => {
-    expect(plans.get('xp: ledger next page (cursor)')).toMatch(/Rows Removed by Filter: [1-9]/);
-    expect(plans.get('finding: ledger next page as a row comparison')).toMatch(/Index Cond: .*ROW\(created_at, id\) </);
+  it('the ledger cursor is an index range (row comparison); the old OR form filtered every newer row', () => {
+    expect(plans.get('xp: ledger next page, old OR form (before the row cursor)')).toMatch(/Rows Removed by Filter: [1-9]/);
+    expect(plans.get('xp: ledger next page (cursor)')).toMatch(/Index Cond: .*ROW\(created_at, id\) </);
+    expect(plans.get('xp: ledger next page (cursor)')).not.toMatch(/Rows Removed by Filter|Sort/);
   });
 
   it('target history reads use the (user_id, effective_from) primary key', () => {

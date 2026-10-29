@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 
 import { decodeTimeCursor, encodeCursor } from '../common/cursor';
-import type { Prisma, XPTransaction, XpSourceType } from '../generated/prisma/client';
+import { Prisma } from '../generated/prisma/client';
+import type { XPTransaction, XpSourceType } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { balanceFor, XpBalance } from './xp.rules';
 
@@ -46,14 +47,15 @@ export class XpService {
 
   async ledger(userId: string, cursor?: string, limit = 20): Promise<{ items: XpEntryView[]; nextCursor: string | null }> {
     const after = decodeTimeCursor(cursor);
-    const rows = await this.prisma.xPTransaction.findMany({
-      where: {
-        userId,
-        ...(after ? { OR: [{ createdAt: { lt: after.t } }, { createdAt: after.t, id: { lt: after.id } }] } : {}),
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-    });
+    // Keyset paging as a row comparison, so (user_id, created_at, id) serves it as an index range;
+    // the equivalent OR form made Postgres walk and discard every newer row (docs/specs/index-audit.md).
+    const rows = await this.prisma.$queryRaw<XPTransaction[]>`
+      SELECT id, user_id AS "userId", source_type AS "sourceType", source_id AS "sourceId", amount, reason, created_at AS "createdAt"
+      FROM xp_transactions
+      WHERE user_id = ${userId}::uuid
+        ${after ? Prisma.sql`AND (created_at, id) < (${after.t}::timestamptz, ${after.id}::uuid)` : Prisma.empty}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${limit + 1}`;
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return {
