@@ -14,11 +14,11 @@ export class GoalCreateDto {
   @IsIn(GOAL_TYPES)
   type!: GoalTypeValue;
 
-  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, description: 'kg for weight goals, count for workouts_per_week' })
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, maximum: 999_999, description: 'kg for weight goals, count for workouts_per_week' })
   @IsOptional() @IsNumber(value) @Min(0) @Max(999_999)
   targetValue?: number | null;
 
-  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0 })
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, maximum: 999_999 })
   @IsOptional() @IsNumber(value) @Min(0) @Max(999_999)
   startValue?: number | null;
 
@@ -32,7 +32,7 @@ export class GoalUpdateDto {
   @IsDefinedWhenPresent() @IsIn(GOAL_STATUSES)
   status?: (typeof GOAL_STATUSES)[number];
 
-  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0 })
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: 0, maximum: 999_999 })
   @IsOptional() @IsNumber(value) @Min(0) @Max(999_999)
   targetValue?: number | null;
 
