@@ -9,7 +9,7 @@ Scope (Tech Lead): **list, pause/resume, archive, unarchive**. Rename is a later
 | `GET /workout-plans?status=active\|paused\|inactive\|archived&cursor&limit` | Page of `WorkoutPlanSummary {id, name, source, version, status, isActive, currentWeek, totalWeeks, activatedAt, pausedAt, archivedAt, createdAt, completedSessions}`, newest first; enough for the list screen with no per-plan GET. No `status` = everything except archived. |
 | `POST /workout-plans/{planId}/deactivate` | 204. Pauses: if active, clears the profile's active plan and sets `paused_at = now`. Idempotent (inactive/paused/archived → 204, no change). |
 | `POST /workout-plans/{planId}/activate` body `{resume?: boolean}` | 200 `WorkoutPlan`. Default restarts at week 1 (unchanged). `resume: true` continues a paused plan's week. |
-| `POST /workout-plans/{planId}/unarchive` | 200 `WorkoutPlan`. Clears `archivedAt`; back to `paused` or `inactive`, never active. Not archived → 204 no-op. |
+| `POST /workout-plans/{planId}/unarchive` | 200 `WorkoutPlan`. Clears `archivedAt`; back to `paused` or `inactive`, never active. Not archived → 200, no change. |
 | `DELETE /workout-plans/{planId}` | 204. Archives (soft delete). Deactivates first if active. Repeat = no-op (keeps the first `archivedAt`). |
 
 Unknown or other users' plans → 404 (malformed ids too, as elsewhere). All writes take an optional `Idempotency-Key`.
@@ -26,12 +26,12 @@ Unknown or other users' plans → 404 (malformed ids too, as elsewhere). All wri
 
 - **Endpoint:** `POST /workout-plans/{planId}/unarchive`, with no body. It follows the action style of `/activate` and `/deactivate`, and returns 200 with the latest-version `WorkoutPlan`.
 - **Resulting status:** the call sets `archived_at = null` and changes nothing else.
-  - A plan paused when it was archived (archive keeps `paused_at`) comes back `paused`, and `activate { resume: true }` continues its week.
-  - Any other plan comes back `inactive`.
+  - A plan paused when it was archived (archive keeps `paused_at`) comes back `paused`, and `activate { resume: true }` continues its week. **Archiving an active plan pauses it first** (`pauseIfActive` sets `paused_at` = archive time), so an active plan that was archived also comes back `paused`.
+  - Only a plan that was inactive when archived comes back `inactive`.
   - It never becomes active: the profile's `active_plan_id` is untouched, and the current active plan stays active.
 - **Version:** no new version. `version`, all version contents and names, `activatedAt` and `createdAt` are unchanged. `workout_plans.updated_at` is bumped (not exposed).
-- **Not archived:** active, paused and inactive plans (including one just unarchived) return `204` with no change. This is idempotent and consistent with archive (repeat = 204 no-op), and has no new error code.
-- **Idempotency:** a retry after success returns 204, which is safe. An optional `Idempotency-Key` behaves as on other writes: the same key replays the original 200, and the same key with a different request is a conflict (409).
+- **Not archived:** active, paused and inactive plans (including one just unarchived) return `200` with the plan and no change. This is idempotent. **Difference from archive and deactivate:** they return `204`, but unarchive always returns `200` with the plan, so the client gets the restored `status` and `pausedAt` without another GET.
+- **Idempotency:** a retry after success returns 200 with the same plan. An optional `Idempotency-Key` behaves as on other writes: the same key replays the original 200, and the same key with a different request is a conflict (409).
 - **Errors:** missing or invalid token → `401`. Unknown plan, another user's plan or a malformed id → `404`.
 - **Reads:** afterwards the plan appears in `GET /workout-plans` with no `status` filter, and under `?status=paused` or `inactive`. It no longer appears under `?status=archived`. `GET /workout-plans/active` is unchanged. `PATCH`, rename and `activate` work on it again.
 - **No migration needed.**
@@ -40,10 +40,10 @@ Unknown or other users' plans → 404 (malformed ids too, as elsewhere). All wri
 
 - Archive an inactive plan, then unarchive it: 200, `archivedAt` null, `status` `inactive`, `version` unchanged, no new version row, and the list filters move it from `archived` to `inactive`.
 - Pause a plan, archive it, then unarchive it: `status` `paused` with the same `pausedAt`. `activate { resume: true }` then continues the week (with a faked clock).
-- Archive the active plan, then unarchive it: `inactive`, `/active` returns 204. With another plan active meanwhile, that plan stays active.
+- Archive the active plan, then unarchive it: `paused` (archive calls `pauseIfActive`), `pausedAt` equals the archive time, and `/active` returns 204. If another plan was activated meanwhile, that plan stays active.
 - `activatedAt` is unchanged. `PATCH` and `activate` return 409 `PLAN_ARCHIVED` before the call and 200 after.
-- Not archived (active, paused or inactive): 204, with no change to status, `pausedAt` or `updated_at`.
-- A second unarchive without a key returns 204 and the plan is unchanged. With the same `Idempotency-Key`, it replays the original 200.
+- Not archived (active, paused or inactive): 200 with the plan, and no change to status, `pausedAt` or `updated_at`.
+- A second unarchive without a key returns 200 with an identical body. With the same `Idempotency-Key`, it replays the original 200.
 - 401 without a token. 404 for an unknown id, another user's plan and a malformed id.
 - Sessions, history and the XP ledger are unchanged.
 
