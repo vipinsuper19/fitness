@@ -62,17 +62,45 @@ export class HealthController {
   @RateLimit('healthDeep')
   @ApiOkResponse({ description: 'Database reachable' })
   async deep(@Res({ passthrough: true }) res: Response): Promise<DeepHealthResponse> {
-    if ((await withTimeout(this.prisma.$queryRaw`SELECT 1`)) === FAILED) {
+    const probe = { dbUp: false, migration: undefined as unknown };
+    // One transaction under SET LOCAL statement_timeout: Postgres cancels a hung query, so the pooled connection is
+    // released. The app-level guard bounds the whole endpoint (pool wait + both queries) to one DEEP_TIMEOUT_MS budget.
+    await withTimeout(
+      withStatementTimeout(this.prisma, async (tx) => {
+        await tx.$queryRaw`SELECT 1`;
+        probe.dbUp = true;
+        const rows = await tx.$queryRaw<{ migration_name: string }[]>`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY finished_at DESC, migration_name DESC LIMIT 1`;
+        probe.migration = rows[0]?.migration_name;
+      }),
+    );
+    if (!probe.dbUp) {
       res.status(503);
       return { status: 'degraded', db: 'down', migration: null };
     }
-    const rows = await withTimeout(
-      this.prisma.$queryRaw<{ migration_name: string }[]>`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY finished_at DESC, migration_name DESC LIMIT 1`,
-    );
-    const name = rows === FAILED ? undefined : rows[0]?.migration_name;
+    const name = probe.migration;
     const migration = typeof name === 'string' && /^[A-Za-z0-9_.-]{1,255}$/.test(name) ? name : null;
     return { status: migration ? 'ok' : 'degraded', db: 'up', migration };
   }
+}
+
+/** The SQL literal for DEEP_TIMEOUT_MS (`SET LOCAL` takes no bind parameters). */
+export const STATEMENT_TIMEOUT = '2s';
+
+type Tx = Pick<PrismaService, '$queryRaw' | '$executeRawUnsafe'>;
+
+/**
+ * Runs `fn` in one interactive transaction whose statements are cancelled by Postgres after STATEMENT_TIMEOUT
+ * (`SET LOCAL`, so it ends with the transaction and never leaks onto the pooled connection; works with pgbouncer's
+ * transaction mode). Prisma's own maxWait/timeout bound the pool wait and the transaction.
+ */
+export function withStatementTimeout<T>(prisma: PrismaService, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = '${STATEMENT_TIMEOUT}'`);
+      return fn(tx);
+    },
+    { maxWait: DEEP_TIMEOUT_MS, timeout: DEEP_TIMEOUT_MS + 500 },
+  );
 }
 
 const FAILED: unique symbol = Symbol('failed');

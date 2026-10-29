@@ -5,13 +5,22 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 
+import { withStatementTimeout } from '../src/health/health.controller';
+import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './helpers';
 
 const CONN = 'postgresql://svc_user:Sup3rS3cretPw@db.abcdefghij.supabase.co:6543/postgres?pgbouncer=true';
-type Mode = 'ok' | 'dbThrows' | 'dbHangs' | 'migrationThrows' | 'noMigrations';
+type Mode = 'ok' | 'dbThrows' | 'dbHangs' | 'migrationHangs' | 'migrationThrows' | 'noMigrations';
+const executed: string[] = [];
 let mode: Mode = 'ok';
 
-const stubPrisma = {
+const stubPrisma: Record<string, unknown> = {
+  // One interactive transaction: the tx client is the stub itself.
+  $transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(stubPrisma),
+  $executeRawUnsafe: async (sql: string) => {
+    executed.push(sql);
+    return 0;
+  },
   $connect: async () => {},
   $disconnect: async () => {},
   $queryRaw: (strings: TemplateStringsArray) => {
@@ -21,6 +30,7 @@ const stubPrisma = {
     if (mode === 'dbHangs') return new Promise(() => {});
     if (sql.includes('_prisma_migrations')) {
       if (mode === 'migrationThrows') return fail();
+      if (mode === 'migrationHangs') return new Promise(() => {});
       return Promise.resolve(mode === 'noMigrations' ? [] : [{ migration_name: '20261020000000_add_things' }]);
     }
     return Promise.resolve([{ '?column?': 1 }]);
@@ -61,9 +71,23 @@ describe('GET /health/deep (stub database)', () => {
     mode = 'dbHangs';
     const started = process.hrtime.bigint();
     const res = await http().get('/health/deep').expect(503);
-    expect(Number(process.hrtime.bigint() - started) / 1e6).toBeLessThan(4000);
+    expect(Number(process.hrtime.bigint() - started) / 1e6).toBeLessThan(2500);
     expect(res.body).toEqual({ status: 'degraded', db: 'down', migration: null });
   }, 10_000);
+
+  it('one 2 s budget for the whole check: SELECT 1 ok then a hung migration read → 200 degraded within ~2.5 s (not 4 s)', async () => {
+    mode = 'migrationHangs';
+    const started = process.hrtime.bigint();
+    const res = await http().get('/health/deep').expect(200);
+    expect(Number(process.hrtime.bigint() - started) / 1e6).toBeLessThan(2500);
+    expect(res.body).toEqual({ status: 'degraded', db: 'up', migration: null });
+  }, 10_000);
+
+  it("runs inside a transaction with SET LOCAL statement_timeout = '2s'", async () => {
+    executed.length = 0;
+    await http().get('/health/deep').expect(200);
+    expect(executed).toEqual(["SET LOCAL statement_timeout = '2s'"]);
+  });
 
   it.each<Mode>(['migrationThrows', 'noMigrations'])('%s → 200 degraded, db up, migration null', async (m) => {
     mode = m;
@@ -101,6 +125,17 @@ const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
   it('reports the latest applied migration and leaks nothing from DATABASE_URL', async () => {
     const app = await createTestApp();
     try {
+      const prisma = app.get(PrismaService);
+      // statement_timeout really cancels a hung query (SQLSTATE 57014), well before pg_sleep(5) ends.
+      const started = process.hrtime.bigint();
+      const err = await withStatementTimeout(prisma, (tx) => tx.$queryRaw`SELECT pg_sleep(5)`).then(() => null, (e: unknown) => e);
+      const ms = Number(process.hrtime.bigint() - started) / 1e6;
+      expect(String((err as { message?: string } | null)?.message ?? err)).toMatch(/57014|statement timeout|canceling statement/i);
+      expect(ms).toBeGreaterThan(1500);
+      expect(ms).toBeLessThan(3500);
+      // SET LOCAL ends with the transaction: the pooled connection keeps the server default afterwards.
+      const [after] = await prisma.$queryRaw<{ statement_timeout: string }[]>`SHOW statement_timeout`;
+      expect(after!.statement_timeout).not.toBe('2s');
       const res = await request(app.getHttpServer()).get('/health/deep').expect(200);
       expect(res.body).toEqual({ status: 'ok', db: 'up', migration: expect.stringMatching(/^\d{14}_[a-z0-9_]+$/) });
       const url = new URL(process.env.DATABASE_URL!);
