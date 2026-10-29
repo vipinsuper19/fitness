@@ -1854,6 +1854,9 @@ components:
         currency: { type: string, const: INR }
         dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
         dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
+        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
         onboardingCompleted: { type: boolean }
         updatedAt: { type: string, format: date-time }
     ProfileUpdate:
@@ -1872,6 +1875,9 @@ components:
         timezone: { type: string, maxLength: 64 }
         dailyCalorieTargetKcal: { type: [integer, 'null'], minimum: 800, maximum: 6000 }
         dailyWaterTargetMl: { type: [integer, 'null'], minimum: 250, maximum: 10000 }
+        dailyProteinTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily protein target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyCarbsTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily carbs target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
+        dailyFatTargetG: { type: [integer, 'null'], minimum: 0, maximum: 1000, description: 'Daily fat target in grams (integer, 0–1000). Explicit only: never derived from the calorie target. On PATCH, omit to keep, null to clear; 0 is accepted but stored as null, so reads never return 0. Takes effect from now; summaries for all periods, including past ones, use the current value.' }
         onboardingCompleted: { type: boolean }
     DataExport:
       type: object
@@ -2351,9 +2357,9 @@ components:
       required: [kcal, proteinG, carbsG, fatG, waterMl]
       properties:
         kcal: { type: [integer, 'null'], description: '`dailyCalorieTargetKcal`' }
-        proteinG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
-        carbsG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
-        fatG: { type: [number, 'null'], description: Always null until macro targets exist in the profile }
+        proteinG: { type: [integer, 'null'], description: '`dailyProteinTargetG`; null when unset (0 is normalized to null)' }
+        carbsG: { type: [integer, 'null'], description: '`dailyCarbsTargetG`; null when unset (0 is normalized to null)' }
+        fatG: { type: [integer, 'null'], description: '`dailyFatTargetG`; null when unset (0 is normalized to null)' }
         waterMl: { type: [integer, 'null'], description: '`dailyWaterTargetMl`' }
     NutritionAdherence:
       type: object
@@ -2362,7 +2368,7 @@ components:
         the period or their target is null; `waterPct` is null when no water was logged or `targets.waterMl` is null. A target
         of 0 is treated as null.
         `kcalPct` = `avgPerLoggedDay.energyKcal` / `targets.kcal` × 100; `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro>` / `targets.<macro>` × 100
-        (null until macro targets exist); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
+        (each macro pct is null when its own target is null, independently of the others; current targets apply to every period, including past ones); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
       required: [kcalPct, proteinPct, carbsPct, fatPct, waterPct]
       properties:
         kcalPct: { type: [number, 'null'], minimum: 0 }
