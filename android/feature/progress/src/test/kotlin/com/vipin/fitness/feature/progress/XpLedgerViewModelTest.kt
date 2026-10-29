@@ -58,6 +58,6 @@ class XpLedgerViewModelTest {
         assertEquals("+5", XpFormat.amount(5))
         assertEquals("+0", XpFormat.amount(0))
         // 06:30Z is 12:00 IST.
-        assertEquals("20 Oct 2026, 12:00 pm", XpFormat.time(corr)?.lowercase())
+        assertEquals("20 oct 2026, 12:00 pm", XpFormat.time(corr)?.lowercase())
     }
 }
