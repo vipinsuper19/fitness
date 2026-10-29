@@ -34,7 +34,8 @@ class HomeViewModelTest {
     // Wed 21 Oct 2026, 23:50 IST.
     private val clock = MutableClock(Instant.parse("2026-10-21T18:20:00Z"))
     private val oct21 = LocalDate.of(2026, 10, 21)
-    private fun vm() = HomeViewModel(home, workouts, progress, FakeUnitPreference(), clock)
+    private val goals = com.vipin.fitness.core.testing.FakeGoalsRepository()
+    private fun vm() = HomeViewModel(home, workouts, progress, FakeUnitPreference(), clock, com.vipin.fitness.core.data.GoalProgressService(goals, progress, clock, com.vipin.fitness.core.data.ProfileZone { com.vipin.fitness.core.testing.FakeProfileRepository() }))
     private fun <T> Slot<T>.value() = (this as Slot.Ready<T>).value
 
     private fun plan(name: String, vararg days: Pair<DayOfWeek, String>) = WorkoutPlan(
@@ -106,5 +107,13 @@ class HomeViewModelTest {
         assertEquals(PlanWeek.Finished, vm().state.value.plan.value().week)
         workouts.refreshResult = { ApiResult.Success(ActivePlan.Some(base)) }
         assertNull(vm().state.value.plan.value().week)
+    }
+
+    @Test fun goalsSlotShowsActiveGoalProgress() {
+        goals.goals += com.vipin.fitness.core.data.Goal("g1", com.vipin.fitness.core.data.GoalType.WORKOUTS_PER_WEEK, com.vipin.fitness.core.data.GoalStatus.ACTIVE, 4.0, null, null)
+        progress.points = mapOf(oct21 to ProgressPoint(oct21, workoutsCompleted = 2))
+        val p = vm().state.value.goals.value().single()
+        assertEquals(0.5, p.fraction!!, 1e-9)
+        assertEquals(50, p.milestone)
     }
 }

@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.common.UnitSystem
 import com.vipin.fitness.core.data.DailyNutrition
+import com.vipin.fitness.core.data.GoalProgress
+import com.vipin.fitness.core.data.GoalProgressService
 import com.vipin.fitness.core.data.HomeRepository
 import com.vipin.fitness.core.data.ProgressRepository
 import com.vipin.fitness.core.data.UnitPreference
@@ -61,6 +63,8 @@ data class HomeState(
     val nutrition: Slot<DailyNutrition> = Slot.Loading,
     val streak: Slot<Streak> = Slot.Loading,
     val xp: Slot<XpBalance> = Slot.Loading,
+    /** Active goals with progress (empty = no goals). */
+    val goals: Slot<List<GoalProgress>> = Slot.Loading,
 )
 
 /** Home dashboard: today's plan day, today's nutrition and water, streak and XP. */
@@ -71,6 +75,7 @@ class HomeViewModel @Inject constructor(
     private val progress: ProgressRepository,
     units: UnitPreference,
     private val clock: Clock,
+    private val goals: GoalProgressService,
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeState(today = clock.today()))
     val state: StateFlow<HomeState> = _state.asStateFlow()
@@ -124,6 +129,10 @@ class HomeViewModel @Inject constructor(
         jobs += viewModelScope.launch {
             val r = home.xpBalance()
             _state.update { s -> if (s.today != today) s else s.copy(xp = r.toSlot { it }) }
+        }
+        jobs += viewModelScope.launch {
+            val r = goals.load()
+            _state.update { s -> if (s.today != today) s else s.copy(goals = r.toSlot { it }) }
         }
     }
 
