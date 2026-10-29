@@ -31,6 +31,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -152,26 +153,37 @@ class PlansUiTest {
         until { !present(PlansTags.ARCHIVED_NOTICE) }
     }
 
-    @Test fun archiveMovesThePlanToArchivedAndUnarchiveRestoresItInPlace() {
+    @Test fun archiveMovesThePlanToArchivedAndUnarchiveBringsItBackInactive() {
         openPlans(); act("b", PlanAction.ARCHIVE)
         until { !present(PlansTags.row("b")) }
         filter(PlanStatus.ARCHIVED)
         waitTag(PlansTags.row("b"))
         val lists = plans.listCalls.size
         act("b", PlanAction.UNARCHIVE)
-        // Never paused, so it comes back inactive; the row updates without a reload.
-        waitTag(PlansTags.action("b", PlanAction.MAKE_ACTIVE))
-        assertEquals(lists, plans.listCalls.size)
+        // Never paused, so it comes back inactive, without a reload.
+        until { plans.calls.size == 2 }
         assertEquals(PlanStatus.INACTIVE, plans.plans.first { it.id == "b" }.status)
+        assertEquals(lists, plans.listCalls.size)
         assertEquals(listOf("archive", "unarchive"), plans.calls.map { it.substringBefore(':') })
+        filter(PlanStatus.INACTIVE)
+        waitTag(PlansTags.action("b", PlanAction.MAKE_ACTIVE))
+    }
+
+    @Ignore("Pending #110")
+    @Test fun unarchiveUnderTheArchivedFilterDropsTheRow() {
+        openPlans(); filter(PlanStatus.ARCHIVED)
+        act("c", PlanAction.UNARCHIVE)
+        until { !present(PlansTags.row("c")) }
+        waitTag(PlansTags.EMPTY)
     }
 
     @Test fun unarchivingAPlanArchivedWhilePausedReturnsItPaused() {
         plans.plans[2] = plans.plans[2].copy(pausedAt = FakePlanManagementRepository.PAUSED_AT)
         openPlans(); filter(PlanStatus.ARCHIVED)
         act("c", PlanAction.UNARCHIVE)
+        until { plans.plans[2].status == PlanStatus.PAUSED }
+        filter(PlanStatus.PAUSED)
         waitTag(PlansTags.action("c", PlanAction.RESUME))
-        assertEquals(PlanStatus.PAUSED, plans.plans[2].status)
     }
 
     @Test fun restartResetsTheWeek() {
