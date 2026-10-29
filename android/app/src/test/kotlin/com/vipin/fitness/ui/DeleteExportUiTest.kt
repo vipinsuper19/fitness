@@ -68,8 +68,22 @@ class DeleteExportUiTest {
      * On a device cacheDir never moves, so this only affects tests.
      */
     private fun resetFileProviderCache() {
-        val f = androidx.core.content.FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
-        (f.get(null) as MutableMap<*, *>).clear()
+        // FileProvider caches path strategies in a private static `sCache`; Robolectric reuses the
+        // class across tests, so a stale entry from an earlier test breaks export. If an androidx
+        // upgrade renames or retypes the field, fail loudly here instead of as a confusing export failure.
+        val field = try {
+            androidx.core.content.FileProvider::class.java.getDeclaredField("sCache").apply { isAccessible = true }
+        } catch (e: NoSuchFieldException) {
+            throw AssertionError(
+                "FileProvider.sCache not found (androidx.core changed?). Update resetFileProviderCache() " +
+                    "so export tests don't share a stale FileProvider path cache.", e,
+            )
+        }
+        val cache = field.get(null)
+        check(cache is MutableMap<*, *>) {
+            "FileProvider.sCache is ${cache?.javaClass?.name ?: "null"}, expected a MutableMap; update resetFileProviderCache()."
+        }
+        cache.clear()
     }
 
     @After fun tearDown() { scenario?.close() }
