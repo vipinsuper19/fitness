@@ -1,0 +1,53 @@
+{
+  "id": "3c7e9a1b-5d2f-4a6c-8e0b-1f3d5a7c9e24",
+  "version": 4,
+  "name": "Push focus",
+  "weeks": 8,
+  "workouts": [
+    {
+      "id": "0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01",
+      "dayOfWeek": 1,
+      "name": "Push",
+      "exercises": [
+        {
+          "exerciseId": "5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13",
+          "order": 0,
+          "sets": 3,
+          "repsMin": 8,
+          "repsMax": 10,
+          "targetWeightKg": 40,
+          "durationSeconds": null,
+          "restSeconds": 90,
+          "notes": null
+        },
+        {
+          "exerciseId": "8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81",
+          "order": 1,
+          "sets": 3,
+          "repsMin": null,
+          "repsMax": null,
+          "targetWeightKg": null,
+          "durationSeconds": 65,
+          "restSeconds": 60,
+          "notes": null
+        },
+        {
+          "exerciseId": "e4b6d8f0-2a4c-4e6a-9b1d-3f5a7c9e0b42",
+          "order": 2,
+          "sets": 3,
+          "repsMin": 8,
+          "repsMax": 10,
+          "targetWeightKg": 30,
+          "durationSeconds": null,
+          "restSeconds": 90,
+          "notes": null
+        }
+      ]
+    }
+  ],
+  "isActive": true,
+  "source": "rule_based",
+  "createdAt": "2026-10-20T09:00:00+05:30",
+  "currentWeek": 2,
+  "planEnded": false
+}

@@ -362,3 +362,13 @@ Local MockWebServer only; no 429s are ever triggered against prod. Single-write 
 | RL5 | Retry-After 999999 | Capped at 1 h | `hugeRetryAfterIsCappedAtAnHour` |
 | RL6 | Retry-After 0 | Minimum 1 s | `zeroRetryAfterStillWaitsTheMinimum` |
 | RL7 | 503 after the window | Normal backoff (no rate-limit wait), attempts counted | `a503AfterTheWindowIsNormalBackoffNotARateLimit` |
+### Outbox sync worker and 429 (#133) — `android/core/data/src/test/.../session/OutboxSyncWorkerRateLimitTest.kt`
+`OutboxSyncWorker` via `TestListenableWorkerBuilder` (androidx.work:work-testing, test-only) with a real `OutboxProcessor` on a local MockWebServer; never prod.
+
+| ID | Case | Expected | Test |
+|---|---|---|---|
+| WK1 | 429 (Retry-After 40) on the last attempt (runAttemptCount 12) | `success`, not `failure`; one reschedule at 40 s; write still queued | `a429OnTheLastAttemptIsSuccessAndReschedulesAfterRetryAfter` |
+| WK2 | 429 on the first attempt | `success`, not `retry` (no attempt spent); reschedule at 5 s | `a429OnTheFirstAttemptIsSuccessNotRetry` |
+| WK3 | Run inside the window | Nothing sent; `success`; reschedules for the remaining 20 s | `aRunInsideTheWindowSendsNothingAndReschedulesForTheRest` |
+| WK4 | 503 | `retry`, and `failure` on the last attempt; no reschedule | `a503StillSpendsAttemptsAndFailsOnTheLast` |
+| WK5 | After the window | Queue drains, `success`, no wait left | `afterTheWindowTheQueueDrainsToSuccess` |

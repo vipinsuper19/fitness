@@ -112,6 +112,7 @@ fun WorkoutHomeRoute(
                     } else {
                         Text(stringResource(R.string.rest_day_body))
                     }
+                    ProgressionSuggestionsRoute(plan.id)
                 }
                 Button(onClick = { onNavigate(WorkoutDestination.NewPlan) }, modifier = Modifier.fillMaxWidth().testTag("start_new_plan")) {
                     Text(stringResource(R.string.start_new_plan))
