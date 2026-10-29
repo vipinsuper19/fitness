@@ -72,6 +72,24 @@ class SessionCorrectionViewModelTest {
         assertEquals(CorrectionError.OFFLINE, vm.state.value.error)
     }
 
+    @Test fun deleteOfAnAlreadyDeletedSetCountsAsSuccess() {
+        // The first delete reached the server but its response was lost; the retry gets 404 SET_NOT_FOUND.
+        repo.failure = ApiResult.Failure(ApiError.Http(404, "SET_NOT_FOUND", "x", null))
+        val vm = vm()
+        val gone = session.sets.first().clientSetId
+        vm.deleteSet(gone, session)
+        val s = vm.state.value
+        assertEquals(null, s.error)
+        assertFalse(s.busy)
+        assertEquals(0, s.outcome?.xpDelta)
+        assertFalse(s.session!!.sets.any { it.clientSetId == gone })
+        assertEquals(session.sets.size - 1, s.session!!.sets.size)
+        // A 404 for anything else is still a failure.
+        repo.failure = ApiResult.Failure(ApiError.Http(404, "NOT_FOUND", "x", null))
+        vm.deleteSet(gone, session)
+        assertEquals(CorrectionError.FAILED, vm.state.value.error)
+    }
+
     @Test fun completedAtMustMoveEarlierOnTheSameDay() {
         val vm = vm()
         vm.correctCompletion(session, Instant.parse("2026-10-20T06:40:00Z"), null, null) // later

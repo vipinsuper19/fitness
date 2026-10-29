@@ -45,20 +45,30 @@ class DefaultWorkoutRepository @Inject constructor(
     private val _active = MutableStateFlow<ActivePlan?>(null)
     override val activePlan: StateFlow<ActivePlan?> = _active.asStateFlow()
     private val exerciseCache = ConcurrentHashMap<String, Exercise>()
+    /** Bumped on every clear, so a response for the previous user isn't cached (as in ProfileZone). */
+    @Volatile private var generation = 0
+
+    private fun setActive(value: ActivePlan, gen: Int) = synchronized(this) {
+        if (gen == generation) _active.value = value
+    }
 
     /** The catalog is shared, so the exercise cache stays; the plan is the user's. */
-    override suspend fun clearUserState() {
+    override suspend fun clearUserState() = synchronized(this) {
+        generation++
         _active.value = null
     }
 
-    override suspend fun refreshActivePlan(): ApiResult<ActivePlan> = apiCall(json) {
-        val r = api.active()
-        when {
-            r.code() == 204 -> ActivePlan.None
-            r.isSuccessful -> r.body()?.let { ActivePlan.Some(it.toDomain()) } ?: ActivePlan.None
-            else -> throw HttpException(r)
-        }
-    }.also { if (it is ApiResult.Success) _active.value = it.value }
+    override suspend fun refreshActivePlan(): ApiResult<ActivePlan> {
+        val gen = generation
+        return apiCall(json) {
+            val r = api.active()
+            when {
+                r.code() == 204 -> ActivePlan.None
+                r.isSuccessful -> r.body()?.let { ActivePlan.Some(it.toDomain()) } ?: ActivePlan.None
+                else -> throw HttpException(r)
+            }
+        }.also { if (it is ApiResult.Success) setActive(it.value, gen) }
+    }
 
     override suspend fun exercises(filter: ExerciseFilter, cursor: String?, limit: Int) = apiCall(json) {
         val page = api.exercises(
@@ -81,9 +91,11 @@ class DefaultWorkoutRepository @Inject constructor(
     override suspend fun create(draft: PlanDraft, idempotencyKey: String) =
         apiCall(json) { api.create(draft.toDto(), idempotencyKey).toDomain() }
 
-    override suspend fun activate(planId: String, idempotencyKey: String) =
-        apiCall(json) { api.activate(planId, idempotencyKey).toDomain() }
-            .also { if (it is ApiResult.Success) _active.value = ActivePlan.Some(it.value) }
+    override suspend fun activate(planId: String, idempotencyKey: String): ApiResult<WorkoutPlan> {
+        val gen = generation
+        return apiCall(json) { api.activate(planId, idempotencyKey).toDomain() }
+            .also { if (it is ApiResult.Success) setActive(ActivePlan.Some(it.value), gen) }
+    }
 }
 
 /** True for a 404 (e.g. an exercise removed from the catalog). */

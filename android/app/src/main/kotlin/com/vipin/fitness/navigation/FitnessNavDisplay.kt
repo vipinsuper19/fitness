@@ -27,6 +27,7 @@ import com.vipin.fitness.feature.workout.NewPlanRoute
 import com.vipin.fitness.feature.workout.PlanPreviewRoute
 import com.vipin.fitness.feature.workout.SessionSummaryRoute
 import com.vipin.fitness.feature.workout.HistoryRoute
+import com.vipin.fitness.feature.workout.PlansRoute
 import com.vipin.fitness.feature.workout.PastSessionRoute
 import com.vipin.fitness.feature.workout.WorkoutDestination
 import java.time.DayOfWeek
@@ -89,6 +90,7 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                                         is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
                                         WorkoutDestination.ActiveSession -> Route.ActiveSession
                                         WorkoutDestination.History -> Route.WorkoutHistory
+                                        WorkoutDestination.Plans -> Route.WorkoutPlans
                                     },
                                 )
                             },
@@ -139,6 +141,9 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                 Route.DeleteAccount -> NavEntry(key) {
                     // Deleted: same landing as sign-out (fresh SignIn, nothing to go back to).
                     DeleteAccountRoute(onDeleted = { AppNavigation.onSignedOut(stack) }, onCancel = { AppNavigation.pop(stack) })
+                }
+                Route.WorkoutPlans -> NavEntry(key) {
+                    PlansRoute(onNewPlan = { backStack.add(Route.WorkoutNewPlan) })
                 }
                 Route.WorkoutHistory -> NavEntry(key) {
                     HistoryRoute(onOpen = { backStack.add(Route.PastSession(it)) })
