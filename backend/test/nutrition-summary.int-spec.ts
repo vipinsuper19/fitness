@@ -11,7 +11,7 @@ import request from 'supertest';
 
 import { seed } from '../prisma/seed';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { createTestApp } from './helpers';
+import { backdateTargets, createTestApp } from './helpers';
 
 const run = process.env.DB_TESTS === '1' && !!process.env.DATABASE_URL;
 const describeDb = run ? describe : describe.skip;
@@ -105,11 +105,12 @@ describeDb('nutrition summary (HTTP + Postgres)', () => {
     expect(s.points[0].avgPerLoggedDay.energyKcal).toBe(100.2); // 100.15 -> 100.2 (float rounding gives 100.1)
   });
 
-  it('targets and adherence: current targets, null rules, 0 counted as null', async () => {
+  it('targets and adherence: constant (backdated) targets, null rules, 0 counted as null', async () => {
     const u = await signUp();
     const f = await food(u.token, 1000);
     await log(u.token, f, '2026-10-05');
     await api(u.token).put('/api/v1/me/profile').send({ dailyCalorieTargetKcal: 2000, dailyWaterTargetMl: 2000 }).expect(200);
+    await backdateTargets(prisma, u.id);
     await water(u.token, '2026-10-05', 1000);
     await water(u.token, '2026-10-06', 1001);
     let s = await summary(u.token, 'from=2026-10-05&to=2026-10-11&bucket=week');
@@ -126,11 +127,11 @@ describeDb('nutrition summary (HTTP + Postgres)', () => {
     expect(s.points[0].adherence).toMatchObject({ kcalPct: 50, waterPct: null });
 
     // A target of 0 counts as null; with no targets at all, targets and adherence are null.
-    await prisma.userProfile.update({ where: { userId: u.id }, data: { dailyCalorieTargetKcal: 0, dailyWaterTargetMl: 0 } });
+    await prisma.profileTargetHistory.updateMany({ where: { userId: u.id }, data: { dailyCalorieTargetKcal: 0, dailyWaterTargetMl: 0 } });
     s = await summary(u.token, 'from=2026-10-05&to=2026-10-11&bucket=week');
     expect(s.targets).toBeNull();
     expect(s.points[0].adherence).toBeNull();
-    await prisma.userProfile.update({ where: { userId: u.id }, data: { dailyCalorieTargetKcal: 0, dailyWaterTargetMl: 2000 } });
+    await prisma.profileTargetHistory.updateMany({ where: { userId: u.id }, data: { dailyCalorieTargetKcal: 0, dailyWaterTargetMl: 2000 } });
     s = await summary(u.token, 'from=2026-10-05&to=2026-10-11&bucket=week');
     expect(s.targets).toMatchObject({ kcal: null, waterMl: 2000 });
     expect(s.points[0].adherence).toMatchObject({ kcalPct: null, waterPct: 50 });

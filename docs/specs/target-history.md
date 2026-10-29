@@ -70,7 +70,7 @@ Rollback: the old app ignores the table, so rolling back the app is safe. The ta
 ## Effects on existing docs
 - **nutrition-summary.md:** the "Targets" section now uses the targets in effect each day. The "if targets are stored with history later" note is resolved by this spec.
 - **macro-targets.md:** the "Effective date" rule is replaced by the targets taking effect from today's local date. The planned test "targets changed today apply to a past period" is inverted.
-- **openapi.yaml:** `NutritionTargets`, `NutritionAdherence`, `NutritionSummary.targets` and `DailyNutrition` targets are reworded. `NutritionSummaryPoint.targets` and `targetsChanged`, `DataExport.targetHistory`, `TargetHistoryEntry` and `GET /me/target-history` are new. The new response fields are documented as always present once implemented. They are not yet in `required`, so the current backend still validates. The implementation PR adds them to `required`.
+- **openapi.yaml:** `NutritionTargets`, `NutritionAdherence`, `NutritionSummary.targets` and `DailyNutrition` targets are reworded. `NutritionSummaryPoint.targets` and `targetsChanged`, `DataExport.targetHistory`, `TargetHistoryEntry` and `GET /me/target-history` are new. The new response fields are in `required` (added by the implementation PR).
 
 ## Planned tests
 - **PUT and history:**

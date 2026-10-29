@@ -9,6 +9,7 @@ import { isoDate, num, parseIsoDate } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
 import type { FoodItem, FoodLog, Prisma, WaterLog } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { loadResolver } from '../targets/target-history';
 import { MEAL_TYPES, MealTypeValue } from './nutrition.dto';
 import type { FoodCreateDto, FoodLogCreateDto, FoodLogUpdateDto, FoodSearchQuery, FoodUpdateDto, NutrientsDto, WaterLogDto, WaterLogUpdateDto } from './nutrition.dto';
 
@@ -392,10 +393,10 @@ export class NutritionService {
 
   async daily(userId: string, date: string): Promise<DailyNutrition> {
     const day = parseIsoDate(date)!;
-    const [logs, water, profile] = await Promise.all([
+    const [logs, water, targetsOn] = await Promise.all([
       this.prisma.foodLog.findMany({ where: { userId, date: day } }),
       this.prisma.waterLog.aggregate({ where: { userId, date: day }, _sum: { amountMl: true } }),
-      this.prisma.userProfile.findUnique({ where: { userId }, select: { dailyCalorieTargetKcal: true, dailyWaterTargetMl: true } }),
+      loadResolver(this.prisma, userId, date),
     ]);
     const entries = logs.map((l) => ({ meal: l.mealType as MealTypeValue, n: nutrientsOf(l) }));
     const byMeal = Object.fromEntries(MEAL_TYPES.map((m) => [m, sum(entries.filter((e) => e.meal === m).map((e) => e.n))])) as Record<MealTypeValue, Nutrients>;
@@ -407,8 +408,9 @@ export class NutritionService {
       totals: sum(entries.map((e) => e.n)),
       byMeal,
       waterMl: water._sum.amountMl ?? 0,
-      calorieTargetKcal: profile?.dailyCalorieTargetKcal ?? null,
-      waterTargetMl: profile?.dailyWaterTargetMl ?? null,
+      // Targets in effect on `date` (dated history, docs/specs/target-history.md).
+      calorieTargetKcal: targetsOn(date).kcal,
+      waterTargetMl: targetsOn(date).waterMl,
     };
   }
 }

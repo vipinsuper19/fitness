@@ -179,6 +179,7 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   profile            UserProfile?
+  targetHistory      ProfileTargetHistory[]
   refreshTokens      RefreshToken[]
   goals              FitnessGoal[]
   workoutPlans       WorkoutPlan[]
@@ -671,4 +672,23 @@ model IdempotencyKey {
   @@unique([scope, key])
   @@index([expiresAt])
   @@map("idempotency_keys")
+}
+
+/// Dated daily-target history (docs/specs/target-history.md): a full snapshot of the five
+/// targets in effect from `effectiveFrom` (local date) until the next row.
+model ProfileTargetHistory {
+  userId                 String   @map("user_id") @db.Uuid
+  effectiveFrom          DateTime @map("effective_from") @db.Date
+  dailyCalorieTargetKcal Int?     @map("daily_calorie_target_kcal")
+  dailyWaterTargetMl     Int?     @map("daily_water_target_ml")
+  dailyProteinTargetG    Int?     @map("daily_protein_target_g")
+  dailyCarbsTargetG      Int?     @map("daily_carbs_target_g")
+  dailyFatTargetG        Int?     @map("daily_fat_target_g")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, effectiveFrom])
+  @@map("profile_target_history")
 }

@@ -4,6 +4,7 @@ import { num } from '../common/decimal';
 import { notFound } from '../common/id-param.pipe';
 import type { UserProfile } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { recordTargetChange, snapshotOf } from '../targets/target-history';
 import type { ProfileUpdateDto } from './profile.dto';
 
 export interface ProfileView {
@@ -88,7 +89,11 @@ export class ProfileService {
         displayName !== undefined
           ? await tx.user.update({ where: { id: userId }, data: { displayName } })
           : await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const before = await tx.userProfile.findUnique({ where: { userId } });
       const profile = await tx.userProfile.upsert({ where: { userId }, create: { userId, ...data }, update: data });
+      // Dated target history: a target change writes/replaces today's row, in the timezone after
+      // this PUT, in the same transaction; no change writes nothing (docs/specs/target-history.md).
+      await recordTargetChange(tx, userId, snapshotOf(before), snapshotOf(profile), profile.timezone, new Date());
       return toProfileView(profile, user.displayName);
     });
   }
