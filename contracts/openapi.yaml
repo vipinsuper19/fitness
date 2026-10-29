@@ -255,6 +255,22 @@ paths:
               schema: { $ref: '#/components/schemas/DataExport' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /me/target-history:
+    get:
+      tags: [me]
+      operationId: getTargetHistory
+      summary: Dated history of the daily targets (read-only)
+      description: |
+        One entry per local date on which any of the five daily targets changed, newest first; each is a full snapshot.
+        Written only by `PUT /me/profile` (a target change upserts today's row in the profile timezone). Past entries cannot
+        be edited in v1. See docs/specs/target-history.md.
+      responses:
+        '200':
+          description: Target history, newest first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TargetHistory' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /me/profile:
     get:
       tags: [me]
@@ -2057,11 +2073,28 @@ components:
         xpLedger: { type: array, items: { $ref: '#/components/schemas/XpTransaction' } }
         badges: { type: array, items: { $ref: '#/components/schemas/ExportedBadge' }, description: Earned badges }
         challenges: { type: array, items: { $ref: '#/components/schemas/Challenge' }, description: 'All challenges, any status' }
+        targetHistory: { type: array, items: { $ref: '#/components/schemas/TargetHistoryEntry' }, description: 'Dated daily-target history, newest first. Always present once implemented.' }
         truncated:
           type: array
           items: { type: string }
           description: Collections cut at their cap, e.g. `foodLogs`, `workoutSessions.sets` or `workoutPlans.exercises`; empty when complete.
 
+    TargetHistoryEntry:
+      type: object
+      required: [effectiveFrom, kcal, waterMl, proteinG, carbsG, fatG]
+      description: Full snapshot of the five daily targets in effect from `effectiveFrom` (local date) until the next entry. 0 is stored as null.
+      properties:
+        effectiveFrom: { type: string, format: date, description: 'Local date in the profile timezone; `1900-01-01` marks the migration backfill (targets set before history existed)' }
+        kcal: { type: [integer, 'null'] }
+        waterMl: { type: [integer, 'null'] }
+        proteinG: { type: [integer, 'null'] }
+        carbsG: { type: [integer, 'null'] }
+        fatG: { type: [integer, 'null'] }
+    TargetHistory:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, maxItems: 1000, items: { $ref: '#/components/schemas/TargetHistoryEntry' }, description: Newest `effectiveFrom` first }
     GoalType:
       type: string
       enum: [lose_weight, gain_muscle, maintain, improve_endurance, workouts_per_week]
@@ -2577,12 +2610,12 @@ components:
             dinner: { $ref: '#/components/schemas/Nutrients' }
             snack: { $ref: '#/components/schemas/Nutrients' }
         waterMl: { type: integer, minimum: 0 }
-        calorieTargetKcal: { type: [integer, 'null'] }
-        waterTargetMl: { type: [integer, 'null'] }
+        calorieTargetKcal: { type: [integer, 'null'], description: Calorie target in effect on `date` (dated history) }
+        waterTargetMl: { type: [integer, 'null'], description: Water target in effect on `date` (dated history) }
 
     NutritionTargets:
       type: object
-      description: The profile's current daily targets (targets are not stored historically). A target the user has not set is null.
+      description: Daily targets in effect on a given date (dated history, see docs/specs/target-history.md). A target not set on that date is null.
       required: [kcal, proteinG, carbsG, fatG, waterMl]
       properties:
         kcal: { type: [integer, 'null'], description: '`dailyCalorieTargetKcal`' }
@@ -2597,7 +2630,10 @@ components:
         the period or their target is null; `waterPct` is null when no water was logged or `targets.waterMl` is null. A target
         of 0 is treated as null.
         `kcalPct` = `avgPerLoggedDay.energyKcal` / `targets.kcal` × 100; `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro>` / `targets.<macro>` × 100
-        (each macro pct is null when its own target is null, independently of the others; current targets apply to every period, including past ones); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
+        (each macro pct is null when its own target is null, independently of the others; each day uses its own target in effect); `waterPct` = `avgWaterMlPerLoggedDay` / `targets.waterMl` × 100.
+        With dated targets (docs/specs/target-history.md) each pct is a ratio of sums over the counted days (logged days whose own
+        target is non-null): Σ intake ÷ Σ that day's target × 100. This equals the formulas above when the target is constant over the
+        period. A pct is null when no counted day exists.
       required: [kcalPct, proteinPct, carbsPct, fatPct, waterPct]
       properties:
         kcalPct: { type: [number, 'null'], minimum: 0 }
@@ -2631,6 +2667,12 @@ components:
             - type: 'null'
             - $ref: '#/components/schemas/NutritionAdherence'
         entryCount: { type: integer, minimum: 0, description: Food log entries counted in `totals` }
+        targets:
+          description: 'Targets in effect on the last date of the period (docs/specs/target-history.md); null when none are set that day. Always present once implemented.'
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/NutritionTargets'
+        targetsChanged: { type: boolean, description: 'True when any target differs between days of the period. Always present once implemented.' }
         entriesMissing:
           type: object
           description: As in `DailyNutrition`, over the period's entries
@@ -2648,7 +2690,7 @@ components:
         bucket: { type: string, enum: [day, week, month] }
         timezone: { type: string, description: 'Profile timezone used for local dates (IANA, e.g. Asia/Kolkata)' }
         targets:
-          description: 'Null only when none of kcal, water, protein, carbs or fat has a target; only macro targets set gives a non-null object with kcal and waterMl null'
+          description: 'Targets in effect on `to` (dated history). Null only when none of kcal, water, protein, carbs or fat has a target on `to`; only macro targets set gives a non-null object with kcal and waterMl null'
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/NutritionTargets'
