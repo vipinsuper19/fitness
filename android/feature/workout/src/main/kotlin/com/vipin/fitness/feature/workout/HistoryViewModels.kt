@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -40,7 +42,11 @@ data class HistoryState(
 }
 
 @HiltViewModel
-class HistoryViewModel @Inject constructor(private val repo: WorkoutHistoryRepository) : ViewModel() {
+class HistoryViewModel @Inject constructor(
+    private val repo: WorkoutHistoryRepository,
+    displaySource: HistoryDisplaySource,
+) : ViewModel() {
+    val display: StateFlow<HistoryDisplay> = displaySource.display.stateIn(viewModelScope, SharingStarted.Eagerly, HistoryDisplay())
     private val _state = MutableStateFlow(HistoryState())
     val state: StateFlow<HistoryState> = _state.asStateFlow()
 
@@ -90,8 +96,10 @@ data class PastSessionState(
 class PastSessionViewModel @AssistedInject constructor(
     private val repo: WorkoutHistoryRepository,
     private val workouts: WorkoutRepository,
+    displaySource: HistoryDisplaySource,
     @Assisted private val sessionId: String,
 ) : ViewModel() {
+    val display: StateFlow<HistoryDisplay> = displaySource.display.stateIn(viewModelScope, SharingStarted.Eagerly, HistoryDisplay())
     private val _state = MutableStateFlow(PastSessionState())
     val state: StateFlow<PastSessionState> = _state.asStateFlow()
 

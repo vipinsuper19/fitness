@@ -30,6 +30,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.data.history.PastSession
 import com.vipin.fitness.core.data.history.PastSet
 import java.time.ZoneId
+import com.vipin.fitness.core.common.UnitConversion
+import com.vipin.fitness.core.common.UnitSystem
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
@@ -52,16 +54,23 @@ private fun HistoryError.message() = when (this) {
 }
 
 private val dateFormat: DateTimeFormatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-internal fun PastSession.whenText(zone: ZoneId = ZoneId.systemDefault()): String = dateFormat.format((completedAt ?: startedAt).atZone(zone))
+internal fun PastSession.whenText(zone: ZoneId): String = dateFormat.format((completedAt ?: startedAt).atZone(zone))
 
 @Composable
 fun HistoryRoute(onOpen: (String) -> Unit, viewModel: HistoryViewModel = hiltViewModel()) {
     val s by viewModel.state.collectAsStateWithLifecycle()
-    HistoryContent(s, onOpen, onRetry = viewModel::refresh, onLoadMore = viewModel::loadMore)
+    val display by viewModel.display.collectAsStateWithLifecycle()
+    HistoryContent(s, onOpen, onRetry = viewModel::refresh, onLoadMore = viewModel::loadMore, display = display)
 }
 
 @Composable
-fun HistoryContent(s: HistoryState, onOpen: (String) -> Unit, onRetry: () -> Unit, onLoadMore: () -> Unit) {
+fun HistoryContent(
+    s: HistoryState,
+    onOpen: (String) -> Unit,
+    onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
+    display: HistoryDisplay = HistoryDisplay(),
+) {
     when {
         s.loading -> Box(Modifier.fillMaxSize().testTag(HistoryTags.LOADING), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         s.error != null -> ErrorState(s.error, onRetry)
@@ -82,7 +91,7 @@ fun HistoryContent(s: HistoryState, onOpen: (String) -> Unit, onRetry: () -> Uni
             items(s.items, key = { it.id }) { p ->
                 Card(Modifier.fillMaxWidth().clickable { onOpen(p.id) }.testTag(HistoryTags.row(p.id))) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(p.whenText(), style = MaterialTheme.typography.titleMedium)
+                        Text(p.whenText(display.zone), style = MaterialTheme.typography.titleMedium)
                         Text(
                             stringResource(R.string.active_time, formatClock(p.activeSeconds.toLong())) + " · " +
                                 pluralStringResource(R.plurals.history_sets, p.completedSets, p.completedSets),
@@ -128,11 +137,12 @@ fun PastSessionRoute(
     ),
 ) {
     val s by viewModel.state.collectAsStateWithLifecycle()
-    PastSessionContent(s, onRetry = viewModel::load)
+    val display by viewModel.display.collectAsStateWithLifecycle()
+    PastSessionContent(s, onRetry = viewModel::load, display = display)
 }
 
 @Composable
-fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit) {
+fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit, display: HistoryDisplay = HistoryDisplay()) {
     val session = s.session
     when {
         s.loading -> Box(Modifier.fillMaxSize().testTag(HistoryTags.LOADING), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -143,7 +153,7 @@ fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
-                Text(session.whenText(), style = MaterialTheme.typography.headlineSmall)
+                Text(session.whenText(display.zone), style = MaterialTheme.typography.headlineSmall)
                 Text(stringResource(R.string.active_time, formatClock(session.activeSeconds.toLong())))
                 session.perceivedDifficulty?.let { Text(stringResource(R.string.history_difficulty, it)) }
                 session.notes?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
@@ -157,7 +167,7 @@ fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit) {
                             sets.sortedBy { it.setIndex }.forEach { set ->
                                 Row(Modifier.fillMaxWidth().testTag(HistoryTags.SET)) {
                                     Text(stringResource(R.string.history_set_n, set.setIndex + 1), modifier = Modifier.weight(1f))
-                                    Text(set.summary() + if (set.completed) "" else " · " + stringResource(R.string.history_skipped))
+                                    Text(set.summary(display.units) + if (set.completed) "" else " · " + stringResource(R.string.history_skipped))
                                 }
                             }
                         }
@@ -169,14 +179,18 @@ fun PastSessionContent(s: PastSessionState, onRetry: () -> Unit) {
     }
 }
 
-/** "10 × 20 kg", "45 s", "1.2 km"; whatever the set recorded. */
-internal fun PastSet.summary(): String = listOfNotNull(
+/** "10 × 20 kg" (or lb for imperial), "45 s", "1.2 km"; whatever the set recorded. */
+internal fun PastSet.summary(units: UnitSystem = UnitSystem.METRIC): String = listOfNotNull(
     when (val kg = weightKg) {
         null -> reps?.let { "$it reps" }
-        else -> if (reps != null) "$reps × ${trimNumber(kg)} kg" else "${trimNumber(kg)} kg"
+        else -> {
+            val w = trimNumber(UnitConversion.displayWeight(kg, units) ?: kg)
+            val unit = if (units == UnitSystem.IMPERIAL) "lb" else "kg"
+            if (reps != null) "$reps × $w $unit" else "$w $unit"
+        }
     },
     durationSeconds?.let { if (it >= 60) formatClock(it.toLong()) else "$it s" },
     distanceM?.let { if (it >= 1000) "${trimNumber(it / 1000)} km" else "${trimNumber(it)} m" },
 ).joinToString(" · ").ifEmpty { "–" }
 
-private fun trimNumber(d: Double): String = if (d % 1.0 == 0.0) d.toLong().toString() else "%.1f".format(d)
+internal fun trimNumber(d: Double): String = HistoryFormat.number(d)
