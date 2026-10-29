@@ -109,10 +109,10 @@ internal fun NotificationSettingsScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     val editable = p.quietHours.enabled && !s.saving
                     OutlinedButton(onClick = { picking = Picking.START }, enabled = editable, modifier = Modifier.testTag(Tags.QUIET_START)) {
-                        Text("${stringResource(R.string.notif_quiet_start)} ${p.quietHours.start}")
+                        Text(stringResource(R.string.notif_quiet_start_at, p.quietHours.start))
                     }
                     OutlinedButton(onClick = { picking = Picking.END }, enabled = editable, modifier = Modifier.testTag(Tags.QUIET_END)) {
-                        Text("${stringResource(R.string.notif_quiet_end)} ${p.quietHours.end}")
+                        Text(stringResource(R.string.notif_quiet_end_at, p.quietHours.end))
                     }
                 }
                 if (!s.sameTimes) {

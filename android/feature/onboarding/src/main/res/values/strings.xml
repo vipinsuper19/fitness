@@ -105,8 +105,8 @@
     <string name="notif_type_progression_suggestion">Progression suggestions</string>
     <string name="notif_quiet_title">Quiet hours</string>
     <string name="notif_quiet_enabled">Use quiet hours</string>
-    <string name="notif_quiet_start">Start</string>
-    <string name="notif_quiet_end">End</string>
+    <string name="notif_quiet_start_at">Start %1$s</string>
+    <string name="notif_quiet_end_at">End %1$s</string>
     <string name="notif_quiet_window">%1$s – %2$s (%3$s)</string>
     <string name="notif_quiet_window_overnight">%1$s – %2$s next day (%3$s)</string>
     <string name="notif_timezone">Time zone: %1$s</string>
