@@ -70,14 +70,30 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const name = exception instanceof Error ? exception.name : typeof exception;
       this.logger.error(`unhandled error requestId=${requestId} type=${name}`);
     }
-    if (status === 429) {
-      const retryAfter = res.getHeader('Retry-After');
-      const fromDetails = body.details?.retryAfterSeconds;
-      if (typeof fromDetails === 'number') res.setHeader('Retry-After', String(fromDetails));
-      else if (!retryAfter) res.setHeader('Retry-After', '60');
-    }
+    if (status === 429) res.setHeader('Retry-After', String(retryAfterSeconds(res, body.details?.retryAfterSeconds)));
     res.status(status).json(body);
   }
+}
+
+/**
+ * Every 429 carries a plain `Retry-After` in whole seconds (>= 1). Sources, in order: an explicit
+ * `details.retryAfterSeconds` (login failure limiter); else the throttler's own headers. @nestjs/throttler v6 names
+ * them `Retry-After-<throttle>` for named throttles (only `default` gets a bare `Retry-After`), so the longest of those
+ * wins; else 60.
+ */
+function retryAfterSeconds(res: Response, fromDetails: unknown): number {
+  const positive = (v: unknown) => {
+    const n = Math.ceil(Number(v));
+    return Number.isFinite(n) && n >= 1 ? n : null;
+  };
+  const explicit = positive(fromDetails);
+  if (explicit) return explicit;
+  const fromHeaders = res
+    .getHeaderNames()
+    .filter((h) => /^retry-after(-.+)?$/i.test(h))
+    .map((h) => positive(res.getHeader(h)))
+    .filter((n): n is number => n !== null);
+  return fromHeaders.length ? Math.max(...fromHeaders) : 60;
 }
 
 /** body-parser errors (too large, bad JSON) carry `status` and `type`. */
