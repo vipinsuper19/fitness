@@ -18,7 +18,7 @@ info:
       timezone (default `Asia/Kolkata`); `date-time` is RFC 3339 with offset.
     - **Missing vs zero:** a `null` metric means "no data", never 0.
     - **Errors:** every non-2xx body is `Error`; `requestId` matches the
-      `X-Request-Id` response header.
+      `X-Request-Id` response header (sent on every response; see `components/headers/XRequestId`).
     - **Idempotency:** every write (POST, PUT, PATCH, DELETE) accepts an
       `Idempotency-Key` header (a client UUID). It is **required** on
       endpoints that can award XP or create rows the client retries offline.
@@ -2089,6 +2089,12 @@ components:
       schema: { $ref: '#/components/schemas/Id' }
 
   headers:
+    XRequestId:
+      description: >-
+        Request id, on every response. A client-sent `X-Request-Id` matching `^[A-Za-z0-9._-]{8,64}$` is echoed;
+        anything else (or none) is replaced by a server-generated UUID. Equals `requestId` in error bodies and in
+        the server's request log (docs/specs/request-log.md), so quote it in bug reports.
+      schema: { type: string, pattern: '^[A-Za-z0-9._-]{8,64}$' }
     RetryAfter:
       description: Seconds to wait before retrying
       schema: { type: integer, minimum: 1 }
@@ -2096,21 +2102,29 @@ components:
   responses:
     ValidationError:
       description: '`VALIDATION_FAILED`; `details.fields` maps field paths to messages'
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
       description: '`UNAUTHENTICATED` (missing or bad token) or `TOKEN_EXPIRED` (refresh and retry)'
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     NotFound:
       description: '`NOT_FOUND`, including another user''s resource'
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     IdempotencyConflict:
       description: '`IDEMPOTENCY_KEY_REUSED` (different body, method or path; never replayed) or `IDEMPOTENCY_IN_PROGRESS`'
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -2118,6 +2132,7 @@ components:
       description: '`RATE_LIMITED`'
       headers:
         Retry-After: { $ref: '#/components/headers/RetryAfter' }
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
