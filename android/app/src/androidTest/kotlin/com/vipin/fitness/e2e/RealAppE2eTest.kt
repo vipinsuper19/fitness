@@ -50,6 +50,9 @@ class RealAppE2eTest {
             body(); shot(name); report.appendText("PASS $name\n")
         } catch (t: Throwable) {
             runCatching { shot("$name-FAIL") }
+            // Diagnostics only: thread dump to /data/anr, then a later screenshot to see if the UI settled.
+            runCatching { android.os.Process.sendSignal(android.os.Process.myPid(), 3) }
+            runCatching { Thread.sleep(30_000); shot("$name-FAIL-late") }
             report.appendText("FAIL $name ${t.javaClass.simpleName}: ${t.message?.lineSequence()?.firstOrNull()?.take(200)}\n")
             if (required) throw t
         }

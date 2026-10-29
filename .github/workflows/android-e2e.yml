@@ -60,6 +60,9 @@ jobs:
             adb logcat -c
             bash .github/scripts/e2e-instrument.sh "$RUNNER_TEMP/acct" || echo failed > "$RUNNER_TEMP/e2e-failed"
             mkdir -p e2e-out && adb pull /sdcard/Android/data/com.vipin.fitness/files/e2e e2e-out/ || true
+            adb root || true
+            sleep 3
+            adb pull /data/anr e2e-out/anr || true
             adb logcat -d > e2e-out/logcat.txt || true
       - name: Report
         if: always()
