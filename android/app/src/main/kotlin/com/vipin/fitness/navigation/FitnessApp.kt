@@ -35,8 +35,9 @@ fun FitnessApp(
     modifier: Modifier = Modifier,
     onWorkoutNavigate: (WorkoutDestination) -> Unit = {},
     onOpenAchievements: () -> Unit = {},
+    onOpenXpLedger: () -> Unit = {},
     /** Slot so UI tests can render the shell without Hilt. Defaults to the real screen for each tab. */
-    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m, onWorkoutNavigate, onOpenAchievements) },
+    tabContent: @Composable (TopLevelDestination, Modifier) -> Unit = { dest, m -> TabContent(dest, m, onWorkoutNavigate, onOpenAchievements, onOpenXpLedger) },
 ) {
     var current by rememberSaveable { mutableStateOf(TopLevelDestination.START) }
     Scaffold(
@@ -72,7 +73,13 @@ fun FitnessApp(
 
 /** The real screen for each tab. Tests can pass their own [FitnessApp] tabContent to stay free of Hilt. */
 @Composable
-private fun TabContent(dest: TopLevelDestination, modifier: Modifier, onWorkoutNavigate: (WorkoutDestination) -> Unit, onOpenAchievements: () -> Unit) = when (dest) {
+private fun TabContent(
+    dest: TopLevelDestination,
+    modifier: Modifier,
+    onWorkoutNavigate: (WorkoutDestination) -> Unit,
+    onOpenAchievements: () -> Unit,
+    onOpenXpLedger: () -> Unit = {},
+) = when (dest) {
     TopLevelDestination.HOME -> HomeScreen(
         modifier,
         planDayContent = { WorkoutPlanDayContent(it, onOpenSession = { onWorkoutNavigate(WorkoutDestination.ActiveSession) }) },
@@ -80,6 +87,7 @@ private fun TabContent(dest: TopLevelDestination, modifier: Modifier, onWorkoutN
             workoutHomeSlots(it, onOpenSession = { onWorkoutNavigate(WorkoutDestination.ActiveSession) })
             item(key = "achievements") { AchievementsHomeCard(onOpenAchievements) }
         },
+        onOpenXpLedger = onOpenXpLedger,
     )
     TopLevelDestination.WORKOUT -> WorkoutHomeRoute(onWorkoutNavigate, modifier)
     TopLevelDestination.NUTRITION -> NutritionScreen(modifier)

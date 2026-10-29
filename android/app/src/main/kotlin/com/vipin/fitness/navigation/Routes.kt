@@ -27,6 +27,9 @@ sealed interface Route : NavKey {
     // Badges & challenges (feature:achievements).
     @Serializable data object Achievements : Route
 
+    // XP ledger (feature:progress).
+    @Serializable data object XpLedger : Route
+
     @Serializable data object DeleteAccount : Route
     @Serializable data object ExportData : Route
 }

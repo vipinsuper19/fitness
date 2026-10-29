@@ -23,6 +23,7 @@
     <string name="home_xp_empty">No XP yet. Complete a workout to earn some.</string>
     <string name="home_xp_level">Level %1$d · %2$s XP</string>
     <string name="home_xp_next">%1$d / %2$d XP to the next level</string>
+    <string name="home_xp_history">XP history</string>
     <string name="home_goals_title">Goals</string>
     <string name="home_goals_none">No active goals. Add one in Progress → Goals.</string>
     <string name="home_goal_pct">%1$d%% there</string>
