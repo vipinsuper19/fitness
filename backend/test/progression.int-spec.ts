@@ -4,6 +4,12 @@
  * sessions are inserted with fixed completedAt values before that.
  */
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import Ajv2020 from 'ajv/dist/2020';
+import addFormats from 'ajv-formats';
+import { parse } from 'yaml';
 
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
@@ -460,5 +466,61 @@ describeDb('progression suggestions (HTTP + Postgres)', () => {
     expect(reused.body.code).toBe('IDEMPOTENCY_KEY_REUSED');
     const stale = await patch(randomUUID()).send(body).expect(409);
     expect(stale.body).toMatchObject({ code: 'VERSION_CONFLICT', details: { currentVersion: 2 } });
+  });
+
+  it('inputs: populated per ProgressionInputs and the GET body validates against the openapi schema', async () => {
+    const openapi = parse(readFileSync(join(__dirname, '..', '..', 'contracts', 'openapi.yaml'), 'utf8')) as { components: { schemas: unknown } };
+    const ajv = new Ajv2020({ allErrors: true, strict: false });
+    addFormats(ajv);
+    const defs = JSON.parse(JSON.stringify(openapi.components.schemas).replaceAll('#/components/schemas/', '#/$defs/'));
+    const validate = ajv.compile({ $defs: defs, $ref: '#/$defs/ProgressionSuggestions' });
+    const check = (body: unknown) => expect({ ok: validate(body), errors: validate.errors }).toEqual({ ok: true, errors: null });
+
+    const u = await signUp();
+    const a = await mkEx();
+    const b = await mkEx({ tracking: 'duration', muscle: 'core' });
+    const plan = await mkPlan(u.token, [{ ex: a, repsMax: 10, targetWeightKg: 20 }, { ex: b, sets: 1, durationSeconds: 60 }]);
+
+    // No history.
+    let s = await suggest(u.token, plan);
+    check(s);
+    expect((byEx(s, a) as unknown as { inputs: unknown }).inputs).toEqual({
+      sessionsRequired: 3, sessionsConsidered: 0, sessionsMetTarget: 0, maxPerceivedDifficulty: null,
+      cooldown: { active: false, lastRaisedAt: null, until: null, days: 7 }, step: null,
+    });
+
+    // Three met sessions: 20 kg upper body -> +2.5% = 0.5 < 1.0 min step -> 21 kg.
+    await session(u.id, plan, 6, { [a]: rep(2, { reps: 10, kg: 20 }), [b]: [{ sec: 60 }] }, { difficulty: 2 });
+    await session(u.id, plan, 4, { [a]: rep(2, { reps: 10, kg: 20 }), [b]: [{ sec: 60 }] }, { difficulty: null });
+    await session(u.id, plan, 2, { [a]: rep(2, { reps: 10, kg: 20 }), [b]: [{ sec: 60 }] }, { difficulty: 3 });
+    s = await suggest(u.token, plan);
+    check(s);
+    const inp = (x: Sugg) => (x as unknown as { inputs: Record<string, unknown> }).inputs;
+    expect(byEx(s, a).suggested!.targetWeightKg).toBe(21);
+    expect(inp(byEx(s, a))).toMatchObject({
+      sessionsConsidered: 3, sessionsMetTarget: 3, maxPerceivedDifficulty: 3, cooldown: { active: false, lastRaisedAt: null },
+      step: { field: 'targetWeightKg', rule: 'percent_increase', percent: 2.5, capPercent: 10, capApplied: false, minStepApplied: true, rounding: 'down_0_5_kg', limitApplied: false },
+    });
+    expect(inp(byEx(s, b)).step).toMatchObject({ field: 'durationSeconds', rule: 'percent_increase', percent: 10, minStepApplied: false, rounding: 'down_5_s' });
+
+    // Apply both; the raise is 3 days old -> cooldown active with lastRaisedAt.
+    const pes = s.suggestions.map((x) => ({ ex: x.exerciseId, ...(x.suggested as object) }));
+    await as(u.token).patch(`/api/v1/workout-plans/${plan}`).send({ ...draftOf(pes), baseVersion: s.planVersion }).expect(200);
+    const v2 = await prisma.workoutPlanVersion.findUniqueOrThrow({ where: { planId_version: { planId: plan, version: 2 } } });
+    const raisedAt = new Date(NOW.getTime() - 3 * DAY);
+    await prisma.workoutPlanVersion.update({ where: { id: v2.id }, data: { createdAt: raisedAt } });
+    // One v2 session that misses `a`: MISSED_TARGET decides the reason, but the cooldown is still reported.
+    await session(u.id, plan, 1, { [a]: rep(1, { reps: 10, kg: 21 }), [b]: [{ sec: 65 }] }, { v: 2, difficulty: 4 });
+    s = await suggest(u.token, plan);
+    check(s);
+    const until = new Date(raisedAt.getTime() + 7 * DAY).toISOString();
+    expect(byEx(s, a)).toMatchObject({ reason: 'MISSED_TARGET', cooldownUntil: null });
+    expect(inp(byEx(s, a))).toMatchObject({ sessionsConsidered: 3, sessionsMetTarget: 2, maxPerceivedDifficulty: 4, cooldown: { active: true, lastRaisedAt: raisedAt.toISOString(), until }, step: null });
+
+    // 8 days later the cooldown has ended, but lastRaisedAt is still reported.
+    await prisma.workoutPlanVersion.update({ where: { id: v2.id }, data: { createdAt: new Date(NOW.getTime() - 8 * DAY) } });
+    s = await suggest(u.token, plan);
+    check(s);
+    expect(inp(byEx(s, a)).cooldown).toEqual({ active: false, lastRaisedAt: new Date(NOW.getTime() - 8 * DAY).toISOString(), until: null, days: 7 });
   });
 });
