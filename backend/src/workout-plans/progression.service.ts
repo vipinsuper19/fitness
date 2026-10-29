@@ -57,11 +57,25 @@ export class ProgressionService {
       return pe ? presc(pe) : undefined;
     };
 
-    /** Prescription at an entry position (workout index, exercise index) in a version, if it is the same exercise. */
-    const prescAt = (v: (typeof versions)[number] | undefined, wi: number, ei: number, exerciseId: string): Prescription | undefined => {
-      const pe = v?.workouts[wi]?.exercises[ei];
-      return pe && pe.exerciseId === exerciseId ? presc(pe) : undefined;
+    type Version = (typeof versions)[number];
+    type Entry = { wi: number; ei: number };
+    /**
+     * The entry in `prev` that corresponds to `at` in `cur`. Workouts have no id that is stable across
+     * versions (each version gets new rows), so the workout is matched by its unique (dayOfWeek, name),
+     * falling back to the same order. Within it the exercise is matched by exerciseId; when an exercise
+     * appears more than once in a workout, the k-th occurrence (by exercise order) matches the k-th.
+     */
+    const matchEntry = (cur: Version, prev: Version, at: Entry): Entry | undefined => {
+      const cw = cur.workouts[at.wi]!;
+      const exerciseId = cw.exercises[at.ei]!.exerciseId;
+      const k = cw.exercises.slice(0, at.ei).filter((e) => e.exerciseId === exerciseId).length;
+      const same = prev.workouts.flatMap((w, i) => (w.dayOfWeek === cw.dayOfWeek && w.name === cw.name ? [i] : []));
+      const wi = same.length === 1 ? same[0]! : at.wi < prev.workouts.length ? at.wi : -1;
+      if (wi < 0) return undefined;
+      const idx = prev.workouts[wi]!.exercises.flatMap((e, i) => (e.exerciseId === exerciseId ? [i] : []));
+      return idx[k] === undefined ? undefined : { wi, ei: idx[k]! };
     };
+    const prescOf = (v: Version, e: Entry) => presc(v.workouts[e.wi]!.exercises[e.ei]!);
 
     const exerciseIds = [...new Set(latest.workouts.flatMap((w) => w.exercises.map((e) => e.exerciseId)))];
     // Only the newest N completed sessions per exercise (that logged a completed set of it).
@@ -104,10 +118,14 @@ export class ProgressionService {
           };
         });
 
-        // Cooldown: newest version that raised this entry's load (same workout and exercise position) over the previous version.
+        // Cooldown: newest version that raised this entry's load over the matching entry of the previous
+        // version, tracing the entry back through versions (survives workout and exercise reorders).
         let raisedAt: Date | null = null;
-        for (let i = versions.length - 1; i > 0 && !raisedAt; i--) {
-          if (raisedLoad(prescAt(versions[i - 1], wi, ei, pe.exerciseId), prescAt(versions[i], wi, ei, pe.exerciseId))) raisedAt = versions[i]!.createdAt;
+        let at: Entry | undefined = latest === versions[versions.length - 1] ? { wi, ei } : undefined;
+        for (let i = versions.length - 1; i > 0 && at && !raisedAt; i--) {
+          const prevAt = matchEntry(versions[i]!, versions[i - 1]!, at);
+          if (prevAt && raisedLoad(prescOf(versions[i - 1]!, prevAt), prescOf(versions[i]!, at))) raisedAt = versions[i]!.createdAt;
+          at = prevAt;
         }
         const cooldownUntil = raisedAt && now.getTime() - raisedAt.getTime() < COOLDOWN_MS ? new Date(raisedAt.getTime() + COOLDOWN_MS) : null;
 

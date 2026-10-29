@@ -42,7 +42,7 @@ Per planned exercise: (1) deload check (needs only the latest **2** sessions, so
 - **Every suggested weight is a multiple of 0.5 kg** (increase, deload and `NO_TARGET_SET`). Increases round **down** to 0.5 kg, except when that would fall below `current + minimum step` (a current target off the 0.5 kg grid): then they round **up** to the next 0.5 kg at or above `current + minimum step` (40.3 → 41.5, not 41.0; 9.8 → 10.5, not 10.0). Deloads and `NO_TARGET_SET` round down.
 
 ## Cooldown
-The server derives "last progression applied" from plan versions: the newest plan version where this exercise's prescribed load (target weight, reps or duration) increased versus the previous version, compared **by entry** (same workout position and exercise position, same `exerciseId`), so an exercise in two workouts has its own cooldown per entry. Only a raise from one set value to a higher one counts: **setting a first target** (null → value, e.g. accepting `NO_TARGET_SET`) does **not** start a cooldown. If its `createdAt` is less than 7 days ago, `hold` with `COOLDOWN` and `cooldownUntil`. No new table is needed.
+The server derives "last progression applied" from plan versions: the newest plan version where this exercise's prescribed load (target weight, reps or duration) increased versus the previous version, compared **by entry**, traced back version by version so reorders don't break it. Workouts have no id that is stable across versions, so a workout matches the previous version's workout with the same `dayOfWeek` and `name` (when exactly one has them), otherwise the one at the same order. Within it the entry matches by `exerciseId`; if the exercise appears more than once in that workout, the k-th occurrence (by exercise order) matches the k-th. An exercise in two workouts therefore has its own cooldown per entry. Only a raise from one set value to a higher one counts: **setting a first target** (null → value, e.g. accepting `NO_TARGET_SET`) does **not** start a cooldown. If its `createdAt` is less than 7 days ago, `hold` with `COOLDOWN` and `cooldownUntil`. No new table is needed.
 
 ## Deload
 Suggest a **deload** (−10% of `targetWeightKg` rounded down to 0.5 kg, or −10% of `durationSeconds` rounded **down** to 5 s; reps unchanged for `reps`) when either:
@@ -97,6 +97,7 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
 - One session missing a set or a rep → `MISSED_TARGET`; `perceivedDifficulty` 4 in the window → `HIGH_EFFORT`.
 - Two consecutive misses → deload −10% (weight rounded down to 0.5 kg; duration 65 s → 55 s, rounded down to 5 s); two sessions at difficulty 5 → `VERY_HARD` deload.
 - Off-grid targets: 40.3 kg → 41.5 kg; 9.8 kg → 10.5 kg (never below current + min step).
+- Cooldown survives reordering: workouts swapped and exercises reordered in the raising version still give `COOLDOWN` for the raised entry only.
 - Cooldown by entry: the same exercise in two workouts, only one entry raised 2 days ago → that entry `COOLDOWN`, the other `increase`; both share the same `basedOn`.
 - Cooldown: a version raising the load 3 days ago → `COOLDOWN` with `cooldownUntil`; 8 days ago → increase (faked clock, Date only).
 - Incomplete (`completed: false`) sets and in-progress sessions are ignored.
