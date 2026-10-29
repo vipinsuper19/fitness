@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.vipin.fitness.core.data.newIdempotencyKey
 import com.vipin.fitness.core.data.workout.PlanManagementRepository
 import com.vipin.fitness.core.data.workout.PlanName
+import com.vipin.fitness.core.data.workout.PlanRowUpdate
+import com.vipin.fitness.core.data.workout.applying
 import com.vipin.fitness.core.data.workout.PlanStatus
 import com.vipin.fitness.core.data.workout.PlanSummary
 import com.vipin.fitness.core.data.workout.isPlanArchived
@@ -123,17 +125,24 @@ class PlansViewModel @Inject constructor(
         if (action == PlanAction.RENAME) return startRename(planId)
         if (_state.value.busyId != null) return
         val key = newKey()
+        val status = _state.value.items.firstOrNull { it.id == planId }?.status
         _state.update { it.copy(busyId = planId, actionError = null) }
         viewModelScope.launch {
             val r: ApiResult<*> = when (action) {
                 PlanAction.PAUSE -> repo.pause(planId, key)
                 PlanAction.RESUME -> repo.resume(planId, key)
-                PlanAction.RESTART, PlanAction.MAKE_ACTIVE -> repo.restart(planId, key)
+                PlanAction.RESTART, PlanAction.MAKE_ACTIVE -> repo.restart(planId, key, wasActive = status == PlanStatus.ACTIVE)
                 PlanAction.ARCHIVE -> repo.archive(planId, key)
                 PlanAction.UNARCHIVE -> repo.unarchive(planId, key)
                 PlanAction.RENAME -> error("handled above")
             }
             _state.update { it.copy(busyId = null) }
+            if (action == PlanAction.UNARCHIVE && r is ApiResult.Success) {
+                // The 200 plan says where it went (paused or inactive): update the row, no reload.
+                val u = r.value as PlanRowUpdate
+                _state.update { s -> s.copy(items = s.items.map { if (it.id == planId) it.applying(u) else it }) }
+                return@launch
+            }
             when (r) {
                 // Statuses move between filters (and switching pauses the old plan), so reload.
                 is ApiResult.Success -> refresh()

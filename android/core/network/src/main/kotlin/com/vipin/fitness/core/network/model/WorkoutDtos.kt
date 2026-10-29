@@ -78,4 +78,8 @@ data class WorkoutPlanDto(
     val currentWeek: Int? = null,
     /** #37: true once the active plan's last week is over; null unless active. */
     val planEnded: Boolean? = null,
+    /** Set while paused; optional for older servers. */
+    val pausedAt: String? = null,
+    /** Set while archived; optional for older servers. */
+    val archivedAt: String? = null,
 )

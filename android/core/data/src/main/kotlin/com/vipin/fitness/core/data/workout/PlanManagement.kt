@@ -6,7 +6,9 @@ import com.vipin.fitness.core.network.PlanManagementApi
 import com.vipin.fitness.core.network.apiCall
 import com.vipin.fitness.core.network.model.PlanActivateDto
 import com.vipin.fitness.core.network.model.PlanRenameDto
+import com.vipin.fitness.core.network.model.WorkoutPlanDto
 import com.vipin.fitness.core.network.model.WorkoutPlanSummaryDto
+import java.util.UUID
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 import retrofit2.Response
@@ -32,7 +34,26 @@ data class PlanSummary(
     val totalWeeks: Int,
     val completedSessions: Int,
     val createdAt: String,
+    val pausedAt: String? = null,
 )
+
+/** What a returned [WorkoutPlanDto] says about a row (unarchive answers with the plan, not a summary). */
+data class PlanRowUpdate(val id: String, val name: String, val status: PlanStatus, val pausedAt: String?, val currentWeek: Int?)
+
+fun WorkoutPlanDto.toRowUpdate() = PlanRowUpdate(
+    id = id,
+    name = name,
+    status = when {
+        isActive -> PlanStatus.ACTIVE
+        archivedAt != null -> PlanStatus.ARCHIVED
+        pausedAt != null -> PlanStatus.PAUSED
+        else -> PlanStatus.INACTIVE
+    },
+    pausedAt = pausedAt,
+    currentWeek = currentWeek,
+)
+
+fun PlanSummary.applying(u: PlanRowUpdate) = copy(name = u.name, status = u.status, pausedAt = u.pausedAt, currentWeek = u.currentWeek ?: currentWeek)
 
 data class PlanSummaryPage(val items: List<PlanSummary>, val nextCursor: String?)
 
@@ -46,6 +67,7 @@ fun WorkoutPlanSummaryDto.toDomain() = PlanSummary(
     totalWeeks = totalWeeks,
     completedSessions = completedSessions,
     createdAt = createdAt,
+    pausedAt = pausedAt,
 )
 
 /** Contract limits for PUT /workout-plans/{id}/name, after trimming. */
@@ -65,10 +87,14 @@ interface PlanManagementRepository {
     suspend fun list(status: PlanStatus?, cursor: String? = null, limit: Int = WorkoutRepository.PAGE_SIZE): ApiResult<PlanSummaryPage>
     suspend fun pause(planId: String, idempotencyKey: String): ApiResult<Unit>
     suspend fun resume(planId: String, idempotencyKey: String): ApiResult<WorkoutPlan>
-    /** Restart at week 1; also how an inactive plan becomes the active one. */
-    suspend fun restart(planId: String, idempotencyKey: String): ApiResult<WorkoutPlan>
+    /**
+     * Restart at week 1; also how an inactive plan becomes the active one. Activating the plan
+     * that is already active is a no-op, so [wasActive] pauses it first, then activates with no body.
+     */
+    suspend fun restart(planId: String, idempotencyKey: String, wasActive: Boolean = false): ApiResult<WorkoutPlan>
     suspend fun archive(planId: String, idempotencyKey: String): ApiResult<Unit>
-    suspend fun unarchive(planId: String, idempotencyKey: String): ApiResult<WorkoutPlan>
+    /** Returns the restored row (paused or inactive) from the 200 plan. */
+    suspend fun unarchive(planId: String, idempotencyKey: String): ApiResult<PlanRowUpdate>
     /** [name] must already be [PlanName.normalize]d. */
     suspend fun rename(planId: String, name: String, idempotencyKey: String): ApiResult<WorkoutPlan>
 }
@@ -90,14 +116,19 @@ class DefaultPlanManagementRepository @Inject constructor(
     override suspend fun resume(planId: String, idempotencyKey: String) =
         apiCall(json) { api.activate(planId, idempotencyKey, PlanActivateDto(resume = true)).toDomain() }.synced()
 
-    override suspend fun restart(planId: String, idempotencyKey: String) =
-        apiCall(json) { api.restart(planId, idempotencyKey).toDomain() }.synced()
+    override suspend fun restart(planId: String, idempotencyKey: String, wasActive: Boolean) = apiCall(json) {
+        if (wasActive) {
+            // Its own key, derived so a retry of this restart reuses both.
+            api.deactivate(planId, UUID.nameUUIDFromBytes("$idempotencyKey:deactivate".toByteArray()).toString()).orThrow()
+        }
+        api.restart(planId, idempotencyKey).toDomain()
+    }.synced()
 
     override suspend fun archive(planId: String, idempotencyKey: String) =
         apiCall(json) { api.archive(planId, idempotencyKey).orThrow() }.synced()
 
     override suspend fun unarchive(planId: String, idempotencyKey: String) =
-        apiCall(json) { api.unarchive(planId, idempotencyKey).toDomain() }
+        apiCall(json) { api.unarchive(planId, idempotencyKey).toRowUpdate() }
 
     override suspend fun rename(planId: String, name: String, idempotencyKey: String) =
         apiCall(json) { api.rename(planId, idempotencyKey, PlanRenameDto(name)).toDomain() }.synced()

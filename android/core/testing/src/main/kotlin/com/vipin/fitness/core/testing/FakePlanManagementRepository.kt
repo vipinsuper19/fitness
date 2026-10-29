@@ -1,6 +1,7 @@
 package com.vipin.fitness.core.testing
 
 import com.vipin.fitness.core.data.workout.PlanManagementRepository
+import com.vipin.fitness.core.data.workout.PlanRowUpdate
 import com.vipin.fitness.core.data.workout.PlanSource
 import com.vipin.fitness.core.data.workout.PlanStatus
 import com.vipin.fitness.core.data.workout.PlanSummary
@@ -19,6 +20,10 @@ private fun PlanSummary.asPlan() = WorkoutPlan(id, version, name, totalWeeks, nu
 
 /** In-memory plans; [failure] fails the next writes, [pages] overrides list(). */
 class FakePlanManagementRepository : PlanManagementRepository {
+    companion object {
+        const val PAUSED_AT = "2026-10-29T06:00:00Z"
+    }
+
     val plans = mutableListOf<PlanSummary>()
     var pages: ((PlanStatus?, String?) -> ApiResult<PlanSummaryPage>)? = null
     var failure: ApiResult.Failure? = null
@@ -37,8 +42,17 @@ class FakePlanManagementRepository : PlanManagementRepository {
 
     private fun set(id: String, status: PlanStatus): PlanSummary {
         val i = plans.indexOfFirst { it.id == id }
-        if (status == PlanStatus.ACTIVE) plans.replaceAll { if (it.status == PlanStatus.ACTIVE) it.copy(status = PlanStatus.PAUSED) else it }
-        return plans[i].copy(status = status).also { plans[i] = it }
+        if (status == PlanStatus.ACTIVE) {
+            plans.replaceAll { if (it.status == PlanStatus.ACTIVE) it.copy(status = PlanStatus.PAUSED, pausedAt = PAUSED_AT) else it }
+        }
+        val p = plans[i]
+        val pausedAt = when (status) {
+            PlanStatus.PAUSED -> p.pausedAt ?: PAUSED_AT
+            // Archiving the active plan pauses it first; archive keeps pausedAt.
+            PlanStatus.ARCHIVED -> if (p.status == PlanStatus.ACTIVE) PAUSED_AT else p.pausedAt
+            else -> null
+        }
+        return p.copy(status = status, pausedAt = pausedAt).also { plans[i] = it }
     }
 
     private inline fun <T> write(tag: String, id: String, key: String, block: () -> T): ApiResult<T> {
@@ -49,9 +63,19 @@ class FakePlanManagementRepository : PlanManagementRepository {
 
     override suspend fun pause(planId: String, idempotencyKey: String) = write("pause", planId, idempotencyKey) { set(planId, PlanStatus.PAUSED); Unit }
     override suspend fun resume(planId: String, idempotencyKey: String) = write("resume", planId, idempotencyKey) { set(planId, PlanStatus.ACTIVE).asPlan() }
-    override suspend fun restart(planId: String, idempotencyKey: String) = write("restart", planId, idempotencyKey) { set(planId, PlanStatus.ACTIVE).asPlan() }
+    /** Mirrors the contract: activate on the active plan is a no-op unless it was paused first. */
+    override suspend fun restart(planId: String, idempotencyKey: String, wasActive: Boolean) = write("restart", planId, idempotencyKey) {
+        val i = plans.indexOfFirst { it.id == planId }
+        if (plans[i].status == PlanStatus.ACTIVE && !wasActive) return@write plans[i].asPlan()
+        set(planId, PlanStatus.ACTIVE)
+        plans[i] = plans[i].copy(currentWeek = 1, pausedAt = null)
+        plans[i].asPlan()
+    }
     override suspend fun archive(planId: String, idempotencyKey: String) = write("archive", planId, idempotencyKey) { set(planId, PlanStatus.ARCHIVED); Unit }
-    override suspend fun unarchive(planId: String, idempotencyKey: String) = write("unarchive", planId, idempotencyKey) { set(planId, PlanStatus.INACTIVE).asPlan() }
+    override suspend fun unarchive(planId: String, idempotencyKey: String) = write("unarchive", planId, idempotencyKey) {
+        val p = set(planId, if (plans.first { it.id == planId }.pausedAt != null) PlanStatus.PAUSED else PlanStatus.INACTIVE)
+        PlanRowUpdate(p.id, p.name, p.status, p.pausedAt, p.currentWeek)
+    }
     override suspend fun rename(planId: String, name: String, idempotencyKey: String) = write("rename", planId, idempotencyKey) {
         val i = plans.indexOfFirst { it.id == planId }
         plans[i] = plans[i].copy(name = name)

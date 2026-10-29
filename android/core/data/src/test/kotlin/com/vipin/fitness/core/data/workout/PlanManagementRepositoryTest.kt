@@ -5,6 +5,10 @@ import com.vipin.fitness.core.network.PlanManagementApi
 import com.vipin.fitness.core.network.WorkoutApi
 import com.vipin.fitness.core.network.di.fitnessJson
 import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.model.WorkoutPlanDto
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import retrofit2.Response
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -90,6 +94,73 @@ class PlanManagementRepositoryTest {
             assertEquals("PUT", it.method); assertEquals("/api/v1/workout-plans/p1/name", it.url.encodedPath)
             assertEquals("""{"name":"Strong"}""", it.body?.utf8())
         }
+    }
+
+    private fun planJson(week: Int, active: Boolean = true, pausedAt: String? = null, archivedAt: String? = null) =
+        """{"id":"p1","version":1,"name":"Strong","weeks":8,"workouts":[],"isActive":$active,"source":"custom","createdAt":"t","currentWeek":$week,""" +
+            """"pausedAt":${pausedAt?.let { "\"$it\"" } ?: "null"},"archivedAt":${archivedAt?.let { "\"$it\"" } ?: "null"}}"""
+
+    @Test fun restartOfTheActivePlanPausesThenActivatesWithNoBodyAndResetsTheWeek() = runTest {
+        server.enqueue(MockResponse(code = 204))                    // deactivate
+        server.enqueue(MockResponse(code = 200, body = planJson(1))) // activate, no body
+        server.enqueue(MockResponse(code = 200, body = planJson(1))) // GET /active
+        val plan = (repo.restart("p1", "k1", wasActive = true) as ApiResult.Success).value
+        assertEquals(1, plan.currentWeek)
+        val d = server.takeRequest()
+        assertEquals("/api/v1/workout-plans/p1/deactivate", d.url.encodedPath)
+        val dKey = d.headers["Idempotency-Key"]!!
+        assertTrue(dKey != "k1" && java.util.UUID.fromString(dKey) != null)
+        val a = server.takeRequest()
+        assertEquals("/api/v1/workout-plans/p1/activate", a.url.encodedPath)
+        assertEquals("k1", a.headers["Idempotency-Key"])
+        assertEquals(0, a.body?.size ?: 0)
+        assertEquals(1, (workouts.activePlan.value as ActivePlan.Some).plan.currentWeek)
+        server.takeRequest() // GET /active
+        // A retry of the same restart reuses both keys.
+        server.enqueue(MockResponse(code = 204))
+        server.enqueue(MockResponse(code = 200, body = planJson(1)))
+        server.enqueue(MockResponse(code = 200, body = planJson(1)))
+        repo.restart("p1", "k1", wasActive = true)
+        assertEquals(dKey, server.takeRequest().headers["Idempotency-Key"])
+    }
+
+    @Test fun unarchiveReturnsTheRestoredRow() = runTest {
+        server.enqueue(MockResponse(code = 200, body = planJson(3, active = false, pausedAt = "2026-10-20T00:00:00Z")))
+        val u = (repo.unarchive("p1", "k") as ApiResult.Success).value
+        assertEquals(PlanStatus.PAUSED, u.status)
+        assertEquals("2026-10-20T00:00:00Z", u.pausedAt)
+        server.enqueue(MockResponse(code = 200, body = planJson(1, active = false)))
+        assertEquals(PlanStatus.INACTIVE, (repo.unarchive("p1", "k2") as ApiResult.Success).value.status)
+        assertEquals(2, server.requestCount) // no reload, no active refresh
+    }
+
+    /** Delegates to the server-backed api but holds GET /active until [gate] completes. */
+    private class HeldActive(private val real: WorkoutApi, val gate: CompletableDeferred<Unit>) : WorkoutApi by real {
+        val started = CompletableDeferred<Unit>()
+        override suspend fun active(): Response<WorkoutPlanDto> {
+            started.complete(Unit)
+            gate.await()
+            return real.active()
+        }
+    }
+
+    @Test fun activeResponseHeldAcrossSignOutIsNotCached() = runTest {
+        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val held = HeldActive(r.create(WorkoutApi::class.java), CompletableDeferred())
+        val scopedWorkouts = DefaultWorkoutRepository(held, json)
+        val plans = DefaultPlanManagementRepository(r.create(PlanManagementApi::class.java), scopedWorkouts, json)
+        server.enqueue(MockResponse(code = 204))                // deactivate
+        server.enqueue(MockResponse(code = 200, body = plan))   // the held GET /active
+        val call = async { plans.pause("p1", "k") }
+        held.started.await()
+        scopedWorkouts.clearUserState()                          // sign-out / user switch
+        held.gate.complete(Unit)
+        assertTrue(call.await() is ApiResult.Success)
+        assertNull(scopedWorkouts.activePlan.value)
+        // Without a sign-out in between the same response is cached.
+        server.enqueue(MockResponse(code = 200, body = plan))
+        scopedWorkouts.refreshActivePlan()
+        assertTrue(scopedWorkouts.activePlan.value is ActivePlan.Some)
     }
 
     @Test fun planArchivedIsRecognised() = runTest {
