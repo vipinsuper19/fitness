@@ -528,7 +528,7 @@ paths:
       tags: [workout-plans]
       operationId: updateWorkoutPlan
       summary: Edit a plan by creating a new version
-      description: Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
+      description: The new version keeps the latest version's name (`name` in the body is ignored; rename with `PUT .../name`). Earlier versions stay readable, so logged sessions keep pointing at the version they followed. `baseVersion` must be the latest version or the call fails with `409 VERSION_CONFLICT`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -580,15 +580,15 @@ paths:
         no new version is created; older versions keep the names they were saved with
         (`GET /workout-plans/{planId}?version=N` shows the old name). The name is trimmed;
         after trimming it must be 1–80 characters, otherwise `400 VALIDATION_FAILED`
-        (blank or whitespace-only is rejected). Renaming to the current name (after
+        (empty after trimming, including blank or whitespace-only, is `400 VALIDATION_FAILED`). Renaming to the current name (after
         trimming) is a no-op that returns 200. `PUT` is idempotent by itself; an
         `Idempotency-Key` is also accepted as on other writes. Works for active, paused
         and inactive plans; archived plans are read-only, so any rename, even to the same name, is `409 PLAN_ARCHIVED`. Status,
         `activatedAt`, `pausedAt` and `currentWeek` are unchanged. The new name shows in
         `GET /workout-plans` (`WorkoutPlanSummary.name`), `GET /workout-plans/active` and
-        `GET /workout-plans/{planId}` straight away. A later `PATCH` without `name` copies
-        the renamed name; clients leave `name` out unless the user edited it. There is no
-        version check; the last write wins.
+        `GET /workout-plans/{planId}` straight away. `PATCH` ignores `name` and copies the
+        latest name, so this is the only way to rename. There is no version check; the
+        last write wins.
       parameters:
         - $ref: '#/components/parameters/PlanId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2079,13 +2079,12 @@ components:
     WorkoutPlanUpdate:
       type: object
       description: |
-        A `WorkoutPlanDraft` plus `baseVersion`, except that `name` is optional. A missing
-        `name` copies the latest version's name (including a rename made with
-        `PUT /workout-plans/{planId}/name`). A provided `name` is trimmed and must be 1–80
-        characters, as before. Clients should leave `name` out unless the user edited it.
+        A `WorkoutPlanDraft` plus `baseVersion`. `name` is **ignored**: it is still accepted
+        (optional, any valid draft name) for compatibility, but the new version always copies
+        the latest version's name. Renaming is only possible with `PUT /workout-plans/{planId}/name`.
       required: [weeks, workouts, generator, baseVersion]
       properties:
-        name: { type: string, minLength: 1, maxLength: 80, description: Optional; omitted = keep the latest version's name }
+        name: { type: string, minLength: 1, maxLength: 80, deprecated: true, description: 'Ignored; accepted for compatibility. The new version copies the latest name.' }
         weeks: { $ref: './schemas/workout-plan-draft.schema.json#/properties/weeks' }
         generator: { $ref: './schemas/workout-plan-draft.schema.json#/properties/generator' }
         rationale: { $ref: './schemas/workout-plan-draft.schema.json#/properties/rationale' }
