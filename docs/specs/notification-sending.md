@@ -24,7 +24,7 @@ The seven existing preference types. Two families:
 
 - **Only live events notify. Backfills never do.** An outbox row is created only when a badge award, challenge transition or progression suggestion is **caused by a live user write after release**: a workout session completed, or a food, water or body log written, through the API. Evaluation code takes an explicit `cause` (`live` | `backfill`) and writes outbox rows only for `live`. None of these create outbox rows:
   - `npm run badges:backfill`, `targets:backfill` and any future backfill script;
-  - the **first evaluation of a user's existing history**, including the lazy release backfill on `GET /badges` (`AchievementsService` `…Backfilled`, once per catalog version) and the re-evaluation after a catalog version bump;
+  - the **first evaluation of a user's existing history**, including the lazy release backfill on `GET /badges` (`AchievementsService.ensureBackfilled`, once per catalog version) and the re-evaluation after a catalog version bump;
   - **challenges:** transitions found during a backfill or lazy evaluation on read. Lazy expiry on `GET /challenges` is evaluated as `backfill`, so "expired" is sent only when a live write or the tick detects it after release. "Deadline near" comes from the tick, which is a live check, and is sent once per challenge (slot key);
   - **progression:** suggestions are computed on read (`GET …/progression-suggestions`), and reading never notifies. Only the session-completion hook after release does, and only for a suggestion that differs from the last notified one.
   - Scheduled reminders aren't affected; they come from the tick.
