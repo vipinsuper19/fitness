@@ -25,6 +25,8 @@ import com.vipin.fitness.feature.workout.ExerciseLibraryRoute
 import com.vipin.fitness.feature.workout.NewPlanRoute
 import com.vipin.fitness.feature.workout.PlanPreviewRoute
 import com.vipin.fitness.feature.workout.SessionSummaryRoute
+import com.vipin.fitness.feature.workout.HistoryRoute
+import com.vipin.fitness.feature.workout.PastSessionRoute
 import com.vipin.fitness.feature.workout.WorkoutDestination
 import java.time.DayOfWeek
 import kotlinx.coroutines.flow.Flow
@@ -84,6 +86,7 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                                         WorkoutDestination.Library -> Route.ExerciseLibrary()
                                         is WorkoutDestination.ExerciseDetail -> Route.ExerciseDetail(dest.id)
                                         WorkoutDestination.ActiveSession -> Route.ActiveSession
+                                        WorkoutDestination.History -> Route.WorkoutHistory
                                     },
                                 )
                             },
@@ -134,6 +137,12 @@ fun FitnessNavDisplay(startRoute: Route, isSignedIn: () -> Boolean, sessionExpir
                 Route.DeleteAccount -> NavEntry(key) {
                     // Deleted: same landing as sign-out (fresh SignIn, nothing to go back to).
                     DeleteAccountRoute(onDeleted = { AppNavigation.onSignedOut(stack) }, onCancel = { AppNavigation.pop(stack) })
+                }
+                Route.WorkoutHistory -> NavEntry(key) {
+                    HistoryRoute(onOpen = { backStack.add(Route.PastSession(it)) })
+                }
+                is Route.PastSession -> NavEntry(key) {
+                    PastSessionRoute(route.id)
                 }
                 Route.ExportData -> NavEntry(key) { ExportRoute() }
                 Route.Achievements -> NavEntry(key) {
