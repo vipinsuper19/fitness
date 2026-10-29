@@ -20,6 +20,10 @@ data class ProfileDto(
     val currency: String = "INR",
     val dailyCalorieTargetKcal: Int? = null,
     val dailyWaterTargetMl: Int? = null,
+    /** Macro targets (#85): integer grams 0–1000; reads never return 0 (normalized to null). */
+    val dailyProteinTargetG: Int? = null,
+    val dailyCarbsTargetG: Int? = null,
+    val dailyFatTargetG: Int? = null,
     val onboardingCompleted: Boolean = false,
     val updatedAt: String,
 )

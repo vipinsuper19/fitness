@@ -46,15 +46,18 @@ import com.vipin.fitness.core.data.WaterLog
  * Kept inside the module so the app's nav files only reference [NutritionScreen].
  */
 @Composable
-fun NutritionScreen(modifier: Modifier = Modifier) {
+fun NutritionScreen(modifier: Modifier = Modifier, onOpenProfile: () -> Unit = {}) {
     val diary: DiaryViewModel = hiltViewModel(key = "nutrition_diary")
     var addingTo by rememberSaveable { mutableStateOf<MealType?>(null) }
     var showSummary by rememberSaveable { mutableStateOf(false) }
+    var showMacros by rememberSaveable { mutableStateOf(false) }
     val meal = addingTo
-    if (showSummary) {
+    if (showMacros) {
+        MacroTargetsRoute(onBack = { showMacros = false }, onOpenProfile = onOpenProfile, modifier = modifier)
+    } else if (showSummary) {
         NutritionSummaryRoute(onBack = { showSummary = false }, modifier = modifier)
     } else if (meal == null) {
-        DiaryScreen(diary, onAdd = { addingTo = it }, onOpenSummary = { showSummary = true }, modifier = modifier)
+        DiaryScreen(diary, onAdd = { addingTo = it }, onOpenSummary = { showSummary = true }, onOpenMacros = { showMacros = true }, modifier = modifier)
     } else {
         val date = diary.state.collectAsStateWithLifecycle().value.date
         FoodSearchScreen(
@@ -70,7 +73,7 @@ fun NutritionScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DiaryScreen(vm: DiaryViewModel, onAdd: (MealType) -> Unit, onOpenSummary: () -> Unit, modifier: Modifier) {
+private fun DiaryScreen(vm: DiaryViewModel, onAdd: (MealType) -> Unit, onOpenSummary: () -> Unit, onOpenMacros: () -> Unit, modifier: Modifier) {
     val s by vm.state.collectAsStateWithLifecycle()
     var editingWater by remember { mutableStateOf<WaterLog?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
@@ -78,6 +81,9 @@ private fun DiaryScreen(vm: DiaryViewModel, onAdd: (MealType) -> Unit, onOpenSum
         DateBar(s, vm)
         androidx.compose.material3.TextButton(onClick = onOpenSummary, modifier = Modifier.padding(horizontal = 8.dp).testTag("open_nutrition_summary")) {
             Text(stringResource(R.string.summary_open))
+        }
+        TextButton(onClick = onOpenMacros, modifier = Modifier.padding(horizontal = 8.dp).testTag(MacroTargetsTags.OPEN)) {
+            Text(stringResource(R.string.macro_open))
         }
         when {
             s.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
