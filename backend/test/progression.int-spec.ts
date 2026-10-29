@@ -304,4 +304,29 @@ describeDb('progression suggestions (HTTP + Postgres)', () => {
     expect(byEx(s, a)).toMatchObject({ action: 'increase', reason: 'ALL_SETS_COMPLETED', cooldownUntil: null, suggested: { targetWeightKg: 42 } });
     expect(byEx(s, b).suggested!.durationSeconds).toBe(70);
   });
+
+  it('corrections apply: a set corrected through the session-correction API changes the suggestion', async () => {
+    const u = await signUp();
+    const a = await mkEx();
+    const plan = await mkPlan(u.token, [{ ex: a, repsMin: 8, repsMax: 10, targetWeightKg: 40 }]);
+    await session(u.id, plan, 4, { [a]: rep(2, { reps: 10, kg: 40 }) });
+    await session(u.id, plan, 2, { [a]: rep(2, { reps: 10, kg: 40 }) });
+    // Third session through the API (today, inside the correction window): one set short of repsMax.
+    const { pwId } = await version(plan);
+    const sid = (await as(u.token).post('/api/v1/workout-sessions').send({ plannedWorkoutId: pwId, planVersion: 1 }).expect(201)).body.id as string;
+    const ids = [randomUUID(), randomUUID()];
+    const setBody = (i: number, reps: number) => ({ clientSetId: ids[i], exerciseId: a, setIndex: i, reps, weightKg: 40, completed: true });
+    await as(u.token).post(`/api/v1/workout-sessions/${sid}/sets`).send(setBody(0, 10)).expect(200);
+    await as(u.token).post(`/api/v1/workout-sessions/${sid}/sets`).send(setBody(1, 9)).expect(200);
+    await as(u.token).post(`/api/v1/workout-sessions/${sid}/complete`).send({ perceivedDifficulty: 3 }).expect(200);
+    let s = await suggest(u.token, plan);
+    expect(byEx(s, a)).toMatchObject({ action: 'hold', reason: 'MISSED_TARGET' });
+    expect(byEx(s, a).basedOn[0]).toMatchObject({ sessionId: sid, metTarget: false });
+
+    const put = http().put(`/api/v1/workout-sessions/${sid}/corrections/sets/${ids[1]}`).set('Authorization', `Bearer ${u.token}`).set('Idempotency-Key', randomUUID());
+    await put.send(setBody(1, 10)).expect(200);
+    s = await suggest(u.token, plan);
+    expect(byEx(s, a).basedOn[0]).toMatchObject({ sessionId: sid, metTarget: true, bestReps: 10 });
+    expect(byEx(s, a)).toMatchObject({ action: 'increase', reason: 'ALL_SETS_COMPLETED', suggested: { targetWeightKg: 41 } });
+  });
 });
