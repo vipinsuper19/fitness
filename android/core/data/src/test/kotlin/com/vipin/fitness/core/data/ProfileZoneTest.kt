@@ -5,7 +5,7 @@ import com.vipin.fitness.core.common.time.APP_ZONE
 import com.vipin.fitness.core.datastore.ProfileFlagsCache
 import com.vipin.fitness.core.network.ProfileApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import com.vipin.fitness.core.network.ApiResult
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
@@ -38,7 +38,7 @@ class ProfileZoneTest {
 
     @Before fun setUp() {
         server.start()
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         zone = ProfileZone { profiles }
         profiles = DefaultProfileRepository(r.create(ProfileApi::class.java), json, NoCache, zone)
     }

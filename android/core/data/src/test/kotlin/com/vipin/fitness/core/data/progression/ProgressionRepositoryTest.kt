@@ -6,7 +6,7 @@ import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.ProgressionApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -49,7 +49,7 @@ class ProgressionRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         repo = DefaultProgressionRepository(r.create(ProgressionApi::class.java), workouts, json, Clock.fixed(Instant.parse("2026-10-29T10:00:00Z"), ZoneOffset.UTC))
     }
 

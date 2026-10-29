@@ -18,7 +18,7 @@ import com.vipin.fitness.core.database.FitnessDatabase
 import com.vipin.fitness.core.database.outbox.PendingWriteEntity
 import com.vipin.fitness.core.network.OutboxApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -74,7 +74,7 @@ class WorkoutTrackingTest {
 
     @Before fun setUp() {
         server.start()
-        outbox = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
+        outbox = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
     }
 
     @After fun tearDown() {
@@ -255,7 +255,7 @@ class WorkoutTrackingTest {
         assertTrue(queued().isEmpty())
     }
 
-    private fun newProcessor() = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
+    private fun newProcessor() = OutboxProcessor(db.pendingWriteDao(), db.workoutSessionDao(), buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(OutboxApi::class.java), json, clock)
     private val rateLimited get() = MockResponse(code = 429, headers = okhttp3.Headers.headersOf("Retry-After", "120"), body = """{"code":"RATE_LIMITED","message":"x"}""")
 
     @Test fun rateLimitWindowSurvivesAProcessRestartAndClearsOnSuccess() = runTest {

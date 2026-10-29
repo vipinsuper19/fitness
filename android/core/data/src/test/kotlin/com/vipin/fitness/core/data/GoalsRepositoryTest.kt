@@ -3,7 +3,7 @@ package com.vipin.fitness.core.data
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.GoalsApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -22,7 +22,7 @@ class GoalsRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        repo = DefaultGoalsRepository(retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(GoalsApi::class.java), json)
+        repo = DefaultGoalsRepository(buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(GoalsApi::class.java), json)
     }
 
     @After fun tearDown() = server.close()

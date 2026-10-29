@@ -4,7 +4,7 @@ import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.PlanManagementApi
 import com.vipin.fitness.core.network.WorkoutApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import com.vipin.fitness.core.network.model.WorkoutPlanDto
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -30,7 +30,7 @@ class PlanManagementRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         workouts = DefaultWorkoutRepository(r.create(WorkoutApi::class.java), json)
         repo = DefaultPlanManagementRepository(r.create(PlanManagementApi::class.java), workouts, json)
     }
@@ -145,7 +145,7 @@ class PlanManagementRepositoryTest {
     }
 
     @Test fun activeResponseHeldAcrossSignOutIsNotCached() = runTest {
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         val held = HeldActive(r.create(WorkoutApi::class.java), CompletableDeferred())
         val scopedWorkouts = DefaultWorkoutRepository(held, json)
         val plans = DefaultPlanManagementRepository(r.create(PlanManagementApi::class.java), scopedWorkouts, json)

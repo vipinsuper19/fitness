@@ -1,7 +1,7 @@
 package com.vipin.fitness.core.network.auth
 
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -82,12 +82,12 @@ class TokenAuthenticatorTest {
         val baseUrl = server.url("/api/v1/").toString()
         val json = fitnessJson()
         val base = OkHttpClient()
-        val refresher = RetrofitTokenRefresher(retrofit(baseUrl, base, json).create(RefreshApi::class.java), Clock.fixed(Instant.ofEpochMilli(1_000L), ZoneOffset.UTC))
+        val refresher = RetrofitTokenRefresher(buildRetrofit(baseUrl, base, json).create(RefreshApi::class.java), Clock.fixed(Instant.ofEpochMilli(1_000L), ZoneOffset.UTC))
         val client = base.newBuilder()
             .addInterceptor(AuthInterceptor(store))
             .authenticator(TokenAuthenticator(store, refresher, events))
             .build()
-        api = retrofit(baseUrl, client, json).create(TestApi::class.java)
+        api = buildRetrofit(baseUrl, client, json).create(TestApi::class.java)
     }
 
     @After fun tearDown() = server.close()

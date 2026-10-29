@@ -16,7 +16,7 @@ import com.vipin.fitness.core.network.ApiError
 import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.WorkoutApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -36,7 +36,7 @@ class WorkoutRepositoryTest {
     @Before fun setUp() {
         server.start()
         val json = fitnessJson()
-        repo = DefaultWorkoutRepository(retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(WorkoutApi::class.java), json)
+        repo = DefaultWorkoutRepository(buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json).create(WorkoutApi::class.java), json)
     }
 
     @After fun tearDown() = server.close()

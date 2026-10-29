@@ -4,7 +4,7 @@ import com.vipin.fitness.core.network.ApiResult
 import com.vipin.fitness.core.network.NutritionApi
 import com.vipin.fitness.core.network.ProgressApi
 import com.vipin.fitness.core.network.di.fitnessJson
-import com.vipin.fitness.core.network.di.retrofit
+import com.vipin.fitness.core.network.di.buildRetrofit
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -27,7 +27,7 @@ class ProgressRepositoryTest {
 
     @Before fun setUp() {
         server.start()
-        val r = retrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
+        val r = buildRetrofit(server.url("/api/v1/").toString(), OkHttpClient(), json)
         repo = DefaultProgressRepository(r.create(ProgressApi::class.java), json)
         home = DefaultHomeRepository(r.create(ProgressApi::class.java), r.create(NutritionApi::class.java), json)
     }
