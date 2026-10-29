@@ -92,8 +92,38 @@ class PlansViewModelTest {
     @Test fun unarchiveUnderAllUpdatesTheRowInPlace() {
         repo.pages = { _, _ -> ApiResult.Success(PlanSummaryPage(repo.plans.toList(), null)) } // e.g. a stale All list still showing it
         val vm = vm()
+        val before = vm.state.value.items
+        val lists = repo.listCalls.size
         vm.perform("c", PlanAction.UNARCHIVE)
-        assertEquals(PlanStatus.INACTIVE, vm.state.value.items.single { it.id == "c" }.status)
+        val after = vm.state.value.items
+        // Same rows in the same order, no reload; only "c" changed.
+        assertEquals(before.map { it.id }, after.map { it.id })
+        assertEquals(lists, repo.listCalls.size)
+        val c = after.single { it.id == "c" }
+        assertEquals(PlanStatus.INACTIVE, c.status)
+        assertNull(c.pausedAt)
+        assertEquals(before.filter { it.id != "c" }, after.filter { it.id != "c" })
+        assertNull(vm.state.value.busyId)
+    }
+
+    @Test fun unarchiveUnderAllUpdatesAPausedRowInPlaceWithItsPausedAt() {
+        repo.plans[2] = repo.plans[2].copy(pausedAt = FakePlanManagementRepository.PAUSED_AT) // archived while paused
+        repo.pages = { _, _ -> ApiResult.Success(PlanSummaryPage(repo.plans.toList(), null)) }
+        val vm = vm()
+        val before = vm.state.value.items
+        val index = before.indexOfFirst { it.id == "c" }
+        val lists = repo.listCalls.size
+        vm.perform("c", PlanAction.UNARCHIVE)
+        val after = vm.state.value.items
+        assertEquals(before.map { it.id }, after.map { it.id })
+        assertEquals(lists, repo.listCalls.size)
+        val c = after[index]
+        assertEquals("c", c.id)
+        assertEquals(PlanStatus.PAUSED, c.status)
+        assertEquals(FakePlanManagementRepository.PAUSED_AT, c.pausedAt)
+        assertEquals(before[index].name, c.name)
+        assertEquals(before.filter { it.id != "c" }, after.filter { it.id != "c" })
+        assertNull(vm.state.value.busyId)
     }
 
     @Test fun planArchivedShowsTheNoticeAndRefreshClearsIt() {
