@@ -108,18 +108,48 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RegisterRequest' }
+            example:
+              email: asha.verma@example.invalid
+              password: correct horse battery staple
+              displayName: Asha Verma
       responses:
         '201':
           description: Account created and signed in
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthResponse' }
+              example:
+                user:
+                  id: 12dea96f-ec20-4935-a6ab-75692c994959
+                  email: asha.verma@example.invalid
+                  displayName: Asha Verma
+                  createdAt: 2026-09-14T09:12:00+05:30
+                accessToken: eyJhbGciOiJIUzI1NiJ9.placeholder.signature
+                refreshToken: rt_placeholder_3f9a1c7e5b2d4f6a
+                tokenType: Bearer
+                expiresIn: 900
         '400': { $ref: '#/components/responses/ValidationError' }
         '409':
           description: '`EMAIL_TAKEN` (also on a retry after a successful sign-up), `IDEMPOTENCY_IN_PROGRESS`, or `IDEMPOTENCY_KEY_REUSED`'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                EMAIL_TAKEN:
+                  value:
+                    code: EMAIL_TAKEN
+                    message: An account with this email already exists. Sign in instead.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_IN_PROGRESS:
+                  value:
+                    code: IDEMPOTENCY_IN_PROGRESS
+                    message: A request with this Idempotency-Key is still running. Retry shortly.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/login:
     post:
@@ -133,18 +163,35 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/LoginRequest' }
+            example:
+              email: asha.verma@example.invalid
+              password: correct horse battery staple
       responses:
         '200':
           description: Signed in
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthResponse' }
+              example:
+                user:
+                  id: 12dea96f-ec20-4935-a6ab-75692c994959
+                  email: asha.verma@example.invalid
+                  displayName: Asha Verma
+                  createdAt: 2026-09-14T09:12:00+05:30
+                accessToken: eyJhbGciOiJIUzI1NiJ9.placeholder.signature
+                refreshToken: rt_placeholder_3f9a1c7e5b2d4f6a
+                tokenType: Bearer
+                expiresIn: 900
         '400': { $ref: '#/components/responses/ValidationError' }
         '401':
           description: '`INVALID_CREDENTIALS` (same response for unknown email and wrong password)'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: INVALID_CREDENTIALS
+                message: Email or password is incorrect.
+                requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/refresh:
     post:
@@ -158,17 +205,40 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RefreshRequest' }
+            example:
+              refreshToken: rt_placeholder_3f9a1c7e5b2d4f6a
       responses:
         '200':
           description: New token pair
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
+              example:
+                accessToken: eyJhbGciOiJIUzI1NiJ9.placeholder.signature
+                refreshToken: rt_placeholder_3f9a1c7e5b2d4f6a
+                tokenType: Bearer
+                expiresIn: 900
         '401':
           description: '`REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED` or `REFRESH_TOKEN_REUSED`. Every rejected refresh token (unknown, expired, revoked by logout, or reused after rotation) is a `401`, never `400`/`403`; clients treat only a `401` from refresh as "session over".'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                REFRESH_TOKEN_INVALID:
+                  value:
+                    code: REFRESH_TOKEN_INVALID
+                    message: Sign in again.
+                    requestId: req_7f3a9c1e2b4d
+                REFRESH_TOKEN_EXPIRED:
+                  value:
+                    code: REFRESH_TOKEN_EXPIRED
+                    message: Sign in again.
+                    requestId: req_7f3a9c1e2b4d
+                REFRESH_TOKEN_REUSED:
+                  value:
+                    code: REFRESH_TOKEN_REUSED
+                    message: Sign in again.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/logout:
     post:
@@ -189,6 +259,8 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RefreshRequest' }
+            example:
+              refreshToken: rt_placeholder_3f9a1c7e5b2d4f6a
       responses:
         '204': { description: Signed out (also returned for an already revoked token) }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -210,6 +282,8 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/DeleteAccountRequest' }
+            example:
+              password: correct horse battery staple
       responses:
         '204': { description: Deleted }
         '400': { $ref: '#/components/responses/ValidationError' }
@@ -218,11 +292,19 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: UNAUTHENTICATED
+                message: Sign in to continue.
+                requestId: req_7f3a9c1e2b4d
         '403':
           description: '`INVALID_PASSWORD`'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: INVALID_PASSWORD
+                message: Password is incorrect.
+                requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /me/macro-suggestion:
     get:
@@ -243,6 +325,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MacroSuggestion' }
+              example:
+                suggestion:
+                  proteinG: 109
+                  carbsG: 192
+                  fatG: 44
+                  kcal: 1600
+                missingInputs: []
+                basis:
+                  calorieTargetKcal: 1600
+                  weightKg: 68.4
+                  goal: lose_weight
+                  goalSource: active_goal
+                  dietPreference: vegetarian
+                  proteinGPerKg: 1.6
+                  fatPct: 25
+                formulaVersion: 1
         '401': { $ref: '#/components/responses/Unauthorized' }
   /me/export:
     get:
@@ -264,6 +362,256 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DataExport' }
+              example:
+                exportedAt: 2026-10-29T08:30:00+05:30
+                user:
+                  id: 12dea96f-ec20-4935-a6ab-75692c994959
+                  email: asha.verma@example.invalid
+                  displayName: Asha Verma
+                  createdAt: 2026-09-14T09:12:00+05:30
+                profile:
+                  userId: 12dea96f-ec20-4935-a6ab-75692c994959
+                  displayName: Asha Verma
+                  birthYear: 1994
+                  sex: female
+                  heightCm: 158
+                  weightKg: 68.4
+                  activityLevel: light
+                  experienceLevel: beginner
+                  dietPreference: vegetarian
+                  unitSystem: metric
+                  timezone: Asia/Kolkata
+                  locale: en-IN
+                  currency: INR
+                  dailyCalorieTargetKcal: 1600
+                  dailyWaterTargetMl: 2500
+                  dailyProteinTargetG: 109
+                  dailyCarbsTargetG: 192
+                  dailyFatTargetG: 44
+                  onboardingCompleted: true
+                  updatedAt: 2026-10-27T21:05:00+05:30
+                notificationPreferences:
+                  enabled: true
+                  types:
+                    workout_reminder: true
+                    streak_reminder: true
+                    water_reminder: true
+                    food_log_reminder: false
+                    challenge_updates: true
+                    badge_earned: true
+                    progression_suggestion: true
+                  quietHours:
+                    enabled: true
+                    start: 22:00
+                    end: 07:00
+                  reminders:
+                    workoutReminder:
+                      time: 07:00
+                      days:
+                        - mon
+                        - wed
+                        - fri
+                    streakReminder:
+                      time: 20:00
+                    waterReminder:
+                      intervalMinutes: 120
+                      start: 09:00
+                      end: 21:00
+                    foodLogReminder:
+                      times:
+                        - 09:30
+                        - 14:00
+                        - 21:00
+                  timezone: Asia/Kolkata
+                  updatedAt: 2026-10-27T21:10:00+05:30
+                notificationDevices:
+                  - id: f3a929b3-364b-471a-881f-4f7cda0b4559
+                    platform: android
+                    appVersion: 1.6.0
+                    createdAt: 2026-10-27T21:15:00+05:30
+                    lastSeenAt: 2026-10-29T07:25:00+05:30
+                notificationSends:
+                  - type: workout_reminder
+                    status: sent
+                    dueAt: 2026-10-29T07:00:00+05:30
+                    sentAt: 2026-10-29T07:00:00+05:30
+                goals:
+                  - id: db9a022b-7562-4d56-a405-9371d5ef893e
+                    type: lose_weight
+                    status: active
+                    targetValue: 62
+                    startValue: 72
+                    targetDate: 2027-03-31
+                    createdAt: 2026-09-14T09:20:00+05:30
+                    updatedAt: 2026-09-14T09:20:00+05:30
+                workoutPlans:
+                  - id: bed97175-b06e-48eb-bff5-722897aa86b8
+                    version: 1
+                    name: Beginner full body, 3 days
+                    weeks: 8
+                    rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                    workouts:
+                      - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                        dayOfWeek: 1
+                        name: Full body A
+                        exercises:
+                          - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                            order: 0
+                            sets: 3
+                            repsMin: 8
+                            repsMax: 12
+                            durationSeconds: null
+                            targetWeightKg: 30
+                            restSeconds: 90
+                            notes: Keep your feet flat on the floor.
+                          - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                            order: 1
+                            sets: 3
+                            repsMin: null
+                            repsMax: null
+                            durationSeconds: 45
+                            targetWeightKg: null
+                            restSeconds: 60
+                            notes: null
+                    isActive: true
+                    source: rule_based
+                    createdAt: 2026-10-19T19:40:00+05:30
+                    activatedAt: 2026-10-19T19:41:00+05:30
+                    pausedAt: null
+                    archivedAt: null
+                    currentWeek: 2
+                    planEnded: false
+                workoutSessions:
+                  - id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                    planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                    planVersion: 1
+                    plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    status: completed
+                    startedAt: 2026-10-29T07:30:00+05:30
+                    completedAt: 2026-10-29T08:20:00+05:30
+                    activeSeconds: 2700
+                    perceivedDifficulty: 3
+                    notes: Last set of bench press felt heavy.
+                    sets:
+                      - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                        updatedAt: 2026-10-29T07:41:00+05:30
+                        clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                        exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        setIndex: 0
+                        reps: 10
+                        weightKg: 30
+                        durationSeconds: null
+                        distanceM: null
+                        completed: true
+                        loggedAt: 2026-10-29T07:41:00+05:30
+                      - id: 61867c2c-37d6-4dff-b258-b5f0c05f70e7
+                        updatedAt: 2026-10-29T08:02:00+05:30
+                        clientSetId: 6f07b080-fea2-4af2-9227-3a47c76008d0
+                        exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        setIndex: 0
+                        reps: null
+                        weightKg: null
+                        durationSeconds: 45
+                        distanceM: null
+                        completed: true
+                        loggedAt: 2026-10-29T08:02:00+05:30
+                customFoods:
+                  - id: da4bfaed-955c-45a7-a403-10f429307aa7
+                    name: Homemade poha
+                    nameHi: null
+                    brand: null
+                    servingSize: 1
+                    servingUnit: katori
+                    gramsPerServing: 150
+                    nutrients:
+                      energyKcal: 250
+                      proteinG: 5
+                      carbsG: 42
+                      fatG: 7
+                      fiberG: 2.5
+                      sugarG: 2
+                      sodiumMg: 310
+                    isVegetarian: true
+                    source: custom
+                    deletedAt: null
+                foodLogs:
+                  - id: 2d574ad8-3928-4f9a-b087-6b3a940532ba
+                    foodId: 39ccb32d-95ed-4dbc-9882-f2b01809724e
+                    foodName: Masala dosa
+                    date: 2026-10-29
+                    mealType: breakfast
+                    servings: 1
+                    servingSize: 1
+                    servingUnit: piece
+                    gramsPerServing: 160
+                    nutrients:
+                      energyKcal: 270
+                      proteinG: 6.5
+                      carbsG: 38
+                      fatG: 10.5
+                      fiberG: 3.2
+                      sugarG: 1.8
+                      sodiumMg: 450
+                    nutrientsEdited: false
+                    createdAt: 2026-10-29T08:45:00+05:30
+                waterLogs:
+                  - id: 6d5a4592-0a15-4dea-849c-8f22d569ff20
+                    date: 2026-10-29
+                    amountMl: 250
+                    createdAt: 2026-10-29T10:15:00+05:30
+                bodyMeasurements:
+                  - id: e382b1de-d37d-4669-8cd7-69c53b387023
+                    date: 2026-10-29
+                    weightKg: 68.4
+                    bodyFatPct: 31.5
+                    waistCm: 84
+                    chestCm: 92.5
+                    hipCm: 101
+                    armCm: 29.5
+                    thighCm: 56
+                    createdAt: 2026-10-29T07:05:00+05:30
+                xpLedger:
+                  - id: 4e7e132b-b784-4ef7-9759-2a66800d08d3
+                    sourceType: workout_session
+                    sourceId: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                    amount: 53
+                    reason: Workout completed
+                    createdAt: 2026-10-29T08:20:00+05:30
+                badges:
+                  - code: WORKOUTS_10
+                    earnedAt: 2026-10-29T08:20:00+05:30
+                challenges:
+                  - id: bb064b23-223d-4f9b-8053-13cdafc355ac
+                    templateCode: WEEKLY_WORKOUTS
+                    type: weekly
+                    title: Workouts this week
+                    target: 3
+                    progress: 2
+                    unit: workouts
+                    windowStart: 2026-10-26
+                    windowEnd: 2026-11-01
+                    joinDate: 2026-10-26
+                    timezone: Asia/Kolkata
+                    waterGoalMl: null
+                    status: active
+                    joinedAt: 2026-10-26T06:55:00+05:30
+                    completedAt: null
+                    leftAt: null
+                    xpAwarded: 0
+                targetHistory:
+                  - effectiveFrom: 2026-10-27
+                    kcal: 1600
+                    waterMl: 2500
+                    proteinG: 109
+                    carbsG: 192
+                    fatG: 44
+                sessionCorrections:
+                  - id: fb5246f0-7f67-4563-9be6-eb274e5bf46a
+                    sessionId: 67c7f006-54b2-4ce9-a70f-1481308a0af3
+                    kind: correction
+                    xpDelta: 2
+                    createdAt: 2026-10-27T20:30:00+05:30
+                truncated: []
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /me/target-history:
@@ -282,6 +630,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TargetHistory' }
+              example:
+                items:
+                  - effectiveFrom: 2026-10-27
+                    kcal: 1600
+                    waterMl: 2500
+                    proteinG: 109
+                    carbsG: 192
+                    fatG: 44
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /me/notification-preferences:
@@ -301,6 +657,40 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationPreferences' }
+              example:
+                enabled: true
+                types:
+                  workout_reminder: true
+                  streak_reminder: true
+                  water_reminder: true
+                  food_log_reminder: false
+                  challenge_updates: true
+                  badge_earned: true
+                  progression_suggestion: true
+                quietHours:
+                  enabled: true
+                  start: 22:00
+                  end: 07:00
+                reminders:
+                  workoutReminder:
+                    time: 07:00
+                    days:
+                      - mon
+                      - wed
+                      - fri
+                  streakReminder:
+                    time: 20:00
+                  waterReminder:
+                    intervalMinutes: 120
+                    start: 09:00
+                    end: 21:00
+                  foodLogReminder:
+                    times:
+                      - 09:30
+                      - 14:00
+                      - 21:00
+                timezone: Asia/Kolkata
+                updatedAt: 2026-10-27T21:10:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
     patch:
@@ -320,12 +710,51 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/NotificationPreferencesUpdate' }
+            example:
+              quietHours:
+                start: 23:00
+              types:
+                food_log_reminder: true
       responses:
         '200':
           description: Full preferences after the merge
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationPreferences' }
+              example:
+                enabled: true
+                types:
+                  workout_reminder: true
+                  streak_reminder: true
+                  water_reminder: true
+                  food_log_reminder: false
+                  challenge_updates: true
+                  badge_earned: true
+                  progression_suggestion: true
+                quietHours:
+                  enabled: true
+                  start: 22:00
+                  end: 07:00
+                reminders:
+                  workoutReminder:
+                    time: 07:00
+                    days:
+                      - mon
+                      - wed
+                      - fri
+                  streakReminder:
+                    time: 20:00
+                  waterReminder:
+                    intervalMinutes: 120
+                    start: 09:00
+                    end: 21:00
+                  foodLogReminder:
+                    times:
+                      - 09:30
+                      - 14:00
+                      - 21:00
+                timezone: Asia/Kolkata
+                updatedAt: 2026-10-27T21:10:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -349,12 +778,22 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/NotificationDeviceRegistration' }
+            example:
+              token: fcm-token-placeholder-0001
+              platform: android
+              appVersion: 1.6.0
       responses:
         '200':
           description: The registered device (no token)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NotificationDevice' }
+              example:
+                id: f3a929b3-364b-471a-881f-4f7cda0b4559
+                platform: android
+                appVersion: 1.6.0
+                createdAt: 2026-10-27T21:15:00+05:30
+                lastSeenAt: 2026-10-29T07:25:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -389,6 +828,27 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Profile' }
+              example:
+                userId: 12dea96f-ec20-4935-a6ab-75692c994959
+                displayName: Asha Verma
+                birthYear: 1994
+                sex: female
+                heightCm: 158
+                weightKg: 68.4
+                activityLevel: light
+                experienceLevel: beginner
+                dietPreference: vegetarian
+                unitSystem: metric
+                timezone: Asia/Kolkata
+                locale: en-IN
+                currency: INR
+                dailyCalorieTargetKcal: 1600
+                dailyWaterTargetMl: 2500
+                dailyProteinTargetG: 109
+                dailyCarbsTargetG: 192
+                dailyFatTargetG: 44
+                onboardingCompleted: true
+                updatedAt: 2026-10-27T21:05:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
     put:
       tags: [me]
@@ -401,12 +861,50 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ProfileUpdate' }
+            example:
+              displayName: Asha Verma
+              birthYear: 1994
+              sex: female
+              heightCm: 158
+              weightKg: 68.4
+              activityLevel: light
+              experienceLevel: beginner
+              dietPreference: vegetarian
+              unitSystem: metric
+              timezone: Asia/Kolkata
+              dailyCalorieTargetKcal: 1600
+              dailyWaterTargetMl: 2500
+              dailyProteinTargetG: 109
+              dailyCarbsTargetG: 192
+              dailyFatTargetG: 44
+              onboardingCompleted: true
       responses:
         '200':
           description: Updated profile
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Profile' }
+              example:
+                userId: 12dea96f-ec20-4935-a6ab-75692c994959
+                displayName: Asha Verma
+                birthYear: 1994
+                sex: female
+                heightCm: 158
+                weightKg: 68.4
+                activityLevel: light
+                experienceLevel: beginner
+                dietPreference: vegetarian
+                unitSystem: metric
+                timezone: Asia/Kolkata
+                locale: en-IN
+                currency: INR
+                dailyCalorieTargetKcal: 1600
+                dailyWaterTargetMl: 2500
+                dailyProteinTargetG: 109
+                dailyCarbsTargetG: 192
+                dailyFatTargetG: 44
+                onboardingCompleted: true
+                updatedAt: 2026-10-27T21:05:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -433,6 +931,16 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/Goal' }
+              example:
+                items:
+                  - id: db9a022b-7562-4d56-a405-9371d5ef893e
+                    type: lose_weight
+                    status: active
+                    targetValue: 62
+                    startValue: 72
+                    targetDate: 2027-03-31
+                    createdAt: 2026-09-14T09:20:00+05:30
+                    updatedAt: 2026-09-14T09:20:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [goals]
@@ -445,12 +953,26 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/GoalCreate' }
+            example:
+              type: lose_weight
+              targetValue: 62
+              startValue: 72
+              targetDate: 2027-03-31
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Goal' }
+              example:
+                id: db9a022b-7562-4d56-a405-9371d5ef893e
+                type: lose_weight
+                status: active
+                targetValue: 62
+                startValue: 72
+                targetDate: 2027-03-31
+                createdAt: 2026-09-14T09:20:00+05:30
+                updatedAt: 2026-09-14T09:20:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -468,6 +990,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Goal' }
+              example:
+                id: db9a022b-7562-4d56-a405-9371d5ef893e
+                type: lose_weight
+                status: active
+                targetValue: 62
+                startValue: 72
+                targetDate: 2027-03-31
+                createdAt: 2026-09-14T09:20:00+05:30
+                updatedAt: 2026-09-14T09:20:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -481,12 +1012,23 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/GoalUpdate' }
+            example:
+              targetValue: 60
       responses:
         '200':
           description: Updated
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Goal' }
+              example:
+                id: db9a022b-7562-4d56-a405-9371d5ef893e
+                type: lose_weight
+                status: active
+                targetValue: 60
+                startValue: 72
+                targetDate: 2027-03-31
+                createdAt: 2026-09-14T09:20:00+05:30
+                updatedAt: 2026-10-29T08:40:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -535,6 +1077,27 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/Exercise' }
+              example:
+                items:
+                  - id: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                    slug: barbell-bench-press
+                    name: Barbell bench press
+                    nameHi: बारबेल बेंच प्रेस
+                    primaryMuscle: chest
+                    secondaryMuscles:
+                      - triceps
+                      - shoulders
+                    equipment:
+                      - barbell
+                      - bench
+                    trackingType: reps_weight
+                    difficulty: beginner
+                    instructions:
+                      - Lie on the bench with your eyes under the bar.
+                      - Lower the bar to mid-chest with elbows at about 45 degrees.
+                      - Press the bar back up until your arms are straight.
+                    videoUrl: null
+                nextCursor: null
         '401': { $ref: '#/components/responses/Unauthorized' }
   /exercises/{exerciseId}:
     get:
@@ -549,6 +1112,25 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Exercise' }
+              example:
+                id: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                slug: barbell-bench-press
+                name: Barbell bench press
+                nameHi: बारबेल बेंच प्रेस
+                primaryMuscle: chest
+                secondaryMuscles:
+                  - triceps
+                  - shoulders
+                equipment:
+                  - barbell
+                  - bench
+                trackingType: reps_weight
+                difficulty: beginner
+                instructions:
+                  - Lie on the bench with your eyes under the bar.
+                  - Lower the bar to mid-chest with elbows at about 45 degrees.
+                  - Press the bar back up until your arms are straight.
+                videoUrl: null
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -563,12 +1145,47 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/PlanGenerateRequest' }
+            example:
+              goal: lose_weight
+              experienceLevel: beginner
+              daysPerWeek: 3
+              sessionMinutes: 45
+              equipment:
+                - none
+              weeks: 8
       responses:
         '200':
           description: Draft plan
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlanDraft' }
+              example:
+                name: Beginner full body, 3 days
+                weeks: 8
+                generator: rule_based
+                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                workouts:
+                  - dayOfWeek: 1
+                    name: Full body A
+                    exercises:
+                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 12
+                        durationSeconds: null
+                        targetWeightKg: 30
+                        restSeconds: 90
+                        notes: Keep your feet flat on the floor.
+                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        durationSeconds: 45
+                        targetWeightKg: null
+                        restSeconds: 60
+                        notes: null
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -577,11 +1194,23 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: NO_MATCHING_EXERCISES
+                message: No exercises match your experience level and equipment. Try adding equipment.
+                details:
+                  experienceLevel: advanced
+                  equipment:
+                    - kettlebell
+                requestId: req_7f3a9c1e2b4d
         '503':
           description: '`EXERCISE_CATALOG_EMPTY`: the server has no exercise catalog (not seeded). A server-side problem the user cannot fix; show a "try again later" state. The response `message` is the generic 5xx text. Never an empty draft.'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: EXERCISE_CATALOG_EMPTY
+                message: Something went wrong. Please try again.
+                requestId: req_7f3a9c1e2b4d
   /workout-plans:
     get:
       tags: [workout-plans]
@@ -616,6 +1245,22 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/WorkoutPlanSummary' }
+              example:
+                items:
+                  - id: bed97175-b06e-48eb-bff5-722897aa86b8
+                    name: Beginner full body, 3 days
+                    source: rule_based
+                    version: 1
+                    status: active
+                    isActive: true
+                    currentWeek: 2
+                    totalWeeks: 8
+                    activatedAt: 2026-10-19T19:41:00+05:30
+                    pausedAt: null
+                    archivedAt: null
+                    createdAt: 2026-10-19T19:40:00+05:30
+                    completedSessions: 4
+                nextCursor: null
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
@@ -629,12 +1274,76 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/WorkoutPlanDraft' }
+            example:
+              name: Beginner full body, 3 days
+              weeks: 8
+              generator: rule_based
+              rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+              workouts:
+                - dayOfWeek: 1
+                  name: Full body A
+                  exercises:
+                    - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                      order: 0
+                      sets: 3
+                      repsMin: 8
+                      repsMax: 12
+                      durationSeconds: null
+                      targetWeightKg: 30
+                      restSeconds: 90
+                      notes: Keep your feet flat on the floor.
+                    - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                      order: 1
+                      sets: 3
+                      repsMin: null
+                      repsMax: null
+                      durationSeconds: 45
+                      targetWeightKg: null
+                      restSeconds: 60
+                      notes: null
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
+              example:
+                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                version: 1
+                name: Beginner full body, 3 days
+                weeks: 8
+                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                workouts:
+                  - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    dayOfWeek: 1
+                    name: Full body A
+                    exercises:
+                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 12
+                        durationSeconds: null
+                        targetWeightKg: 30
+                        restSeconds: 90
+                        notes: Keep your feet flat on the floor.
+                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        durationSeconds: 45
+                        targetWeightKg: null
+                        restSeconds: 60
+                        notes: null
+                isActive: true
+                source: rule_based
+                createdAt: 2026-10-19T19:40:00+05:30
+                activatedAt: 2026-10-19T19:41:00+05:30
+                pausedAt: null
+                archivedAt: null
+                currentWeek: 2
+                planEnded: false
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -650,6 +1359,43 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
+              example:
+                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                version: 1
+                name: Beginner full body, 3 days
+                weeks: 8
+                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                workouts:
+                  - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    dayOfWeek: 1
+                    name: Full body A
+                    exercises:
+                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 12
+                        durationSeconds: null
+                        targetWeightKg: 30
+                        restSeconds: 90
+                        notes: Keep your feet flat on the floor.
+                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        durationSeconds: 45
+                        targetWeightKg: null
+                        restSeconds: 60
+                        notes: null
+                isActive: true
+                source: rule_based
+                createdAt: 2026-10-19T19:40:00+05:30
+                activatedAt: 2026-10-19T19:41:00+05:30
+                pausedAt: null
+                archivedAt: null
+                currentWeek: 2
+                planEnded: false
         '204': { description: No active plan }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /workout-plans/{planId}:
@@ -670,6 +1416,43 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
+              example:
+                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                version: 1
+                name: Beginner full body, 3 days
+                weeks: 8
+                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                workouts:
+                  - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    dayOfWeek: 1
+                    name: Full body A
+                    exercises:
+                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 12
+                        durationSeconds: null
+                        targetWeightKg: 30
+                        restSeconds: 90
+                        notes: Keep your feet flat on the floor.
+                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        durationSeconds: 45
+                        targetWeightKg: null
+                        restSeconds: 60
+                        notes: null
+                isActive: true
+                source: rule_based
+                createdAt: 2026-10-19T19:40:00+05:30
+                activatedAt: 2026-10-19T19:41:00+05:30
+                pausedAt: null
+                archivedAt: null
+                currentWeek: 2
+                planEnded: false
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -781,6 +1564,43 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
+              example:
+                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                version: 1
+                name: Beginner full body, 3 days
+                weeks: 8
+                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                workouts:
+                  - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    dayOfWeek: 1
+                    name: Full body A
+                    exercises:
+                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 12
+                        durationSeconds: null
+                        targetWeightKg: 30
+                        restSeconds: 90
+                        notes: Keep your feet flat on the floor.
+                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        durationSeconds: 45
+                        targetWeightKg: null
+                        restSeconds: 60
+                        notes: null
+                isActive: false
+                source: rule_based
+                createdAt: 2026-10-19T19:40:00+05:30
+                activatedAt: 2026-10-19T19:41:00+05:30
+                pausedAt: 2026-10-28T18:05:00+05:30
+                archivedAt: null
+                currentWeek: 2
+                planEnded: false
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -812,12 +1632,51 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/PlanRename' }
+            example:
+              name: Morning full body
       responses:
         '200':
           description: Renamed (or already had this name); the latest version
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
+              example:
+                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                version: 1
+                name: Morning full body
+                weeks: 8
+                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                workouts:
+                  - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    dayOfWeek: 1
+                    name: Full body A
+                    exercises:
+                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 12
+                        durationSeconds: null
+                        targetWeightKg: 30
+                        restSeconds: 90
+                        notes: Keep your feet flat on the floor.
+                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        durationSeconds: 45
+                        targetWeightKg: null
+                        restSeconds: 60
+                        notes: null
+                isActive: true
+                source: rule_based
+                createdAt: 2026-10-19T19:40:00+05:30
+                activatedAt: 2026-10-19T19:41:00+05:30
+                pausedAt: null
+                archivedAt: null
+                currentWeek: 2
+                planEnded: false
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -826,6 +1685,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                PLAN_ARCHIVED:
+                  value:
+                    code: PLAN_ARCHIVED
+                    message: This plan is archived. Save a new plan instead.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/{planId}/deactivate:
     post:
@@ -878,12 +1748,51 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/PlanActivate' }
+            example:
+              resume: false
       responses:
         '200':
           description: Activated
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
+              example:
+                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                version: 1
+                name: Beginner full body, 3 days
+                weeks: 8
+                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                workouts:
+                  - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    dayOfWeek: 1
+                    name: Full body A
+                    exercises:
+                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        order: 0
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 12
+                        durationSeconds: null
+                        targetWeightKg: 30
+                        restSeconds: 90
+                        notes: Keep your feet flat on the floor.
+                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        order: 1
+                        sets: 3
+                        repsMin: null
+                        repsMax: null
+                        durationSeconds: 45
+                        targetWeightKg: null
+                        restSeconds: 60
+                        notes: null
+                isActive: true
+                source: rule_based
+                createdAt: 2026-10-19T19:40:00+05:30
+                activatedAt: 2026-10-19T19:41:00+05:30
+                pausedAt: null
+                archivedAt: null
+                currentWeek: 2
+                planEnded: false
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -892,6 +1801,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                PLAN_ARCHIVED:
+                  value:
+                    code: PLAN_ARCHIVED
+                    message: This plan is archived. Save a new plan instead.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /workout-plans/{planId}/progression-suggestions:
@@ -1010,12 +1930,28 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/SessionStart' }
+            example:
+              plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+              planVersion: 1
+              startedAt: 2026-10-29T07:30:00+05:30
       responses:
         '201':
           description: Started
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutSession' }
+              example:
+                id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                planVersion: 1
+                plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                status: in_progress
+                startedAt: 2026-10-29T07:30:00+05:30
+                completedAt: null
+                activeSeconds: 2700
+                perceivedDifficulty: null
+                notes: null
+                sets: []
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1049,6 +1985,42 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/WorkoutSession' }
+              example:
+                items:
+                  - id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                    planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                    planVersion: 1
+                    plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                    status: completed
+                    startedAt: 2026-10-29T07:30:00+05:30
+                    completedAt: 2026-10-29T08:20:00+05:30
+                    activeSeconds: 2700
+                    perceivedDifficulty: 3
+                    notes: Last set of bench press felt heavy.
+                    sets:
+                      - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                        updatedAt: 2026-10-29T07:41:00+05:30
+                        clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                        exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                        setIndex: 0
+                        reps: 10
+                        weightKg: 30
+                        durationSeconds: null
+                        distanceM: null
+                        completed: true
+                        loggedAt: 2026-10-29T07:41:00+05:30
+                      - id: 61867c2c-37d6-4dff-b258-b5f0c05f70e7
+                        updatedAt: 2026-10-29T08:02:00+05:30
+                        clientSetId: 6f07b080-fea2-4af2-9227-3a47c76008d0
+                        exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        setIndex: 0
+                        reps: null
+                        weightKg: null
+                        durationSeconds: 45
+                        distanceM: null
+                        completed: true
+                        loggedAt: 2026-10-29T08:02:00+05:30
+                nextCursor: null
         '401': { $ref: '#/components/responses/Unauthorized' }
   /workout-sessions/{sessionId}:
     parameters:
@@ -1063,6 +2035,40 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutSession' }
+              example:
+                id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                planVersion: 1
+                plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                status: completed
+                startedAt: 2026-10-29T07:30:00+05:30
+                completedAt: 2026-10-29T08:20:00+05:30
+                activeSeconds: 2700
+                perceivedDifficulty: 3
+                notes: Last set of bench press felt heavy.
+                sets:
+                  - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                    updatedAt: 2026-10-29T07:41:00+05:30
+                    clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                    exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                    setIndex: 0
+                    reps: 10
+                    weightKg: 30
+                    durationSeconds: null
+                    distanceM: null
+                    completed: true
+                    loggedAt: 2026-10-29T07:41:00+05:30
+                  - id: 61867c2c-37d6-4dff-b258-b5f0c05f70e7
+                    updatedAt: 2026-10-29T08:02:00+05:30
+                    clientSetId: 6f07b080-fea2-4af2-9227-3a47c76008d0
+                    exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                    setIndex: 0
+                    reps: null
+                    weightKg: null
+                    durationSeconds: 45
+                    distanceM: null
+                    completed: true
+                    loggedAt: 2026-10-29T08:02:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -1076,12 +2082,37 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/SessionUpdate' }
+            example:
+              status: paused
       responses:
         '200':
           description: Updated
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutSession' }
+              example:
+                id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                planVersion: 1
+                plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                status: paused
+                startedAt: 2026-10-29T07:30:00+05:30
+                completedAt: null
+                activeSeconds: 2700
+                perceivedDifficulty: null
+                notes: null
+                sets:
+                  - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                    updatedAt: 2026-10-29T07:41:00+05:30
+                    clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                    exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                    setIndex: 0
+                    reps: 10
+                    weightKg: 30
+                    durationSeconds: null
+                    distanceM: null
+                    completed: true
+                    loggedAt: 2026-10-29T07:41:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1090,6 +2121,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                SESSION_COMPLETED:
+                  value:
+                    code: SESSION_COMPLETED
+                    message: This workout is finished and can no longer be changed.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-sessions]
@@ -1138,12 +2180,34 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/SetLogUpsert' }
+            example:
+              clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+              exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+              setIndex: 0
+              reps: 10
+              weightKg: 30
+              durationSeconds: null
+              distanceM: null
+              completed: true
+              loggedAt: 2026-10-29T07:41:00+05:30
       responses:
         '200':
           description: Set stored (created or replaced)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SetLog' }
+              example:
+                id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                updatedAt: 2026-10-29T07:41:00+05:30
+                clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                setIndex: 0
+                reps: 10
+                weightKg: 30
+                durationSeconds: null
+                distanceM: null
+                completed: true
+                loggedAt: 2026-10-29T07:41:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1152,6 +2216,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                SESSION_COMPLETED:
+                  value:
+                    code: SESSION_COMPLETED
+                    message: This workout is finished and can no longer be changed.
+                    requestId: req_7f3a9c1e2b4d
+                CLIENT_SET_CONFLICT:
+                  value:
+                    code: CLIENT_SET_CONFLICT
+                    message: This clientSetId was already used for a set in another workout.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/complete:
     post:
@@ -1170,12 +2250,67 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/SessionComplete' }
+            example:
+              completedAt: 2026-10-29T08:20:00+05:30
+              perceivedDifficulty: 3
+              notes: Last set of bench press felt heavy.
       responses:
         '200':
           description: Completed
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionCompleteResult' }
+              example:
+                session:
+                  id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                  planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                  planVersion: 1
+                  plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                  status: completed
+                  startedAt: 2026-10-29T07:30:00+05:30
+                  completedAt: 2026-10-29T08:20:00+05:30
+                  activeSeconds: 2700
+                  perceivedDifficulty: 3
+                  notes: Last set of bench press felt heavy.
+                  sets:
+                    - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                      updatedAt: 2026-10-29T07:41:00+05:30
+                      clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                      exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                      setIndex: 0
+                      reps: 10
+                      weightKg: 30
+                      durationSeconds: null
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T07:41:00+05:30
+                    - id: 61867c2c-37d6-4dff-b258-b5f0c05f70e7
+                      updatedAt: 2026-10-29T08:02:00+05:30
+                      clientSetId: 6f07b080-fea2-4af2-9227-3a47c76008d0
+                      exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                      setIndex: 0
+                      reps: null
+                      weightKg: null
+                      durationSeconds: 45
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T08:02:00+05:30
+                xpAwarded: 50
+                xpBalance:
+                  total: 1450
+                  level: 4
+                  xpIntoLevel: 250
+                  xpForNextLevel: 600
+                newBadges:
+                  - code: WORKOUTS_10
+                    title: 10 workouts
+                    description: Complete 10 workouts.
+                    family: workout
+                    bonusXp: 25
+                    earnedAt: 2026-10-29T08:20:00+05:30
+                    progress:
+                      current: 10
+                      target: 10
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1185,6 +2320,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: SESSION_EMPTY
+                message: Log at least one completed set before finishing.
+                requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/corrections/sets/{clientSetId}:
     parameters:
@@ -1212,12 +2351,73 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/SetLogUpsert' }
+            example:
+              clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+              exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+              setIndex: 0
+              reps: 12
+              weightKg: 30
+              durationSeconds: null
+              distanceM: null
+              completed: true
+              loggedAt: 2026-10-29T07:41:00+05:30
       responses:
         '200':
           description: Corrected
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+              example:
+                session:
+                  id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                  planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                  planVersion: 1
+                  plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                  status: completed
+                  startedAt: 2026-10-29T07:30:00+05:30
+                  completedAt: 2026-10-29T08:20:00+05:30
+                  activeSeconds: 2700
+                  perceivedDifficulty: 3
+                  notes: Last set of bench press felt heavy.
+                  sets:
+                    - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                      updatedAt: 2026-10-29T07:41:00+05:30
+                      clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                      exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                      setIndex: 0
+                      reps: 10
+                      weightKg: 30
+                      durationSeconds: null
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T07:41:00+05:30
+                    - id: 61867c2c-37d6-4dff-b258-b5f0c05f70e7
+                      updatedAt: 2026-10-29T08:02:00+05:30
+                      clientSetId: 6f07b080-fea2-4af2-9227-3a47c76008d0
+                      exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                      setIndex: 0
+                      reps: null
+                      weightKg: null
+                      durationSeconds: 45
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T08:02:00+05:30
+                xpDelta: 120
+                xpBalance:
+                  total: 1450
+                  level: 5
+                  xpIntoLevel: 450
+                  xpForNextLevel: 500
+                newBadges:
+                  - code: WORKOUTS_10
+                    title: 10 workouts
+                    description: Complete 10 workouts.
+                    family: workout
+                    bonusXp: 25
+                    earnedAt: 2026-10-29T08:20:00+05:30
+                    progress:
+                      current: 10
+                      target: 10
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1226,11 +2426,36 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                SESSION_NOT_COMPLETED:
+                  value:
+                    code: SESSION_NOT_COMPLETED
+                    message: Only a finished workout can be corrected.
+                    requestId: req_7f3a9c1e2b4d
+                CORRECTION_WINDOW_CLOSED:
+                  value:
+                    code: CORRECTION_WINDOW_CLOSED
+                    message: Workouts can only be corrected on the day they were finished or the next day.
+                    requestId: req_7f3a9c1e2b4d
+                CLIENT_SET_CONFLICT:
+                  value:
+                    code: CLIENT_SET_CONFLICT
+                    message: This clientSetId was already used for a set in another workout.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '422':
           description: '`SESSION_EMPTY`: no completed set would be left; discard the session instead'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: SESSION_EMPTY
+                message: A finished workout needs at least one completed set. Discard the workout instead.
+                requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-sessions]
@@ -1254,22 +2479,104 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+              example:
+                session:
+                  id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                  planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                  planVersion: 1
+                  plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                  status: completed
+                  startedAt: 2026-10-29T07:30:00+05:30
+                  completedAt: 2026-10-29T08:20:00+05:30
+                  activeSeconds: 2700
+                  perceivedDifficulty: 3
+                  notes: Last set of bench press felt heavy.
+                  sets:
+                    - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                      updatedAt: 2026-10-29T07:41:00+05:30
+                      clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                      exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                      setIndex: 0
+                      reps: 10
+                      weightKg: 30
+                      durationSeconds: null
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T07:41:00+05:30
+                    - id: 61867c2c-37d6-4dff-b258-b5f0c05f70e7
+                      updatedAt: 2026-10-29T08:02:00+05:30
+                      clientSetId: 6f07b080-fea2-4af2-9227-3a47c76008d0
+                      exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                      setIndex: 0
+                      reps: null
+                      weightKg: null
+                      durationSeconds: 45
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T08:02:00+05:30
+                xpDelta: 120
+                xpBalance:
+                  total: 1450
+                  level: 5
+                  xpIntoLevel: 450
+                  xpForNextLevel: 500
+                newBadges:
+                  - code: WORKOUTS_10
+                    title: 10 workouts
+                    description: Complete 10 workouts.
+                    family: workout
+                    bonusXp: 25
+                    earnedAt: 2026-10-29T08:20:00+05:30
+                    progress:
+                      current: 10
+                      target: 10
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404':
           description: '`SET_NOT_FOUND` (no such set in this session, e.g. already deleted), or `NOT_FOUND` for the session'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                SET_NOT_FOUND:
+                  value:
+                    code: SET_NOT_FOUND
+                    message: This set is not in the workout (it may already be deleted).
+                    requestId: req_7f3a9c1e2b4d
+                NOT_FOUND:
+                  value:
+                    code: NOT_FOUND
+                    message: Session not found.
+                    requestId: req_7f3a9c1e2b4d
         '409':
           description: '`SESSION_NOT_COMPLETED`, `CORRECTION_WINDOW_CLOSED`, or an idempotency conflict'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                SESSION_NOT_COMPLETED:
+                  value:
+                    code: SESSION_NOT_COMPLETED
+                    message: Only a finished workout can be corrected.
+                    requestId: req_7f3a9c1e2b4d
+                CORRECTION_WINDOW_CLOSED:
+                  value:
+                    code: CORRECTION_WINDOW_CLOSED
+                    message: Workouts can only be corrected on the day they were finished or the next day.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '422':
           description: '`SESSION_EMPTY`: this is the last completed set; discard the session instead'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                code: SESSION_EMPTY
+                message: A finished workout needs at least one completed set. Discard the workout instead.
+                requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/completion:
     patch:
@@ -1295,12 +2602,65 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/SessionCompletionUpdate' }
+            example:
+              perceivedDifficulty: 4
       responses:
         '200':
           description: Corrected
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionCorrectionResult' }
+              example:
+                session:
+                  id: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                  planId: bed97175-b06e-48eb-bff5-722897aa86b8
+                  planVersion: 1
+                  plannedWorkoutId: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                  status: completed
+                  startedAt: 2026-10-29T07:30:00+05:30
+                  completedAt: 2026-10-29T08:20:00+05:30
+                  activeSeconds: 2700
+                  perceivedDifficulty: 3
+                  notes: Last set of bench press felt heavy.
+                  sets:
+                    - id: 65c10dc3-549f-4074-a414-8a8a4790a334
+                      updatedAt: 2026-10-29T07:41:00+05:30
+                      clientSetId: b9d4fa4c-5460-4629-891b-c6eeadf9e35f
+                      exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                      setIndex: 0
+                      reps: 10
+                      weightKg: 30
+                      durationSeconds: null
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T07:41:00+05:30
+                    - id: 61867c2c-37d6-4dff-b258-b5f0c05f70e7
+                      updatedAt: 2026-10-29T08:02:00+05:30
+                      clientSetId: 6f07b080-fea2-4af2-9227-3a47c76008d0
+                      exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                      setIndex: 0
+                      reps: null
+                      weightKg: null
+                      durationSeconds: 45
+                      distanceM: null
+                      completed: true
+                      loggedAt: 2026-10-29T08:02:00+05:30
+                xpDelta: 120
+                xpBalance:
+                  total: 1450
+                  level: 5
+                  xpIntoLevel: 450
+                  xpForNextLevel: 500
+                newBadges:
+                  - code: WORKOUTS_10
+                    title: 10 workouts
+                    description: Complete 10 workouts.
+                    family: workout
+                    bonusXp: 25
+                    earnedAt: 2026-10-29T08:20:00+05:30
+                    progress:
+                      current: 10
+                      target: 10
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1309,6 +2669,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                SESSION_NOT_COMPLETED:
+                  value:
+                    code: SESSION_NOT_COMPLETED
+                    message: Only a finished workout can be corrected.
+                    requestId: req_7f3a9c1e2b4d
+                CORRECTION_WINDOW_CLOSED:
+                  value:
+                    code: CORRECTION_WINDOW_CLOSED
+                    message: Workouts can only be corrected on the day they were finished or the next day.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
 
   /foods/search:
@@ -1337,6 +2713,26 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/Food' }
+              example:
+                items:
+                  - id: 39ccb32d-95ed-4dbc-9882-f2b01809724e
+                    name: Masala dosa
+                    nameHi: मसाला डोसा
+                    brand: null
+                    servingSize: 1
+                    servingUnit: piece
+                    gramsPerServing: 160
+                    nutrients:
+                      energyKcal: 270
+                      proteinG: 6.5
+                      carbsG: 38
+                      fatG: 10.5
+                      fiberG: 3.2
+                      sugarG: 1.8
+                      sodiumMg: 450
+                    isVegetarian: true
+                    source: catalog
+                nextCursor: null
         '401': { $ref: '#/components/responses/Unauthorized' }
   /foods:
     post:
@@ -1350,12 +2746,45 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/FoodCreate' }
+            example:
+              name: Homemade poha
+              brand: null
+              servingSize: 1
+              servingUnit: katori
+              gramsPerServing: 150
+              nutrients:
+                energyKcal: 250
+                proteinG: 5
+                carbsG: 42
+                fatG: 7
+                fiberG: 2.5
+                sugarG: 2
+                sodiumMg: 310
+              isVegetarian: true
       responses:
         '201':
           description: Created (visible only to this user)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Food' }
+              example:
+                id: da4bfaed-955c-45a7-a403-10f429307aa7
+                name: Homemade poha
+                nameHi: null
+                brand: null
+                servingSize: 1
+                servingUnit: katori
+                gramsPerServing: 150
+                nutrients:
+                  energyKcal: 250
+                  proteinG: 5
+                  carbsG: 42
+                  fatG: 7
+                  fiberG: 2.5
+                  sugarG: 2
+                  sodiumMg: 310
+                isVegetarian: true
+                source: custom
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -1373,6 +2802,24 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Food' }
+              example:
+                id: 39ccb32d-95ed-4dbc-9882-f2b01809724e
+                name: Masala dosa
+                nameHi: मसाला डोसा
+                brand: null
+                servingSize: 1
+                servingUnit: piece
+                gramsPerServing: 160
+                nutrients:
+                  energyKcal: 270
+                  proteinG: 6.5
+                  carbsG: 38
+                  fatG: 10.5
+                  fiberG: 3.2
+                  sugarG: 1.8
+                  sodiumMg: 450
+                isVegetarian: true
+                source: catalog
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -1390,12 +2837,34 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/FoodUpdate' }
+            example:
+              servingSize: 1
+              servingUnit: katori
+              gramsPerServing: 180
       responses:
         '200':
           description: Updated
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Food' }
+              example:
+                id: da4bfaed-955c-45a7-a403-10f429307aa7
+                name: Homemade poha
+                nameHi: null
+                brand: null
+                servingSize: 1
+                servingUnit: katori
+                gramsPerServing: 180
+                nutrients:
+                  energyKcal: 250
+                  proteinG: 5
+                  carbsG: 42
+                  fatG: 7
+                  fiberG: 2.5
+                  sugarG: 2
+                  sodiumMg: 310
+                isVegetarian: true
+                source: custom
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1437,6 +2906,27 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/FoodLog' }
+              example:
+                items:
+                  - id: 2d574ad8-3928-4f9a-b087-6b3a940532ba
+                    foodId: 39ccb32d-95ed-4dbc-9882-f2b01809724e
+                    foodName: Masala dosa
+                    date: 2026-10-29
+                    mealType: breakfast
+                    servings: 1
+                    servingSize: 1
+                    servingUnit: piece
+                    gramsPerServing: 160
+                    nutrients:
+                      energyKcal: 270
+                      proteinG: 6.5
+                      carbsG: 38
+                      fatG: 10.5
+                      fiberG: 3.2
+                      sugarG: 1.8
+                      sodiumMg: 450
+                    nutrientsEdited: false
+                    createdAt: 2026-10-29T08:45:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [nutrition]
@@ -1449,12 +2939,37 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/FoodLogCreate' }
+            example:
+              foodId: 39ccb32d-95ed-4dbc-9882-f2b01809724e
+              date: 2026-10-29
+              mealType: breakfast
+              servings: 1
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FoodLog' }
+              example:
+                id: 2d574ad8-3928-4f9a-b087-6b3a940532ba
+                foodId: 39ccb32d-95ed-4dbc-9882-f2b01809724e
+                foodName: Masala dosa
+                date: 2026-10-29
+                mealType: breakfast
+                servings: 1
+                servingSize: 1
+                servingUnit: piece
+                gramsPerServing: 160
+                nutrients:
+                  energyKcal: 270
+                  proteinG: 6.5
+                  carbsG: 38
+                  fatG: 10.5
+                  fiberG: 3.2
+                  sugarG: 1.8
+                  sodiumMg: 450
+                nutrientsEdited: false
+                createdAt: 2026-10-29T08:45:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1474,12 +2989,34 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/FoodLogUpdate' }
+            example:
+              servings: 1.5
       responses:
         '200':
           description: Updated
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FoodLog' }
+              example:
+                id: 2d574ad8-3928-4f9a-b087-6b3a940532ba
+                foodId: 39ccb32d-95ed-4dbc-9882-f2b01809724e
+                foodName: Masala dosa
+                date: 2026-10-29
+                mealType: breakfast
+                servings: 1.5
+                servingSize: 1
+                servingUnit: piece
+                gramsPerServing: 160
+                nutrients:
+                  energyKcal: 405
+                  proteinG: 9.8
+                  carbsG: 57
+                  fatG: 15.8
+                  fiberG: 4.8
+                  sugarG: 2.7
+                  sodiumMg: 675
+                nutrientsEdited: false
+                createdAt: 2026-10-29T08:45:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1515,6 +3052,12 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/WaterLog' }
+              example:
+                items:
+                  - id: 6d5a4592-0a15-4dea-849c-8f22d569ff20
+                    date: 2026-10-29
+                    amountMl: 250
+                    createdAt: 2026-10-29T10:15:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [nutrition]
@@ -1527,12 +3070,20 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/WaterLogCreate' }
+            example:
+              date: 2026-10-29
+              amountMl: 250
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WaterLog' }
+              example:
+                id: 6d5a4592-0a15-4dea-849c-8f22d569ff20
+                date: 2026-10-29
+                amountMl: 250
+                createdAt: 2026-10-29T10:15:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -1551,12 +3102,19 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/WaterLogUpdate' }
+            example:
+              amountMl: 500
       responses:
         '200':
           description: Updated
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WaterLog' }
+              example:
+                id: 6d5a4592-0a15-4dea-849c-8f22d569ff20
+                date: 2026-10-29
+                amountMl: 500
+                createdAt: 2026-10-29T10:15:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1586,6 +3144,57 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DailyNutrition' }
+              example:
+                date: 2026-10-29
+                entryCount: 5
+                entriesMissing:
+                  fiberG: 0
+                  sugarG: 1
+                  sodiumMg: 0
+                totals:
+                  energyKcal: 1550
+                  proteinG: 58.5
+                  carbsG: 202
+                  fatG: 54.5
+                  fiberG: 24.2
+                  sugarG: 22.8
+                  sodiumMg: 2240
+                byMeal:
+                  breakfast:
+                    energyKcal: 270
+                    proteinG: 6.5
+                    carbsG: 38
+                    fatG: 10.5
+                    fiberG: 3.2
+                    sugarG: 1.8
+                    sodiumMg: 450
+                  lunch:
+                    energyKcal: 520
+                    proteinG: 18
+                    carbsG: 82
+                    fatG: 12
+                    fiberG: 11
+                    sugarG: 4
+                    sodiumMg: 780
+                  dinner:
+                    energyKcal: 610
+                    proteinG: 26
+                    carbsG: 70
+                    fatG: 24
+                    fiberG: 9
+                    sugarG: 6
+                    sodiumMg: 920
+                  snack:
+                    energyKcal: 150
+                    proteinG: 8
+                    carbsG: 12
+                    fatG: 8
+                    fiberG: 1
+                    sugarG: 11
+                    sodiumMg: 90
+                waterMl: 2000
+                calorieTargetKcal: 1600
+                waterTargetMl: 2500
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /nutrition/summary:
@@ -1619,6 +3228,58 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NutritionSummary' }
+              example:
+                from: 2026-10-19
+                to: 2026-10-25
+                bucket: week
+                timezone: Asia/Kolkata
+                targets:
+                  kcal: 1600
+                  proteinG: 109
+                  carbsG: 192
+                  fatG: 44
+                  waterMl: 2500
+                points:
+                  - period: 2026-10-19
+                    daysInPeriod: 7
+                    daysLogged: 6
+                    totals:
+                      energyKcal: 9300
+                      proteinG: 360
+                      carbsG: 1140
+                      fatG: 270
+                      fiberG: 120
+                      sugarG: 168
+                      sodiumMg: 10800
+                    avgPerLoggedDay:
+                      energyKcal: 1550
+                      proteinG: 60
+                      carbsG: 190
+                      fatG: 45
+                      fiberG: 20
+                      sugarG: 28
+                      sodiumMg: 1800
+                    waterMl: 15400
+                    waterDaysLogged: 7
+                    avgWaterMlPerLoggedDay: 2200
+                    adherence:
+                      kcalPct: 96.9
+                      proteinPct: 55
+                      carbsPct: 99
+                      fatPct: 102.3
+                      waterPct: 88
+                    entryCount: 27
+                    targets:
+                      kcal: 1600
+                      proteinG: 109
+                      carbsG: 192
+                      fatG: 44
+                      waterMl: 2500
+                    targetsChanged: false
+                    entriesMissing:
+                      fiberG: 2
+                      sugarG: 3
+                      sodiumMg: 0
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /body-measurements:
@@ -1649,6 +3310,19 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/BodyMeasurement' }
+              example:
+                items:
+                  - id: e382b1de-d37d-4669-8cd7-69c53b387023
+                    date: 2026-10-29
+                    weightKg: 68.4
+                    bodyFatPct: 31.5
+                    waistCm: 84
+                    chestCm: 92.5
+                    hipCm: 101
+                    armCm: 29.5
+                    thighCm: 56
+                    createdAt: 2026-10-29T07:05:00+05:30
+                nextCursor: null
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
@@ -1662,12 +3336,27 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/BodyMeasurementCreate' }
+            example:
+              date: 2026-10-29
+              weightKg: 68.4
+              waistCm: 84
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BodyMeasurement' }
+              example:
+                id: e382b1de-d37d-4669-8cd7-69c53b387023
+                date: 2026-10-29
+                weightKg: 68.4
+                bodyFatPct: 31.5
+                waistCm: 84
+                chestCm: 92.5
+                hipCm: 101
+                armCm: 29.5
+                thighCm: 56
+                createdAt: 2026-10-29T07:05:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
@@ -1685,6 +3374,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BodyMeasurement' }
+              example:
+                id: e382b1de-d37d-4669-8cd7-69c53b387023
+                date: 2026-10-29
+                weightKg: 68.4
+                bodyFatPct: 31.5
+                waistCm: 84
+                chestCm: 92.5
+                hipCm: 101
+                armCm: 29.5
+                thighCm: 56
+                createdAt: 2026-10-29T07:05:00+05:30
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -1699,12 +3399,25 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/BodyMeasurementUpdate' }
+            example:
+              waistCm: 83.5
       responses:
         '200':
           description: Updated
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BodyMeasurement' }
+              example:
+                id: e382b1de-d37d-4669-8cd7-69c53b387023
+                date: 2026-10-29
+                weightKg: 68.4
+                bodyFatPct: 31.5
+                waistCm: 83.5
+                chestCm: 92.5
+                hipCm: 101
+                armCm: 29.5
+                thighCm: 56
+                createdAt: 2026-10-29T07:05:00+05:30
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1743,6 +3456,20 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ProgressSummary' }
+              example:
+                from: 2026-10-23
+                to: 2026-10-29
+                points:
+                  - date: 2026-10-29
+                    weightKg: 68.4
+                    bodyFatPct: 31.5
+                    waistCm: 84
+                    waterMl: 2000
+                    workoutsCompleted: 1
+                    activeMinutes: 45
+                    energyKcal: 1550
+                    xpEarned: 53
+                streakDays: 5
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
@@ -1789,6 +3516,28 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/ExerciseProgressSummary' }
+              example:
+                from: 2026-10-23
+                to: 2026-10-29
+                timezone: Asia/Kolkata
+                items:
+                  - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                    name: Barbell bench press
+                    trackingType: reps_weight
+                    sessions: 4
+                    lastPerformedAt: 2026-10-29T07:41:00+05:30
+                    pr:
+                      maxWeightKg: 32.5
+                      maxWeightKgAchievedAt: 2026-10-29T07:41:00+05:30
+                      maxReps: 12
+                      maxRepsAchievedAt: 2026-10-26T07:38:00+05:30
+                      best1RmKg: 42.3
+                      best1RmKgAchievedAt: 2026-10-29T07:41:00+05:30
+                      maxDurationSec: null
+                      maxDurationSecAchievedAt: null
+                      maxDistanceM: null
+                      maxDistanceMAchievedAt: null
+                nextCursor: null
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /progress/exercises/{exerciseId}:
@@ -1824,6 +3573,37 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ExerciseProgress' }
+              example:
+                exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                name: Barbell bench press
+                trackingType: reps_weight
+                from: 2026-10-23
+                to: 2026-10-29
+                bucket: day
+                timezone: Asia/Kolkata
+                pr:
+                  maxWeightKg: 32.5
+                  maxWeightKgAchievedAt: 2026-10-29T07:41:00+05:30
+                  maxReps: 12
+                  maxRepsAchievedAt: 2026-10-26T07:38:00+05:30
+                  best1RmKg: 42.3
+                  best1RmKgAchievedAt: 2026-10-29T07:41:00+05:30
+                  maxDurationSec: null
+                  maxDurationSecAchievedAt: null
+                  maxDistanceM: null
+                  maxDistanceMAchievedAt: null
+                points:
+                  - period: 2026-10-29
+                    sessions: 1
+                    sets: 3
+                    volumeKg: 900
+                    totalReps: 30
+                    topSetWeightKg: 32.5
+                    best1RmKg: 42.3
+                    totalDurationSec: null
+                    totalDistanceM: null
+                    maxSetDurationSec: null
+                    maxSetDistanceM: null
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1839,6 +3619,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/XpBalance' }
+              example:
+                total: 1450
+                level: 5
+                xpIntoLevel: 450
+                xpForNextLevel: 500
         '401': { $ref: '#/components/responses/Unauthorized' }
   /xp/ledger:
     get:
@@ -1862,6 +3647,15 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/XpTransaction' }
+              example:
+                items:
+                  - id: 4e7e132b-b784-4ef7-9759-2a66800d08d3
+                    sourceType: workout_session
+                    sourceId: fcbdc4c2-71c8-4982-9d83-38d2d8f10b6e
+                    amount: 53
+                    reason: Workout completed
+                    createdAt: 2026-10-29T08:20:00+05:30
+                nextCursor: null
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /badges:
@@ -1882,6 +3676,18 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BadgeList' }
+              example:
+                items:
+                  - code: WORKOUTS_10
+                    title: 10 workouts
+                    description: Complete 10 workouts.
+                    family: workout
+                    bonusXp: 25
+                    earnedAt: 2026-10-29T08:20:00+05:30
+                    progress:
+                      current: 10
+                      target: 10
+                earnedCount: 3
         '401': { $ref: '#/components/responses/Unauthorized' }
   /challenges/templates:
     get:
@@ -1898,6 +3704,21 @@ paths:
                 required: [items]
                 properties:
                   items: { type: array, items: { $ref: '#/components/schemas/ChallengeTemplate' } }
+              example:
+                items:
+                  - code: WEEKLY_WORKOUTS
+                    type: weekly
+                    title: Workouts this week
+                    description: Complete the target number of workouts this week (Monday to Sunday).
+                    metric: completed_workouts
+                    unit: workouts
+                    targets:
+                      - 2
+                      - 3
+                      - 4
+                      - 5
+                    deadlineDays: null
+                    bonusXp: 25
         '401': { $ref: '#/components/responses/Unauthorized' }
   /challenges:
     get:
@@ -1925,6 +3746,26 @@ paths:
                       items:
                         type: array
                         items: { $ref: '#/components/schemas/Challenge' }
+              example:
+                items:
+                  - id: bb064b23-223d-4f9b-8053-13cdafc355ac
+                    templateCode: WEEKLY_WORKOUTS
+                    type: weekly
+                    title: Workouts this week
+                    target: 3
+                    progress: 2
+                    unit: workouts
+                    windowStart: 2026-10-26
+                    windowEnd: 2026-11-01
+                    joinDate: 2026-10-26
+                    timezone: Asia/Kolkata
+                    waterGoalMl: null
+                    status: active
+                    joinedAt: 2026-10-26T06:55:00+05:30
+                    completedAt: null
+                    leftAt: null
+                    xpAwarded: 0
+                nextCursor: null
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
@@ -1947,12 +3788,33 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/ChallengeJoinRequest' }
+            example:
+              templateCode: WEEKLY_WORKOUTS
+              target: 3
       responses:
         '201':
           description: Joined
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Challenge' }
+              example:
+                id: bb064b23-223d-4f9b-8053-13cdafc355ac
+                templateCode: WEEKLY_WORKOUTS
+                type: weekly
+                title: Workouts this week
+                target: 3
+                progress: 2
+                unit: workouts
+                windowStart: 2026-10-26
+                windowEnd: 2026-11-01
+                joinDate: 2026-10-26
+                timezone: Asia/Kolkata
+                waterGoalMl: null
+                status: active
+                joinedAt: 2026-10-26T06:55:00+05:30
+                completedAt: null
+                leftAt: null
+                xpAwarded: 0
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409':
@@ -1960,6 +3822,27 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                CHALLENGE_ALREADY_JOINED:
+                  value:
+                    code: CHALLENGE_ALREADY_JOINED
+                    message: You have already joined this challenge.
+                    requestId: req_7f3a9c1e2b4d
+                CHALLENGE_LIMIT_REACHED:
+                  value:
+                    code: CHALLENGE_LIMIT_REACHED
+                    message: You can have at most 5 active challenges.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_IN_PROGRESS:
+                  value:
+                    code: IDEMPOTENCY_IN_PROGRESS
+                    message: A request with this Idempotency-Key is still running. Retry shortly.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
   /challenges/{challengeId}:
     parameters:
@@ -1974,6 +3857,24 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Challenge' }
+              example:
+                id: bb064b23-223d-4f9b-8053-13cdafc355ac
+                templateCode: WEEKLY_WORKOUTS
+                type: weekly
+                title: Workouts this week
+                target: 3
+                progress: 2
+                unit: workouts
+                windowStart: 2026-10-26
+                windowEnd: 2026-11-01
+                joinDate: 2026-10-26
+                timezone: Asia/Kolkata
+                waterGoalMl: null
+                status: active
+                joinedAt: 2026-10-26T06:55:00+05:30
+                completedAt: null
+                leftAt: null
+                xpAwarded: 0
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
   /challenges/{challengeId}/leave:
@@ -1992,6 +3893,24 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Challenge' }
+              example:
+                id: bb064b23-223d-4f9b-8053-13cdafc355ac
+                templateCode: WEEKLY_WORKOUTS
+                type: weekly
+                title: Workouts this week
+                target: 3
+                progress: 2
+                unit: workouts
+                windowStart: 2026-10-26
+                windowEnd: 2026-11-01
+                joinDate: 2026-10-26
+                timezone: Asia/Kolkata
+                waterGoalMl: null
+                status: left
+                joinedAt: 2026-10-26T06:55:00+05:30
+                completedAt: null
+                leftAt: 2026-10-29T18:30:00+05:30
+                xpAwarded: 0
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -1999,6 +3918,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                CHALLENGE_NOT_ACTIVE:
+                  value:
+                    code: CHALLENGE_NOT_ACTIVE
+                    message: This challenge has already ended.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_KEY_REUSED:
+                  value:
+                    code: IDEMPOTENCY_KEY_REUSED
+                    message: This Idempotency-Key was used for a different request.
+                    requestId: req_7f3a9c1e2b4d
+                IDEMPOTENCY_IN_PROGRESS:
+                  value:
+                    code: IDEMPOTENCY_IN_PROGRESS
+                    message: A request with this Idempotency-Key is still running. Retry shortly.
+                    requestId: req_7f3a9c1e2b4d
         '429': { $ref: '#/components/responses/RateLimited' }
 
 components:
@@ -2107,6 +4042,13 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+          example:
+            code: VALIDATION_FAILED
+            message: Some fields are invalid.
+            details:
+              fields:
+                amountMl: amountMl must not be greater than 5000
+            requestId: req_7f3a9c1e2b4d
     Unauthorized:
       description: '`UNAUTHENTICATED` (missing or bad token) or `TOKEN_EXPIRED` (refresh and retry)'
       headers:
@@ -2114,6 +4056,17 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            UNAUTHENTICATED:
+              value:
+                code: UNAUTHENTICATED
+                message: Sign in to continue.
+                requestId: req_7f3a9c1e2b4d
+            TOKEN_EXPIRED:
+              value:
+                code: TOKEN_EXPIRED
+                message: Your session expired. Refresh and try again.
+                requestId: req_7f3a9c1e2b4d
     NotFound:
       description: '`NOT_FOUND`, including another user''s resource'
       headers:
@@ -2121,6 +4074,10 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+          example:
+            code: NOT_FOUND
+            message: Session not found.
+            requestId: req_7f3a9c1e2b4d
     IdempotencyConflict:
       description: '`IDEMPOTENCY_KEY_REUSED` (different body, method or path; never replayed) or `IDEMPOTENCY_IN_PROGRESS`'
       headers:
@@ -2128,6 +4085,17 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+          examples:
+            IDEMPOTENCY_KEY_REUSED:
+              value:
+                code: IDEMPOTENCY_KEY_REUSED
+                message: This Idempotency-Key was used for a different request.
+                requestId: req_7f3a9c1e2b4d
+            IDEMPOTENCY_IN_PROGRESS:
+              value:
+                code: IDEMPOTENCY_IN_PROGRESS
+                message: A request with this Idempotency-Key is still running. Retry shortly.
+                requestId: req_7f3a9c1e2b4d
     RateLimited:
       description: '`RATE_LIMITED`'
       headers:
@@ -2136,6 +4104,10 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+          example:
+            code: RATE_LIMITED
+            message: "ThrottlerException: Too Many Requests"
+            requestId: req_7f3a9c1e2b4d
 
   schemas:
     Id:
