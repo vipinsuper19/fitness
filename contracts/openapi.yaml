@@ -646,7 +646,7 @@ paths:
         No AI. One suggestion per planned exercise of the latest plan version, from the last 3 completed
         sessions that followed this plan and logged that exercise (docs/specs/adaptive-progression.md).
         `increase` only when every session met the prescription with `perceivedDifficulty` below 4 and no
-        progression was applied in the last 7 days; one step, at most +10%. `deload` after two consecutive
+        progression was applied in the last 7 days; one step; load (weight, duration) at most +10%, rep steps exempt; deload −10% (weight down to 0.5 kg, duration down to 5 s). `deload` after two consecutive
         misses or two sessions at difficulty 5. The minimum step overrides the cap; weights are multiples of 0.5 kg.
         Nothing is written: PATCH takes the full plan draft, so one `PATCH /workout-plans/{planId}` with
         `baseVersion = planVersion` can apply every accepted suggestion (stale → `409 VERSION_CONFLICT`; refetch after a PATCH).

@@ -31,8 +31,9 @@ Otherwise the suggestion is `hold` or `deload` with a reason.
 | `distance_duration` | raise `durationSeconds` | same as `duration` |
 
 ## Cap
-- One step per suggestion, capped at **+10%** of the current value (weight, reps or seconds).
-- **The minimum step overrides the cap.** When the minimum step (+1.0 kg, +0.5 kg under 10 kg, +1 rep, +5 s) is more than 10% of a small current value, the minimum step is suggested anyway.
+- One step per suggestion. The **+10% cap applies to load only** (`targetWeightKg` and `durationSeconds`).
+- **Rep steps are exempt from the cap:** +1 rep, or +2 when `repsMax >= 15`, is suggested as is (e.g. 3–5 → 4–6).
+- **The minimum step overrides the cap.** When the minimum load step (+1.0 kg, +0.5 kg under 10 kg, +5 s) is more than 10% of a small current value, the minimum step is suggested anyway.
 - Values stay within the plan schema limits (`targetWeightKg` ≤ 1000, reps ≤ 100, `durationSeconds` ≤ 7200). An exercise already at a limit is `hold` / `CAP_REACHED`.
 - **Every suggested weight is a multiple of 0.5 kg** (increase, deload and `NO_TARGET_SET`; rounded down).
 
@@ -40,7 +41,7 @@ Otherwise the suggestion is `hold` or `deload` with a reason.
 The server derives "last progression applied" from plan versions: the newest plan version where this exercise's prescribed load (target weight, reps or duration) increased versus the previous version. If its `createdAt` is less than 7 days ago, `hold` with `COOLDOWN` and `cooldownUntil`. No new table is needed.
 
 ## Deload
-Suggest a **deload** (−10% of `targetWeightKg` rounded down to 0.5 kg, or −10% duration; reps unchanged for `reps`) when either:
+Suggest a **deload** (−10% of `targetWeightKg` rounded down to 0.5 kg, or −10% of `durationSeconds` rounded **down** to 5 s; reps unchanged for `reps`) when either:
 - **two consecutive** qualifying sessions missed the prescription (rule 2) for this exercise, or
 - the latest two sessions both report `perceivedDifficulty = 5`.
 A deload is a suggestion like any other; it is never applied automatically. Pain or medical symptoms are **not** inferred from data; the client shows its standard "stop and seek professional advice" copy whenever the user reports pain (out of scope here).
@@ -84,12 +85,12 @@ A deload is a suggestion like any other; it is never applied automatically. Pain
 - `reps_weight` upper body 40 kg, 3 met sessions → 41 kg (2.5% = 1.0); lower body 100 kg → 105 kg; 8 kg target → 8.5 kg; rounding down to 0.5 kg.
 - Missing target → `NO_TARGET_SET` with the heaviest weight used.
 - `reps` 8–12 → 9–13; 15–18 → 17–20; 19–20 → `REP_CEILING` with `harderVariations` (one-level-harder same-muscle exercise listed; `advanced` exercise → `[]`).
-- Minimum step overrides the cap: 5 kg → 5.5 kg (+10%), 3–5 reps → 4–6; 30 s → 35 s. All suggested weights are multiples of 0.5 kg.
+- Minimum step overrides the cap: 5 kg → 5.5 kg (+10%), 30 s → 35 s; rep steps are exempt from the cap (3–5 reps → 4–6, 15–18 → 17–20). All suggested weights are multiples of 0.5 kg.
 - `suggested` is complete (unchanged fields equal `current`); every item has a `reason` from the enum; `reasonText` optional.
 - Accepting two suggestions in one PATCH with `baseVersion = planVersion` creates one version with both changes.
 - `duration` 60 s → 65 s; 300 s → 330 s.
 - One session missing a set or a rep → `MISSED_TARGET`; `perceivedDifficulty` 4 in the window → `HIGH_EFFORT`.
-- Two consecutive misses → deload −10%; two sessions at difficulty 5 → `VERY_HARD` deload.
+- Two consecutive misses → deload −10% (weight rounded down to 0.5 kg; duration 65 s → 55 s, rounded down to 5 s); two sessions at difficulty 5 → `VERY_HARD` deload.
 - Cooldown: a version raising the load 3 days ago → `COOLDOWN` with `cooldownUntil`; 8 days ago → increase (faked clock, Date only).
 - Incomplete (`completed: false`) sets and in-progress sessions are ignored; corrections are applied.
 - The endpoint never changes the plan (version unchanged after the call); accepting via PATCH with `baseVersion` works and a stale `baseVersion` → 409 `VERSION_CONFLICT`.
