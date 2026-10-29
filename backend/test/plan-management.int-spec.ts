@@ -1,6 +1,6 @@
 /**
  * Plan management over HTTP against Postgres (DB_TESTS=1): list, pause/resume,
- * archive (docs/specs/plan-management.md), checked against contracts/openapi.yaml.
+ * archive, rename, unarchive (docs/specs/plan-management.md), checked against contracts/openapi.yaml.
  */
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -28,7 +28,8 @@ describeDb('plan management (HTTP + Postgres)', () => {
     return {
       get: (url: string) => auth(http().get(url)),
       post: (url: string, key?: string) => auth(http().post(url), key),
-      patch: (url: string) => auth(http().patch(url)),
+      patch: (url: string, key?: string) => auth(http().patch(url), key),
+      put: (url: string, key?: string) => auth(http().put(url), key),
       delete: (url: string, key?: string) => auth(http().delete(url), key),
     };
   };
@@ -241,6 +242,256 @@ describeDb('plan management (HTTP + Postgres)', () => {
       expect(r).toMatchObject({ currentWeek: 1, planEnded: false }); // still day 7 of week 1
       at('2026-09-08T18:40:00Z'); // 00:10 IST on 9 Sep: day 8
       expect((await plan(t, a.id)).currentWeek).toBe(2);
+    });
+  });
+
+  describe('rename (PUT /workout-plans/{planId}/name)', () => {
+    const rename = (t: string, id: string, name: unknown, key?: string) => as(t).put(`/api/v1/workout-plans/${id}/name`, key).send({ name });
+    const versions = (id: string) => prisma.workoutPlanVersion.count({ where: { planId: id } });
+    const updatedAt = async (id: string) => (await prisma.workoutPlan.findUniqueOrThrow({ where: { id } })).updatedAt.getTime();
+    const editOf = async (t: string, id: string, extra: object = {}) => {
+      const p = await plan(t, id);
+      const rest = { weeks: p.weeks, generator: 'custom', rationale: p.rationale, workouts: p.workouts.map((w: { dayOfWeek: number; name: string; exercises: object[] }) => ({ dayOfWeek: w.dayOfWeek, name: w.name, exercises: w.exercises.map((e) => { const { exerciseId, order, sets, repsMin, repsMax, durationSeconds, targetWeightKg, restSeconds } = e as Record<string, unknown>; return { exerciseId, order, sets, repsMin, repsMax, durationSeconds, targetWeightKg, restSeconds }; }) })) };
+      return { ...rest, baseVersion: p.version, ...extra };
+    };
+
+    it('renames the active plan in place: trimmed, same version, visible in list and /active', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await activate(t, a.id);
+      const r = (await rename(t, a.id, '  Push Pull  ').expect(200)).body;
+      expect(r).toMatchObject({ id: a.id, name: 'Push Pull', version: 1, isActive: true, currentWeek: 1 });
+      expect(await versions(a.id)).toBe(1);
+      expect((await as(t).get('/api/v1/workout-plans/active').expect(200)).body.name).toBe('Push Pull');
+      expect((await list(t)).items[0]).toMatchObject({ id: a.id, name: 'Push Pull', version: 1 });
+    });
+
+    it('rename after a PATCH changes only the latest version', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      const before = (await plan(t, a.id)).name;
+      const e1 = await editOf(t, a.id);
+      await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(e1).expect(200);
+      expect((await rename(t, a.id, 'Renamed').expect(200)).body).toMatchObject({ version: 2, name: 'Renamed' });
+      expect((await as(t).get(`/api/v1/workout-plans/${a.id}?version=1`).expect(200)).body.name).toBe(before);
+      expect(await versions(a.id)).toBe(2);
+    });
+
+    it('paused and inactive plans: status, pausedAt, activatedAt and currentWeek unchanged (faked clock)', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'] });
+      try {
+        jest.setSystemTime(new Date('2026-10-28T06:00:00Z'));
+        const t = await signUp();
+        const a = await newPlan(t);
+        const b = await newPlan(t);
+        await activate(t, a.id);
+        await prisma.workoutPlan.update({ where: { id: a.id }, data: { activatedAt: new Date('2026-10-20T06:00:00Z') } });
+        await pause(t, a.id);
+        const pa = await plan(t, a.id);
+        const pb = await plan(t, b.id);
+        const ra = (await rename(t, a.id, 'Paused one').expect(200)).body;
+        const rb = (await rename(t, b.id, 'Inactive one').expect(200)).body;
+        for (const [x, y] of [[pa, ra], [pb, rb]]) expect({ ...y, name: x.name }).toEqual(x);
+        expect((await list(t, '?status=paused')).items).toEqual([expect.objectContaining({ id: a.id, name: 'Paused one' })]);
+        expect((await list(t, '?status=inactive')).items).toEqual([expect.objectContaining({ id: b.id, name: 'Inactive one' })]);
+        await activate(t, a.id, { resume: true });
+        expect((await plan(t, a.id)).currentWeek).toBe(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('validation: empty after trim, too long, missing, wrong type and extra fields are 400', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      for (const body of [{ name: '' }, { name: '   ' }, { name: 'x'.repeat(81) }, { name: `  ${'y'.repeat(81)}  ` }, {}, { name: 3 }, { name: 'ok', extra: 1 }]) {
+        const r = await as(t).put(`/api/v1/workout-plans/${a.id}/name`).send(body).expect(400);
+        expect(r.body.code).toBe('VALIDATION_FAILED');
+      }
+      expect((await rename(t, a.id, `  ${'z'.repeat(80)}  `).expect(200)).body.name).toBe('z'.repeat(80));
+    });
+
+    it('same name (after trim) is a 200 no-op without a write', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await rename(t, a.id, 'Same').expect(200);
+      const u = await updatedAt(a.id);
+      expect((await rename(t, a.id, '  Same ').expect(200)).body.name).toBe('Same');
+      expect(await updatedAt(a.id)).toBe(u);
+    });
+
+    it('archived plans are read-only: 409 PLAN_ARCHIVED even for the same name', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      const name = (await plan(t, a.id)).name;
+      await as(t).delete(`/api/v1/workout-plans/${a.id}`).expect(204);
+      const u = await updatedAt(a.id);
+      expect((await rename(t, a.id, 'New').expect(409)).body.code).toBe('PLAN_ARCHIVED');
+      expect((await rename(t, a.id, name).expect(409)).body.code).toBe('PLAN_ARCHIVED');
+      expect(await updatedAt(a.id)).toBe(u);
+      expect((await plan(t, a.id)).name).toBe(name);
+    });
+
+    it('Idempotency-Key replays; same key with a different name is a conflict', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      const key = randomUUID();
+      const first = (await rename(t, a.id, 'One', key).expect(200)).body;
+      await rename(t, a.id, 'Two').expect(200);
+      expect((await rename(t, a.id, 'One', key).expect(200)).body).toEqual(first);
+      expect((await rename(t, a.id, 'Three', key).expect(409)).body.code).toBe('IDEMPOTENCY_KEY_REUSED');
+    });
+
+    it('401 without a token; 404 for unknown, other user and malformed ids', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await http().put(`/api/v1/workout-plans/${a.id}/name`).send({ name: 'x' }).expect(401);
+      await rename(t, randomUUID(), 'x').expect(404);
+      await rename(await signUp(), a.id, 'x').expect(404);
+      await rename(t, 'not-a-uuid', 'x').expect(404);
+    });
+
+    it('PATCH ignores name: different, missing, empty or overlong name keeps the current name', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await rename(t, a.id, 'Kept').expect(200);
+      const stale = await editOf(t, a.id, { name: 'Stale pre-rename name' });
+      let v = 1;
+      for (const extra of [{ name: 'Different' }, {}, { name: '' }, { name: 'x'.repeat(500) }]) {
+        const body = await editOf(t, a.id, extra);
+        const r = (await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(body).expect(200)).body;
+        expect(r).toMatchObject({ version: ++v, name: 'Kept' });
+      }
+      // After a rename, a stale replay (old name, correct baseVersion) keeps the renamed name.
+      await rename(t, a.id, 'Renamed again').expect(200);
+      const r = (await as(t).patch(`/api/v1/workout-plans/${a.id}`).send({ ...stale, baseVersion: v }).expect(200)).body;
+      expect(r).toMatchObject({ version: v + 1, name: 'Renamed again' });
+      expect((await as(t).get(`/api/v1/workout-plans/${a.id}?version=${v}`).expect(200)).body.name).toBe('Renamed again');
+    });
+  });
+
+  describe('unarchive (POST /workout-plans/{planId}/unarchive)', () => {
+    const unarchive = (t: string, id: string, key?: string) => as(t).post(`/api/v1/workout-plans/${id}/unarchive`, key);
+    const archive = (t: string, id: string) => as(t).delete(`/api/v1/workout-plans/${id}`).expect(204);
+
+    it('inactive plan comes back inactive; same version; list filters move it', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      const before = await plan(t, a.id);
+      await archive(t, a.id);
+      const r = (await unarchive(t, a.id).expect(200)).body;
+      expect(r).toEqual({ ...before });
+      expect(await prisma.workoutPlanVersion.count({ where: { planId: a.id } })).toBe(1);
+      expect((await list(t, '?status=archived')).items).toEqual([]);
+      expect((await list(t, '?status=inactive')).items).toEqual([expect.objectContaining({ id: a.id, status: 'inactive', archivedAt: null })]);
+      // Writable again.
+      expect(await activate(t, a.id)).toMatchObject({ isActive: true });
+    });
+
+    it('paused plan comes back paused with the same pausedAt; resume continues the week (faked clock)', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask', 'hrtime', 'performance'] });
+      try {
+        jest.setSystemTime(new Date('2026-10-20T06:00:00Z'));
+        const t = await signUp();
+        const a = await newPlan(t);
+        await activate(t, a.id);
+        await pause(t, a.id);
+        // Activated Oct 1, paused Oct 9 (week 2), archived Oct 20.
+        await prisma.workoutPlan.update({ where: { id: a.id }, data: { activatedAt: new Date('2026-10-01T06:00:00Z'), pausedAt: new Date('2026-10-09T06:00:00Z') } });
+        const pausedAt = (await plan(t, a.id)).pausedAt;
+        await archive(t, a.id);
+        expect((await unarchive(t, a.id).expect(200)).body).toMatchObject({ pausedAt, archivedAt: null, isActive: false });
+        expect((await list(t, '?status=paused')).items).toEqual([expect.objectContaining({ id: a.id, status: 'paused' })]);
+        expect(await activate(t, a.id, { resume: true })).toMatchObject({ isActive: true, currentWeek: 2 });
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('archived active plan comes back paused (archive pauses first); /active stays 204; another active plan stays active', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      const b = await newPlan(t);
+      await activate(t, a.id);
+      const activatedAt = (await plan(t, a.id)).activatedAt;
+      await archive(t, a.id);
+      const archived = await plan(t, a.id);
+      expect(archived.pausedAt).toBe(archived.archivedAt);
+      const r = (await unarchive(t, a.id).expect(200)).body;
+      expect(r).toMatchObject({ isActive: false, pausedAt: archived.archivedAt, archivedAt: null, activatedAt });
+      expect((await list(t, '?status=paused')).items).toEqual([expect.objectContaining({ id: a.id })]);
+      await as(t).get('/api/v1/workout-plans/active').expect(204);
+      // With another plan active meanwhile, that plan stays active.
+      await archive(t, a.id);
+      await activate(t, b.id);
+      await unarchive(t, a.id).expect(200);
+      expect((await as(t).get('/api/v1/workout-plans/active').expect(200)).body.id).toBe(b.id);
+    });
+
+    it('PATCH and activate are 409 before and 200 after', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await archive(t, a.id);
+      const edit = { ...(await as(t).post('/api/v1/workout-plans/generate').send(draft).expect(200)).body, baseVersion: 1 };
+      expect((await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(edit).expect(409)).body.code).toBe('PLAN_ARCHIVED');
+      expect((await as(t).post(`/api/v1/workout-plans/${a.id}/activate`).send({}).expect(409)).body.code).toBe('PLAN_ARCHIVED');
+      await unarchive(t, a.id).expect(200);
+      await as(t).patch(`/api/v1/workout-plans/${a.id}`).send(edit).expect(200);
+      await activate(t, a.id);
+    });
+
+    it('not archived (active, paused, inactive): 200 with the plan, no change', async () => {
+      const t = await signUp();
+      const act = await newPlan(t);
+      const pau = await newPlan(t);
+      const ina = await newPlan(t);
+      await activate(t, pau.id);
+      await pause(t, pau.id);
+      await activate(t, act.id);
+      for (const id of [act.id, pau.id, ina.id]) {
+        const before = await plan(t, id);
+        const u = (await prisma.workoutPlan.findUniqueOrThrow({ where: { id } })).updatedAt.getTime();
+        expect((await unarchive(t, id).expect(200)).body).toEqual(before);
+        expect((await prisma.workoutPlan.findUniqueOrThrow({ where: { id } })).updatedAt.getTime()).toBe(u);
+      }
+    });
+
+    it('second unarchive: 200 identical body; same Idempotency-Key replays', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await archive(t, a.id);
+      const key = randomUUID();
+      const first = (await unarchive(t, a.id, key).expect(200)).body;
+      expect((await unarchive(t, a.id).expect(200)).body).toEqual(first);
+      expect((await unarchive(t, a.id, key).expect(200)).body).toEqual(first);
+    });
+
+    it('401 without a token; 404 for unknown, other user and malformed ids', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await archive(t, a.id);
+      await http().post(`/api/v1/workout-plans/${a.id}/unarchive`).expect(401);
+      await unarchive(t, randomUUID()).expect(404);
+      await unarchive(await signUp(), a.id).expect(404);
+      await unarchive(t, 'not-a-uuid').expect(404);
+      expect((await plan(t, a.id)).archivedAt).not.toBeNull();
+    });
+
+    it('sessions, history and the XP ledger are unchanged', async () => {
+      const t = await signUp();
+      const a = await newPlan(t);
+      await activate(t, a.id);
+      const w = a.workouts[0]!;
+      const s = (await as(t).post('/api/v1/workout-sessions', randomUUID()).send({ plannedWorkoutId: w.id }).expect(201)).body;
+      await as(t).post(`/api/v1/workout-sessions/${s.id}/sets`, randomUUID()).send({ clientSetId: randomUUID(), exerciseId: w.exercises[0]!.exerciseId, setIndex: 0, reps: 10, completed: true }).expect(200);
+      await as(t).post(`/api/v1/workout-sessions/${s.id}/complete`, randomUUID()).send({}).expect(200);
+      await archive(t, a.id);
+      const hist = (await as(t).get('/api/v1/workout-sessions/history').expect(200)).body;
+      const xp = (await as(t).get('/api/v1/xp/balance').expect(200)).body;
+      await unarchive(t, a.id).expect(200);
+      expect((await as(t).get('/api/v1/workout-sessions/history').expect(200)).body).toEqual(hist);
+      expect((await as(t).get('/api/v1/xp/balance').expect(200)).body).toEqual(xp);
+      expect((await list(t)).items[0]).toMatchObject({ id: a.id, completedSessions: 1 });
     });
   });
 });
