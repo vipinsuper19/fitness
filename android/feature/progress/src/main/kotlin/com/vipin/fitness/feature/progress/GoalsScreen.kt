@@ -1,5 +1,6 @@
 package com.vipin.fitness.feature.progress
 
+import com.vipin.fitness.core.common.format.IndianNumberFormat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -88,7 +89,7 @@ fun goalTitle(type: GoalType): String = stringResource(
 )
 
 private fun weight(kg: Double, units: UnitSystem) =
-    "${ProgressFormat.number(UnitConversion.displayWeight(kg, units)!!)} ${ProgressFormat.unitLabel(MeasureDimension.MASS, units)}"
+    "${IndianNumberFormat.number(UnitConversion.displayWeight(kg, units)!!)} ${ProgressFormat.unitLabel(MeasureDimension.MASS, units)}"
 
 /** One line describing progress, or null when there is nothing measurable. */
 @Composable
