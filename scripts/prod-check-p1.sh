@@ -1,34 +1,93 @@
 #!/usr/bin/env bash
-# QA API checks against prod for session corrections (#63), plan management (#65) and the
-# nutrition summary (#70) and strength progress (#72), using TWO throwaway accounts (A = owner, B = other user).
-#   scripts/prod-check-p1.sh            # prod (or API=... for another origin)
-# Same safety pattern as scripts/prod-probe.sh: credentials only in per-run mode-600 state
-# files (umask 077); password/token never in argv or output; JSON built with jq; the EXIT trap
-# always deletes BOTH accounts (DELETE /me) and verifies login is 401, even if a check fails.
-# Light load: ~70 sequential requests with a small pause. Prints PASS/FAIL per check; exit 1 on any FAIL.
+# QA API checks against the Fitness API server for session corrections (#63), plan management (#65),
+# the nutrition summary (#70), strength progress (#72) and macro targets (#85), using TWO throwaway
+# accounts (A = owner, B = other user).
+#   scripts/prod-check-p1.sh              # the Fitness API server (only allowed host, see ALLOWED_API)
+#   scripts/prod-check-p1.sh --self-test  # register-timeout and signal cleanup against a local stub
+# Safety:
+# - Host allowlist: refuses to run unless API is exactly https://fitness-api-6pcc.onrender.com/api/v1
+#   (loopback is allowed only inside --self-test).
+# - Credentials only in per-run mode-600 state files (umask 077); password/token never in argv or
+#   output; JSON built with jq.
+# - Cleanup on EXIT, INT and TERM: every account registered so far (or possibly registered, after a
+#   register timeout) is logged into and deleted (DELETE /me), then login must return 401.
+# - Register timeout / 5xx: the account may exist, so log in with the same credentials and, if that
+#   works, delete it at once; the run then stops.
+# Light load: sequential requests with a small pause. Prints PASS/FAIL per check; exit 1 on any FAIL.
 set -uo pipefail
-API="${API:-https://fitness-api-6pcc.onrender.com/api/v1}"
+ALLOWED_API="https://fitness-api-6pcc.onrender.com/api/v1"
+if [ "${1:-}" = --self-test ]; then
+  PORT=8798; STUB="$(mktemp)"; cat > "$STUB" <<'PY'
+import http.server,json,sys,time,threading
+acc={}; slow={'n':int(sys.argv[2])}; lock=threading.Lock()
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(s,*a): pass
+    def out(s,code,o=None):
+        s.send_response(code); s.end_headers()
+        if o is not None: s.wfile.write(json.dumps(o).encode())
+    def h(s):
+        n=int(s.headers.get('Content-Length') or 0); b=json.loads(s.rfile.read(n) or b'{}')
+        p=s.path; tok=(s.headers.get('Authorization') or '')[7:]
+        if p=='/__accounts': return s.out(200,{"n":len(acc)})
+        if p.endswith('/auth/register'):
+            with lock: acc[b['email']]=b['password']; sl=slow['n']>0; slow['n']-=1
+            if sl: time.sleep(4)          # created, but the client times out
+            return s.out(201,{"tokens":{"accessToken":"t-"+b['email']}})
+        if p.endswith('/auth/login'):
+            ok=acc.get(b.get('email'))==b.get('password') and b.get('password')
+            return s.out(200,{"tokens":{"accessToken":"t-"+b['email']}}) if ok else s.out(401,{"code":"UNAUTHENTICATED"})
+        if s.command=='DELETE' and p.endswith('/me'):
+            e=tok[2:]
+            if acc.get(e)==b.get('password'): del acc[e]; return s.out(204)
+            return s.out(401,{})
+        return s.out(200,{})
+    do_GET=do_POST=do_PUT=do_DELETE=h
+http.server.ThreadingHTTPServer(('127.0.0.1',int(sys.argv[1])),H).serve_forever()
+PY
+  LOCAL="http://127.0.0.1:$PORT/api/v1"; rc=0
+  left() { curl -s "http://127.0.0.1:$PORT/__accounts" | jq -r .n; }
+  # 1) A's register times out (account created server-side): login + delete, run stops, 0 left.
+  python3 "$STUB" "$PORT" 1 & SP=$!; sleep 1
+  API="$LOCAL" P1_SELFTEST=1 REGISTER_MAX_TIME=2 bash "$0" > /tmp/p1-selftest-1.log 2>&1
+  n="$(left)"; grep -q "register timed out" /tmp/p1-selftest-1.log && [ "$n" = 0 ] && echo "SELFTEST register-timeout: PASS (0 accounts left)" || { echo "SELFTEST register-timeout: FAIL ($n left)"; rc=1; }
+  kill "$SP"; wait "$SP" 2>/dev/null
+  # 2) TERM and INT after both signups: both accounts deleted.
+  for sig in TERM INT; do
+    python3 "$STUB" "$PORT" 0 & SP=$!; sleep 1
+    # Background jobs of a script start with SIGINT ignored (and an ignored signal can't be trapped),
+    # so restore the default disposition before exec to test INT the way a terminal Ctrl-C sends it.
+    API="$LOCAL" P1_SELFTEST=1 P1_SELFTEST_HOLD=1 python3 -c 'import os,signal,sys; signal.signal(signal.SIGINT, signal.SIG_DFL); os.execvp("bash", ["bash", sys.argv[1]])' "$0" > "/tmp/p1-selftest-$sig.log" 2>&1 & RP=$!
+    for _ in $(seq 50); do grep -q HOLDING "/tmp/p1-selftest-$sig.log" && break; sleep 0.2; done
+    kill -s "$sig" "$RP"; wait "$RP" 2>/dev/null
+    n="$(left)"; [ "$(grep -c 'deleted (login 401)' "/tmp/p1-selftest-$sig.log")" = 2 ] && [ "$n" = 0 ] && echo "SELFTEST $sig cleanup: PASS (0 accounts left)" || { echo "SELFTEST $sig cleanup: FAIL ($n left)"; rc=1; }
+    kill "$SP"; wait "$SP" 2>/dev/null
+  done
+  # 3) Allowlist: any other host is refused before any request.
+  API="https://example.com/api/v1" bash "$0" > /tmp/p1-selftest-host.log 2>&1; h=$?
+  [ "$h" = 2 ] && grep -q "refusing" /tmp/p1-selftest-host.log && echo "SELFTEST allowlist: PASS" || { echo "SELFTEST allowlist: FAIL"; rc=1; }
+  rm -f "$STUB"; exit $rc
+fi
+API="${API:-$ALLOWED_API}"; API="${API%/}"
+if [ "$API" != "$ALLOWED_API" ] && ! { [ "${P1_SELFTEST:-}" = 1 ] && [[ "$API" =~ ^http://127\.0\.0\.1:[0-9]+/api/v1$ ]]; }; then
+  echo "refusing to run against $API: only $ALLOWED_API is allowed" >&2; exit 2
+fi
 umask 077
 B="$(mktemp -t p1.body.XXXXXXXX)"; BF="$(mktemp -t p1.req.XXXXXXXX)"; HF="$(mktemp -t p1.hdr.XXXXXXXX)"
 declare -A ST TOK CREATED DELETED
-for a in A B; do
-  ST[$a]="$(mktemp -t p1.state.XXXXXXXX)"
-  { printf 'p1check-%s@example.invalid\n' "$(openssl rand -hex 5)"; printf 'Pr0be-'; openssl rand -hex 12; } > "${ST[$a]}"
-  TOK[$a]=""; CREATED[$a]=0; DELETED[$a]=0
-done
+ACCOUNTS=()   # every account we attempted to register, in order
 AS=""   # current account; "" = unauthenticated
 PASS=0; FAIL=0; FAILS=()
 uid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 now() { TZ=Asia/Kolkata date +%H:%M:%S; }
 cred() { jq -nc --rawfile s "${ST[$1]}" '($s | split("\n")) as $l | $l[0] as $e | $l[1] as $p | '"$2"; }
-# r METHOD PATH [BODY] [IDEMPOTENCY_KEY] -> $C, body in $B
+# r METHOD PATH [BODY] [IDEMPOTENCY_KEY] [MAX_TIME] -> $C, body in $B
 r() {
   sleep 0.3
-  local a=(-sS -o "$B" -w '%{http_code}' --max-time 120 -X "$1" "$API$2" -H 'Content-Type: application/json')
+  local a=(-sS -o "$B" -w '%{http_code}' --max-time "${5:-120}" -X "$1" "$API$2" -H 'Content-Type: application/json')
   if [ -n "$AS" ] && [ -n "${TOK[$AS]}" ]; then printf 'Authorization: Bearer %s\n' "${TOK[$AS]}" > "$HF"; a+=(-H "@$HF"); fi
   [ -n "${4:-}" ] && a+=(-H "Idempotency-Key: $4")
   if [ -n "${3:-}" ]; then printf '%s' "$3" > "$BF"; a+=(--data-binary "@$BF"); fi
-  C="$(curl "${a[@]}" 2>/dev/null || echo 000)"
+  C="$(curl "${a[@]}" 2>/dev/null)" || C=000
   echo "  $(now) IST [${AS:--}] $1 $2 -> $C"
 }
 j() { jq -r "$1" "$B" 2>/dev/null; }
@@ -37,16 +96,23 @@ check() { # check NAME CONDITION-RESULT(0/1) DETAIL
 }
 is() { [ "$C" = "$1" ] && echo 0 || echo 1; }
 code_is() { [ "$C" = "$1" ] && [ "$(j .code)" = "$2" ] && echo 0 || echo 1; }
+token_of() { TOK[$1]="$(j '[.. | objects | .accessToken? // empty][0] // empty')"; }
+# Log in as $1 (if needed) and DELETE /me; sets DELETED[$1]=1 on 204.
+delete_account() {
+  local a=$1
+  TOK[$a]=""; AS=""; r POST /auth/login "$(cred "$a" '{email:$e,password:$p}')"
+  [ "$C" = 200 ] || return 0
+  token_of "$a"; AS=$a
+  r DELETE /me "$(cred "$a" '{password:$p}')" "$(uid)"; [ "$C" = 204 ] && DELETED[$a]=1
+  AS=""
+}
+CLEANED=0
 cleanup() {
-  set +e
-  for a in A B; do
-    AS=$a
-    if [ "${CREATED[$a]}" = 1 ] && [ "${DELETED[$a]}" = 0 ]; then
-      TOK[$a]=""; AS=""; r POST /auth/login "$(cred $a '{email:$e,password:$p}')"
-      TOK[$a]="$(j '[.. | objects | .accessToken? // empty][0] // empty')"; AS=$a
-      r DELETE /me "$(cred $a '{password:$p}')" "$(uid)"; [ "$C" = 204 ] && DELETED[$a]=1
-    fi
-    TOK[$a]=""; AS=""; r POST /auth/login "$(cred $a '{email:$e,password:$p}')"
+  [ "$CLEANED" = 1 ] && return; CLEANED=1
+  set +e; trap '' INT TERM
+  for a in "${ACCOUNTS[@]}"; do
+    if [ "${CREATED[$a]}" = 1 ] && [ "${DELETED[$a]}" = 0 ]; then delete_account "$a"; fi
+    TOK[$a]=""; AS=""; r POST /auth/login "$(cred "$a" '{email:$e,password:$p}')"
     if [ "$C" = 401 ]; then echo "CLEANUP account $a deleted (login 401)"; rm -f "${ST[$a]}"
     else echo "CLEANUP account $a NOT confirmed deleted (login $C); credentials kept in ${ST[$a]} (mode 600)"; fi
   done
@@ -54,15 +120,34 @@ cleanup() {
   echo "SUMMARY pass=$PASS fail=$FAIL ${FAILS[*]:-}"
 }
 trap cleanup EXIT
+trap 'echo "interrupted (INT)"; exit 130' INT
+trap 'echo "terminated (TERM)"; exit 143' TERM
 
 signup() {
-  AS=""; r POST /auth/register "$(cred $1 '{email:$e,password:$p,displayName:"QA"}')" "$(uid)"
-  [ "$C" = 201 ] && CREATED[$1]=1
-  TOK[$1]="$(j '[.. | objects | .accessToken? // empty][0] // empty')"
+  local a=$1
+  ST[$a]="$(mktemp -t p1.state.XXXXXXXX)"
+  { printf 'p1check-%s@example.invalid\n' "$(openssl rand -hex 5)"; printf 'Pr0be-'; openssl rand -hex 12; } > "${ST[$a]}"
+  TOK[$a]=""; DELETED[$a]=0
+  # Counted as (possibly) created before the request goes out, so any exit from here on cleans it up.
+  CREATED[$a]=1; ACCOUNTS+=("$a")
+  AS=""; r POST /auth/register "$(cred "$a" '{email:$e,password:$p,displayName:"QA"}')" "$(uid)" "${REGISTER_MAX_TIME:-120}"
+  if [ "$C" = 201 ]; then token_of "$a"; return 0; fi
+  if [ "$C" = 000 ] || [ "${C:0:1}" = 5 ]; then
+    echo "register timed out or failed ($C) for $a; the account may exist: logging in to delete it"
+    delete_account "$a"
+    [ "${DELETED[$a]}" = 1 ] && echo "  account $a existed and was deleted" || echo "  login did not work: account $a was not created (verified again at cleanup)"
+  else
+    CREATED[$a]=0   # definite rejection (4xx): nothing was created
+  fi
+  echo "FAIL could not register throwaway account $a"; exit 1
 }
 echo "API $API (first call may take ~60-90 s: cold start)"
 signup A; signup B
-[ -n "${TOK[A]}" ] && [ -n "${TOK[B]}" ] || { echo "FAIL could not register throwaway accounts"; exit 1; }
+[ -n "${TOK[A]}" ] && [ -n "${TOK[B]}" ] || { echo "FAIL could not get tokens for throwaway accounts"; exit 1; }
+if [ "${P1_SELFTEST:-}" = 1 ]; then
+  if [ "${P1_SELFTEST_HOLD:-}" = 1 ]; then echo HOLDING; while :; do sleep 0.2; done; fi
+  exit 0
+fi
 TODAY="$(TZ=Asia/Kolkata date +%F)"; YDAY="$(TZ=Asia/Kolkata date -d yesterday +%F)"; TMRW="$(TZ=Asia/Kolkata date -d tomorrow +%F)"
 AS=A; r PUT /me/profile '{"timezone":"Asia/Kolkata"}' "$(uid)"   # best effort; ignored if not a field
 
