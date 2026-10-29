@@ -26,7 +26,7 @@ export class PlanGenerateDto {
   @ApiProperty({ minimum: 15, maximum: 180 }) @IsInt() @Min(15) @Max(180)
   sessionMinutes!: number;
 
-  @ApiPropertyOptional({ enum: EQUIPMENT, isArray: true, description: 'Empty or omitted means bodyweight only' })
+  @ApiPropertyOptional({ enum: EQUIPMENT, isArray: true, maxItems: EQUIPMENT.length, description: 'Empty or omitted means bodyweight only' })
   @IsOptional() @IsArray() @ArrayMaxSize(EQUIPMENT.length) @IsIn(EQUIPMENT, { each: true })
   equipment?: Equip[];
 
@@ -38,7 +38,7 @@ export class PlannedExerciseDto {
   @ApiProperty({ format: 'uuid' }) @IsUUID()
   exerciseId!: string;
 
-  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) @Max(1000)
+  @ApiProperty({ minimum: 0, maximum: 1000 }) @IsInt() @Min(0) @Max(1000)
   order!: number;
 
   @ApiProperty({ minimum: 1, maximum: 20 }) @IsInt() @Min(1) @Max(20)
@@ -117,7 +117,7 @@ export class PlanRenameDto {
 }
 
 export class PlanVersionQuery {
-  @ApiPropertyOptional({ minimum: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1_000_000)
+  @ApiPropertyOptional({ minimum: 1, maximum: 1_000_000 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(1_000_000)
   version?: number;
 }
 

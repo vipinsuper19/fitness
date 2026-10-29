@@ -21,18 +21,10 @@ const CONTRACTS = join(__dirname, '../../contracts');
 /**
  * `<METHOD> <path> <field path>: <aspect>` → why it differs on purpose.
  */
-const NUTRIENT_CAPS = { energyKcal: 5000, proteinG: 900, carbsG: 900, fatG: 900, fiberG: 900, sugarG: 900, sodiumMg: 9000 };
-const NUTRIENTS_REASON =
-  'Contract `Nutrients` is shared with responses (day totals exceed the input caps), so its input caps are prose only; ' +
-  'Swagger shows the enforced caps. Goes away once the contract has a separate NutrientsInput (#155).';
 export const ALLOWED: Record<string, string> = {
   'POST /me/notification-devices: missing in Swagger': 'Planned endpoint (docs/specs/notification-sending.md); not implemented on the server yet.',
   'PATCH /me/notification-preferences body.reminders: only in contract':
     'Planned `reminders` settings (docs/specs/notification-sending.md); the server rejects the key today, so Swagger omits it.',
-  ...Object.fromEntries(
-    (['POST /foods body.nutrients', 'PATCH /foods/{foodId} body.nutrients', 'POST /food-logs body.nutrientsOverride', 'PATCH /food-logs/{foodLogId} body.nutrientsOverride'] as const)
-      .flatMap((at) => Object.entries(NUTRIENT_CAPS).map(([k, max]) => [`${at}.${k}: maximum contract=- nest=${max}`, NUTRIENTS_REASON])),
-  ),
 };
 
 const files = new Map<string, S>();
