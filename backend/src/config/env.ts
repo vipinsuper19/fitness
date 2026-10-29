@@ -25,6 +25,19 @@ export const envSchema = z.object({
   /** GET /me/target-history requests allowed per user per minute. */
   TARGET_HISTORY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   NOTIFICATION_PREFS_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+  /**
+   * Per-user write limits (requests per minute) for routes that had no throttle before this audit. Defaults are
+   * generous so no real client is affected; they bound abuse (docs/DEPLOY.md, test/rate-limits.spec.ts).
+   */
+  PROFILE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+  GOALS_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+  PLANS_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+  /** Set logging bursts during a workout and offline-queue replays. */
+  WORKOUT_SESSIONS_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
+  /** Foods, food logs and water logs (offline-queue replays). */
+  NUTRITION_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
+  BODY_MEASUREMENTS_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+  CHALLENGES_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   /** GET /me/export caps (newest rows kept; cut collections are listed in `truncated`). */
   EXPORT_MAX_ROWS: z.coerce.number().int().positive().max(50_000).default(5000),
   EXPORT_MAX_SESSIONS: z.coerce.number().int().positive().max(50_000).default(2000),

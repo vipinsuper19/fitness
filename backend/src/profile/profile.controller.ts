@@ -2,6 +2,7 @@ import { Body, Controller, Get, Put, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader } from '../auth/idempotency-key';
 import { IdempotentWriteService } from '../idempotency/idempotent-write.service';
@@ -22,6 +23,7 @@ export class ProfileController {
     return this.profiles.get(userId);
   }
 
+  @RateLimit('profile')
   @Put()
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   update(

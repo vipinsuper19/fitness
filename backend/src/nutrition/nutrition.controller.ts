@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res } fr
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
@@ -34,6 +35,7 @@ export class NutritionController {
     return this.nutrition.searchFoods(userId, q);
   }
 
+  @RateLimit('nutrition')
   @Post('foods')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   createFood(
@@ -51,6 +53,7 @@ export class NutritionController {
     return this.nutrition.getFood(userId, id);
   }
 
+  @RateLimit('nutrition')
   @Patch('foods/:foodId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   updateFood(
@@ -64,6 +67,7 @@ export class NutritionController {
     return this.run(userId, key, { req, res }, 200, () => this.nutrition.updateFood(userId, id, dto));
   }
 
+  @RateLimit('nutrition')
   @Delete('foods/:foodId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async deleteFood(
@@ -81,6 +85,7 @@ export class NutritionController {
     return this.nutrition.listFoodLogs(userId, q.date);
   }
 
+  @RateLimit('nutrition')
   @Post('food-logs')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   createFoodLog(
@@ -93,6 +98,7 @@ export class NutritionController {
     return this.run(userId, key, { req, res }, 201, () => this.nutrition.createFoodLog(userId, dto));
   }
 
+  @RateLimit('nutrition')
   @Patch('food-logs/:foodLogId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   updateFoodLog(
@@ -106,6 +112,7 @@ export class NutritionController {
     return this.run(userId, key, { req, res }, 200, () => this.nutrition.updateFoodLog(userId, id, dto));
   }
 
+  @RateLimit('nutrition')
   @Delete('food-logs/:foodLogId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async deleteFoodLog(
@@ -123,6 +130,7 @@ export class NutritionController {
     return this.nutrition.listWater(userId, q.date);
   }
 
+  @RateLimit('nutrition')
   @Post('water-logs')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   createWater(
@@ -135,6 +143,7 @@ export class NutritionController {
     return this.run(userId, key, { req, res }, 201, () => this.nutrition.createWater(userId, dto));
   }
 
+  @RateLimit('nutrition')
   @Patch('water-logs/:waterLogId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   updateWater(
@@ -148,6 +157,7 @@ export class NutritionController {
     return this.run(userId, key, { req, res }, 200, () => this.nutrition.updateWater(userId, id, dto));
   }
 
+  @RateLimit('nutrition')
   @Delete('water-logs/:waterLogId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async deleteWater(

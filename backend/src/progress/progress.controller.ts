@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res } fr
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
@@ -36,6 +37,7 @@ export class ProgressController {
     return this.progress.list(userId, q);
   }
 
+  @RateLimit('bodyMeasurements')
   @Post('body-measurements')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   create(
@@ -53,6 +55,7 @@ export class ProgressController {
     return this.progress.get(userId, id);
   }
 
+  @RateLimit('bodyMeasurements')
   @Patch('body-measurements/:measurementId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   update(
@@ -66,6 +69,7 @@ export class ProgressController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.progress.update(userId, id, dto) });
   }
 
+  @RateLimit('bodyMeasurements')
   @Delete('body-measurements/:measurementId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   async remove(

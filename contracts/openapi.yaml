@@ -192,6 +192,7 @@ paths:
       responses:
         '204': { description: Signed out (also returned for an already revoked token) }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /me:
     delete:
@@ -222,6 +223,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /me/macro-suggestion:
     get:
       tags: [me]
@@ -408,6 +410,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /goals:
     get:
@@ -451,6 +454,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /goals/{goalId}:
     parameters:
       - $ref: '#/components/parameters/GoalId'
@@ -487,6 +491,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [goals]
       operationId: deleteGoal
@@ -497,6 +502,7 @@ paths:
         '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /exercises:
     get:
@@ -632,6 +638,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/active:
     get:
       tags: [workout-plans]
@@ -691,6 +698,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-plans]
       operationId: archiveWorkoutPlan
@@ -711,6 +719,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/{planId}/unarchive:
     post:
       tags: [workout-plans]
@@ -739,6 +748,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/{planId}/name:
     put:
       tags: [workout-plans]
@@ -780,6 +790,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/{planId}/deactivate:
     post:
       tags: [workout-plans]
@@ -803,6 +814,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-plans/{planId}/activate:
     post:
       tags: [workout-plans]
@@ -844,6 +856,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /workout-plans/{planId}/progression-suggestions:
     parameters:
@@ -899,6 +912,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/history:
     get:
       tags: [workout-sessions]
@@ -968,6 +982,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-sessions]
       operationId: discardWorkoutSession
@@ -998,6 +1013,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/sets:
     post:
       tags: [workout-sessions]
@@ -1028,6 +1044,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/complete:
     post:
       tags: [workout-sessions]
@@ -1060,6 +1077,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/corrections/sets/{clientSetId}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -1105,6 +1123,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [workout-sessions]
       operationId: deleteCorrectedSetLog
@@ -1143,6 +1162,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /workout-sessions/{sessionId}/completion:
     patch:
       tags: [workout-sessions]
@@ -1181,6 +1201,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /foods/search:
     get:
@@ -1230,6 +1251,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /foods/{foodId}:
     parameters:
       - $ref: '#/components/parameters/FoodId'
@@ -1270,6 +1292,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [nutrition]
       operationId: deleteCustomFood
@@ -1286,6 +1309,7 @@ paths:
         '204': { description: 'Deleted. A retry with the same Idempotency-Key replays 204; without a key, an already deleted food is 404.' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /food-logs:
     get:
       tags: [nutrition]
@@ -1327,6 +1351,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /food-logs/{foodLogId}:
     parameters:
       - $ref: '#/components/parameters/FoodLogId'
@@ -1351,6 +1376,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [nutrition]
       operationId: deleteFoodLog
@@ -1361,6 +1387,7 @@ paths:
         '204': { description: 'Deleted. A retry with the same Idempotency-Key replays 204, so an already deleted entry is safe to retry; without a key, a missing or another user''s id is 404.' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /water-logs:
     get:
       tags: [nutrition]
@@ -1401,6 +1428,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /water-logs/{waterLogId}:
     parameters:
       - $ref: '#/components/parameters/WaterLogId'
@@ -1425,6 +1453,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [nutrition]
       operationId: deleteWaterLog
@@ -1435,6 +1464,7 @@ paths:
         '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /nutrition/daily:
     get:
       tags: [nutrition]
@@ -1533,6 +1563,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationError' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /body-measurements/{measurementId}:
     parameters:
       - $ref: '#/components/parameters/MeasurementId'
@@ -1570,6 +1601,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
     delete:
       tags: [progress]
       operationId: deleteBodyMeasurement
@@ -1581,6 +1613,7 @@ paths:
         '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /progress/summary:
     get:
       tags: [progress]

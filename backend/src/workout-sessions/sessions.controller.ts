@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { RateLimit } from '../common/rate-limit';
 import { CurrentUserId } from '../auth/current-user.decorator';
 import { IdempotencyKeyHeader, RequiredIdempotencyKey } from '../auth/idempotency-key';
 import { IdParamPipe } from '../common/id-param.pipe';
@@ -18,6 +19,7 @@ export class SessionsController {
     private readonly idem: IdempotentWriteService,
   ) {}
 
+  @RateLimit('sessions')
   @Post()
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   start(
@@ -40,6 +42,7 @@ export class SessionsController {
     return this.sessions.get(userId, id);
   }
 
+  @RateLimit('sessions')
   @Patch(':sessionId')
   @ApiHeader({ name: 'Idempotency-Key', required: false })
   update(
@@ -53,6 +56,7 @@ export class SessionsController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.update(userId, id, dto) });
   }
 
+  @RateLimit('sessions')
   @Post(':sessionId/sets')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   upsertSet(
@@ -66,6 +70,7 @@ export class SessionsController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.upsertSet(userId, id, dto) });
   }
 
+  @RateLimit('sessions')
   @Post(':sessionId/complete')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   complete(
@@ -79,6 +84,7 @@ export class SessionsController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.complete(userId, id, dto) });
   }
 
+  @RateLimit('sessions')
   @Delete(':sessionId')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   async discard(
@@ -92,6 +98,7 @@ export class SessionsController {
   }
 
   // Corrections of a completed session (PRD 5.3): always 200 SessionCorrectionResult.
+  @RateLimit('sessions')
   @Put(':sessionId/corrections/sets/:clientSetId')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   correctSet(
@@ -106,6 +113,7 @@ export class SessionsController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.correctSet(userId, id, clientSetId, dto, key) });
   }
 
+  @RateLimit('sessions')
   @Delete(':sessionId/corrections/sets/:clientSetId')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   deleteCorrectedSet(
@@ -119,6 +127,7 @@ export class SessionsController {
     return this.idem.run({ userId, key, req, res, status: 200, handler: () => this.sessions.deleteCorrectedSet(userId, id, clientSetId, key) });
   }
 
+  @RateLimit('sessions')
   @Patch(':sessionId/completion')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   correctCompletion(
