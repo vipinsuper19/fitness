@@ -84,7 +84,10 @@
     <string name="goal_err_date">Use YYYY-MM-DD, today or later.</string>
     <string name="progress_strength">Strength</string>
     <string name="strength_empty">No strength sets in the last 90 days.</string>
-    <string name="strength_sessions">%1$s sessions · last %2$s</string>
+    <plurals name="strength_sessions">
+        <item quantity="one">%1$s session · last %2$s</item>
+        <item quantity="other">%1$s sessions · last %2$s</item>
+    </plurals>
     <string name="strength_back">Back</string>
     <string name="strength_records">All-time records</string>
     <string name="strength_no_records">No records yet.</string>
@@ -95,4 +98,26 @@
     <string name="strength_offline">You\'re offline. Check your connection.</string>
     <string name="strength_failed">Couldn\'t load strength progress.</string>
     <string name="strength_not_found">This exercise no longer exists.</string>
+    <string name="strength_pr_top">Top %1$s</string>
+    <string name="strength_pr_1rm">1RM %1$s</string>
+    <plurals name="strength_reps">
+        <item quantity="one">%1$s rep</item>
+        <item quantity="other">%1$s reps</item>
+    </plurals>
+    <plurals name="strength_sets">
+        <item quantity="one">%1$s set</item>
+        <item quantity="other">%1$s sets</item>
+    </plurals>
+    <string name="strength_row_heaviest">Heaviest: %1$s</string>
+    <string name="strength_row_best_1rm">Best est. 1RM: %1$s</string>
+    <string name="strength_row_most_reps">Most reps: %1$s</string>
+    <string name="strength_row_longest_set">Longest set: %1$s</string>
+    <string name="strength_row_longest_distance">Longest distance: %1$s</string>
+    <string name="strength_row_achieved">%1$s (%2$s)</string>
+    <string name="strength_point_volume">Volume %1$s</string>
+    <string name="strength_point_time">Time %1$s</string>
+    <string name="strength_point_longest">Longest %1$s</string>
+    <string name="strength_point_distance">Distance %1$s</string>
+    <string name="strength_point_best_set">Best set %1$s</string>
+    <string name="strength_separator">" · "</string>
 </resources>

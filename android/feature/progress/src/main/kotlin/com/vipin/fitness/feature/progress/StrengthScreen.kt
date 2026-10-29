@@ -27,6 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalContext
+import android.content.res.Resources
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.vipin.fitness.core.common.UnitSystem
@@ -69,6 +72,7 @@ fun StrengthContent(
     onBack: () -> Unit,
     onRetryDetail: () -> Unit,
 ) {
+    val res = LocalContext.current.resources
     val d = s.detail
     if (d != null) {
         BackHandler(onBack = onBack)
@@ -87,8 +91,8 @@ fun StrengthContent(
                     Column(Modifier.padding(16.dp)) {
                         Text(e.name, style = MaterialTheme.typography.titleMedium)
                         val last = e.lastPerformedAt?.let { StrengthFormat.date(it, s.zone) } ?: ""
-                        Text(stringResource(R.string.strength_sessions, StrengthFormat.reps(e.sessions), last), style = MaterialTheme.typography.bodySmall)
-                        Text(prLine(e.pr, s.units), style = MaterialTheme.typography.bodyMedium)
+                        Text(pluralStringResource(R.plurals.strength_sessions, e.sessions, StrengthFormat.reps(e.sessions), last), style = MaterialTheme.typography.bodySmall)
+                        Text(prLine(res, e.pr, s.units), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -116,6 +120,7 @@ private fun ErrorBox(e: StrengthError, tag: String, retryTag: String, onRetry: (
 
 @Composable
 private fun DetailBody(d: StrengthDetailState, units: UnitSystem, zone: ZoneId, onBucket: (SummaryBucket) -> Unit, onBack: () -> Unit, onRetry: () -> Unit) {
+    val res = LocalContext.current.resources
     Column(Modifier.fillMaxSize().testTag(StrengthTags.DETAIL)) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack, modifier = Modifier.testTag(StrengthTags.DETAIL_BACK)) { Text(stringResource(R.string.strength_back)) }
@@ -135,7 +140,7 @@ private fun DetailBody(d: StrengthDetailState, units: UnitSystem, zone: ZoneId, 
                     Card(Modifier.fillMaxWidth().testTag(StrengthTags.PR)) {
                         Column(Modifier.padding(16.dp)) {
                             Text(stringResource(R.string.strength_records), style = MaterialTheme.typography.titleSmall)
-                            prRows(p.pr, units, zone).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                            prRows(res, p.pr, units, zone).forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
                             if (p.pr.isEmpty) Text(stringResource(R.string.strength_no_records))
                         }
                     }
@@ -143,7 +148,7 @@ private fun DetailBody(d: StrengthDetailState, units: UnitSystem, zone: ZoneId, 
                 items(p.points.asReversed(), key = { it.period.toString() }) { pt ->
                     Column(Modifier.fillMaxWidth().testTag(StrengthTags.point(pt.period.toString()))) {
                         Text(ProgressFormat.date(pt.period), style = MaterialTheme.typography.labelLarge)
-                        Text(if (pt.empty) stringResource(R.string.strength_no_sets) else pointLine(pt, units), style = MaterialTheme.typography.bodySmall)
+                        Text(if (pt.empty) stringResource(R.string.strength_no_sets) else pointLine(res, pt, units), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -152,36 +157,39 @@ private fun DetailBody(d: StrengthDetailState, units: UnitSystem, zone: ZoneId, 
 }
 
 /** Compact one-liner of the non-null records. */
-internal fun prLine(pr: PersonalRecords, units: UnitSystem): String = listOfNotNull(
-    pr.maxWeightKg?.let { "Top ${StrengthFormat.weight(it, units)}" },
-    pr.best1RmKg?.let { "1RM ${StrengthFormat.weight(it, units)}" },
-    pr.maxReps?.let { "${StrengthFormat.reps(it)} reps" },
+internal fun prLine(res: Resources, pr: PersonalRecords, units: UnitSystem): String = listOfNotNull(
+    pr.maxWeightKg?.let { res.getString(R.string.strength_pr_top, StrengthFormat.weight(it, units)) },
+    pr.best1RmKg?.let { res.getString(R.string.strength_pr_1rm, StrengthFormat.weight(it, units)) },
+    pr.maxReps?.let { res.getQuantityString(R.plurals.strength_reps, it, StrengthFormat.reps(it)) },
     pr.maxDurationSec?.let { StrengthFormat.duration(it) },
     pr.maxDistanceM?.let { StrengthFormat.distance(it, units) },
-).joinToString(" · ")
+).joinToString(res.getString(R.string.strength_separator))
 
-internal fun prRows(pr: PersonalRecords, units: UnitSystem, zone: ZoneId): List<String> {
-    fun at(t: java.time.Instant?) = t?.let { " (${StrengthFormat.date(it, zone)})" } ?: ""
+internal fun prRows(res: Resources, pr: PersonalRecords, units: UnitSystem, zone: ZoneId): List<String> {
+    fun row(label: Int, value: String, t: java.time.Instant?): String {
+        val text = res.getString(label, value)
+        return t?.let { res.getString(R.string.strength_row_achieved, text, StrengthFormat.date(it, zone)) } ?: text
+    }
     return listOfNotNull(
-        pr.maxWeightKg?.let { "Heaviest: ${StrengthFormat.weight(it, units)}${at(pr.maxWeightKgAchievedAt)}" },
-        pr.best1RmKg?.let { "Best est. 1RM: ${StrengthFormat.weight(it, units)}${at(pr.best1RmKgAchievedAt)}" },
-        pr.maxReps?.let { "Most reps: ${StrengthFormat.reps(it)}${at(pr.maxRepsAchievedAt)}" },
-        pr.maxDurationSec?.let { "Longest set: ${StrengthFormat.duration(it)}${at(pr.maxDurationSecAchievedAt)}" },
-        pr.maxDistanceM?.let { "Longest distance: ${StrengthFormat.distance(it, units)}${at(pr.maxDistanceMAchievedAt)}" },
+        pr.maxWeightKg?.let { row(R.string.strength_row_heaviest, StrengthFormat.weight(it, units), pr.maxWeightKgAchievedAt) },
+        pr.best1RmKg?.let { row(R.string.strength_row_best_1rm, StrengthFormat.weight(it, units), pr.best1RmKgAchievedAt) },
+        pr.maxReps?.let { row(R.string.strength_row_most_reps, StrengthFormat.reps(it), pr.maxRepsAchievedAt) },
+        pr.maxDurationSec?.let { row(R.string.strength_row_longest_set, StrengthFormat.duration(it), pr.maxDurationSecAchievedAt) },
+        pr.maxDistanceM?.let { row(R.string.strength_row_longest_distance, StrengthFormat.distance(it, units), pr.maxDistanceMAchievedAt) },
     )
 }
 
-internal fun pointLine(p: ExerciseProgressPoint, units: UnitSystem): String = listOfNotNull(
-    "${p.sets} sets",
-    p.volumeKg?.let { "Volume ${StrengthFormat.volume(it, units)}" },
-    p.totalReps?.let { "${StrengthFormat.reps(it)} reps" },
-    p.topSetWeightKg?.let { "Top ${StrengthFormat.weight(it, units)}" },
-    p.best1RmKg?.let { "1RM ${StrengthFormat.weight(it, units)}" },
-    p.totalDurationSec?.let { "Time ${StrengthFormat.duration(it)}" },
-    p.maxSetDurationSec?.let { "Longest ${StrengthFormat.duration(it)}" },
-    p.totalDistanceM?.let { "Distance ${StrengthFormat.distance(it, units)}" },
-    p.maxSetDistanceM?.let { "Best set ${StrengthFormat.distance(it, units)}" },
-).joinToString(" · ")
+internal fun pointLine(res: Resources, p: ExerciseProgressPoint, units: UnitSystem): String = listOfNotNull(
+    res.getQuantityString(R.plurals.strength_sets, p.sets, StrengthFormat.reps(p.sets)),
+    p.volumeKg?.let { res.getString(R.string.strength_point_volume, StrengthFormat.volume(it, units)) },
+    p.totalReps?.let { res.getQuantityString(R.plurals.strength_reps, it, StrengthFormat.reps(it)) },
+    p.topSetWeightKg?.let { res.getString(R.string.strength_pr_top, StrengthFormat.weight(it, units)) },
+    p.best1RmKg?.let { res.getString(R.string.strength_pr_1rm, StrengthFormat.weight(it, units)) },
+    p.totalDurationSec?.let { res.getString(R.string.strength_point_time, StrengthFormat.duration(it)) },
+    p.maxSetDurationSec?.let { res.getString(R.string.strength_point_longest, StrengthFormat.duration(it)) },
+    p.totalDistanceM?.let { res.getString(R.string.strength_point_distance, StrengthFormat.distance(it, units)) },
+    p.maxSetDistanceM?.let { res.getString(R.string.strength_point_best_set, StrengthFormat.distance(it, units)) },
+).joinToString(res.getString(R.string.strength_separator))
 
 private fun SummaryBucket.label() = when (this) {
     SummaryBucket.DAY -> R.string.strength_bucket_day
