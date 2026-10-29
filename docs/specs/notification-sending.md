@@ -19,10 +19,15 @@ The seven existing preference types. Two families:
 | `water_reminder` | reminder | every `waterReminder.intervalMinutes` from `waterReminder.start` up to (not after) `waterReminder.end` | water logged today < that day's target (dated target from target history; else 2000 ml, as the badge rule) | `YYYY-MM-DDTHH:MM` |
 | `food_log_reminder` | reminder | each time in `foodLogReminder.times` | no food log for that local date created since the previous food slot of the day (or since 00:00 for the first) | `YYYY-MM-DDTHH:MM` |
 | `challenge_updates` | event | joined challenge: **deadline near** (24 h before `windowEnd`, not yet completed), **completed**, **expired** | challenge still in that state | `<challengeId>:<event>` |
-| `badge_earned` | event | badge awarded (live or backfill) | – | `<badgeCode>` |
+| `badge_earned` | event | badge awarded by a **live event after release** (see below) | – | `<badgeCode>` |
 | `progression_suggestion` | event | a completed session produces a suggestion for an exercise whose suggested target differs from the last one notified | suggestion still pending (not accepted) | `<planId>:<exerciseId>:<suggestedKgOrReps>` |
 
-- **Backfills never notify.** `badges:backfill`, `targets:backfill` and any future backfill write no outbox rows (they would otherwise send historic badges).
+- **Only live events notify. Backfills never do.** An outbox row is created only when a badge award, challenge transition or progression suggestion is **caused by a live user write after release**: a workout session completed, or a food, water or body log written, through the API. Evaluation code takes an explicit `cause` (`live` | `backfill`) and writes outbox rows only for `live`. None of these create outbox rows:
+  - `npm run badges:backfill`, `targets:backfill` and any future backfill script;
+  - the **first evaluation of a user's existing history**, including the lazy release backfill on `GET /badges` (`AchievementsService` `…Backfilled`, once per catalog version) and the re-evaluation after a catalog version bump;
+  - **challenges:** transitions found during a backfill or lazy evaluation on read. Lazy expiry on `GET /challenges` is evaluated as `backfill`, so "expired" is sent only when a live write or the tick detects it after release. "Deadline near" comes from the tick, which is a live check, and is sent once per challenge (slot key);
+  - **progression:** suggestions are computed on read (`GET …/progression-suggestions`), and reading never notifies. Only the session-completion hook after release does, and only for a suggestion that differs from the last notified one.
+  - Scheduled reminders aren't affected; they come from the tick.
 - **Generic copy only** (decision 7): title and body come from a fixed per-type template with no user data: no health numbers (weights, reps, kcal, macros, water), no food names, no body weight, no badge or challenge names that imply them. Notifications show on lock screens. Example: "Time for a glass of water", "You earned a new badge". Details live behind the deep link (`data.route`, e.g. `challenges/<id>`), which the app opens after unlock. `data` carries only ids and the route.
 
 ## 2. Gating: master switch, type flag, quiet hours
@@ -144,7 +149,13 @@ Table `notification_devices`: `id` uuid, `user_id` (FK → users `ON DELETE CASC
 - **Upsert by token:** same user → updates `last_seen_at`/`app_version`; another user (shared phone, re-login) → the row moves to the caller. So it's idempotent even without a key.
 - `Idempotency-Key` optional (usual replay/409 rules). Max **10 devices** per user; registering an 11th deletes the least recently seen.
 - Clients call it on every app start and on FCM `onNewToken`.
-- Validation (`400 VALIDATION_FAILED`): `token` string 1–4096 chars, no whitespace; `platform` enum `[android]`; `appVersion` ≤ 32 chars; unknown properties rejected.
+- Validation (`400 VALIDATION_FAILED`; error `details.fields` never echo the token value): `token` string 1–4096 chars, no whitespace; `platform` enum `[android]`; `appVersion` ≤ 32 chars; unknown properties rejected.
+
+**Idempotency storage never holds the token.** Checked against `backend/src/idempotency/idempotency.service.ts` and the `IdempotencyKey` model:
+- The request side already stores only `request_hash` = SHA-256 of the canonical JSON body, plus method, path and scope. **The raw request body is never persisted**, so the token appears there only as part of a one-way hash.
+- The response side stores `response_body` for replay, unless the path is token-bearing (`isTokenBearingPath`) or the scope is anonymous. For this route the stored response is the `NotificationDevice`, which **has no token field**. So no change to the idempotency service is needed; the implementation keeps the response DTO token-free, and a test asserts it.
+- Error responses (`400`) are stored the same way, which is why validation messages must not echo the token.
+- Request logging must not log this body (the logger already logs no bodies; a test checks the token string is absent from logs).
 
 `DELETE /me/notification-devices/{deviceId}` → `204`, also when it doesn't exist or isn't the caller's (no leak, idempotent). `Idempotency-Key` optional.
 
@@ -188,7 +199,8 @@ All secrets live in Render env vars (and the GitHub secret for the cron), never 
 - Catch-up: a 3 h outage sends at most one (latest) reminder per type and only within grace; events within 24 h.
 - FCM: mocked HTTP; `UNREGISTERED` and invalid token delete the device; 503 retried then `failed`; auth error leaves rows pending; the token never appears in logs or errors.
 - Devices API: upsert, move between users, 10-device eviction, DELETE of someone else's id is 204 and changes nothing, validation, 409, 429; logout and refresh-reuse delete the family's devices; account deletion cascades; export has no tokens.
-- Backfills produce no outbox rows.
+- **Live-only outbox:** after release, a session completion that earns a badge creates exactly one `badge_earned` row. `npm run badges:backfill`, the lazy backfill on `GET /badges` for a user with existing qualifying history, and a catalog version bump create **none**. A challenge completed during lazy or backfill evaluation creates none; one completed by a live log does. Lazy expiry on `GET /challenges` creates none. Reading progression suggestions creates none; a session completion with a new suggestion creates one. `targets:backfill` creates none.
+- **Token never stored:** after `POST /me/notification-devices` with an `Idempotency-Key`, the `idempotency_keys` row (`request_hash`, `response_body`) and the logs don't contain the token string; neither does a 400 response for an invalid token.
 - Tick endpoint: 404 when unset, 401 on a wrong secret, counts returned.
 
 ## Proposed PR split
