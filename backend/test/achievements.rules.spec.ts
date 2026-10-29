@@ -10,7 +10,7 @@ const today = '2026-10-21'; // Wednesday
 const at = (date: string, hour = 12) => new Date(startOfLocalDay(date, tz).getTime() + hour * 3_600_000);
 const days = (from: string, n: number) => Array.from({ length: n }, (_, i) => new Date(Date.parse(`${from}T00:00:00Z`) + i * 86_400_000).toISOString().slice(0, 10));
 const facts = (over: Partial<Facts> = {}): Facts => ({
-  tz, today, sessions: [], completedSets: 0, coreXp: 0, foodDates: [], waterByDate: new Map(), waterGoalMl: 2000, waterGoalOn: () => 2000, measurementDates: [], ...over,
+  tz, today, sessions: [], completedSets: 0, coreXp: 0, foodDates: [], waterByDate: new Map(), waterGoalOn: () => 2000, measurementDates: [], ...over,
 });
 const badge = (code: string) => BADGES.find((b) => b.code === code)!;
 const earned = (code: string, f: Facts) => { const { current, target } = badge(code).progress(f); return current >= target; };
@@ -73,7 +73,13 @@ describe('badge rules (boundaries)', () => {
     expect(earned('FOOD_LOG_7_DAYS', facts({ foodDates: days('2026-10-01', 7) }))).toBe(true);
     const water = new Map(days('2026-10-01', 7).map((d) => [d, 2500]));
     expect(earned('HYDRATED_7', facts({ waterByDate: water }))).toBe(true);
-    expect(earned('HYDRATED_7', facts({ waterByDate: water, waterGoalMl: 3000 }))).toBe(false);
+    expect(earned('HYDRATED_7', facts({ waterByDate: water, waterGoalOn: () => 3000 }))).toBe(false);
+    // Goal raised mid-streak (from 10-04): days 1-3 judged at 2000, days 4-7 at 3000.
+    const raised = (d: string) => (d >= '2026-10-04' ? 3000 : 2000);
+    expect(earned('HYDRATED_7', facts({ waterByDate: water, waterGoalOn: raised }))).toBe(false);
+    expect(badge('HYDRATED_7').progress(facts({ waterByDate: water, waterGoalOn: raised })).current).toBe(3);
+    const met = new Map(days('2026-10-01', 7).map((d) => [d, raised(d)]));
+    expect(earned('HYDRATED_7', facts({ waterByDate: met, waterGoalOn: raised }))).toBe(true);
     expect(earned('MEASURE_4_WEEKS', facts({ measurementDates: ['2026-10-05', '2026-10-11', '2026-10-12', '2026-10-19'] }))).toBe(false); // 3 weeks
     expect(earned('MEASURE_4_WEEKS', facts({ measurementDates: ['2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'] }))).toBe(true);
     expect(earned('LEVEL_5', facts({ coreXp: 999 }))).toBe(false); // level 4

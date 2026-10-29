@@ -2916,7 +2916,7 @@ components:
         windowEnd: { type: [string, 'null'], format: date, description: 'Local date, inclusive (Sunday for weekly); null = no deadline' }
         joinDate: { type: string, format: date, description: 'Local date of joining (in `timezone`). Streak challenges count only days on or after it; personal workout challenges count workouts finished after `joinedAt`.' }
         timezone: { type: string, description: Profile timezone captured at join }
-        waterGoalMl: { type: [integer, 'null'], description: 'Water goal in force at join (water templates only), for display. Progress judges each day against its own dated target.' }
+        waterGoalMl: { type: [integer, 'null'], description: 'Water goal in force at join (water templates only). For information only: it does not drive progress, which judges each day against its own dated water goal (else 2000 ml).' }
         status: { $ref: '#/components/schemas/ChallengeStatus' }
         joinedAt: { type: string, format: date-time }
         completedAt: { type: [string, 'null'], format: date-time, description: Never cleared once set }

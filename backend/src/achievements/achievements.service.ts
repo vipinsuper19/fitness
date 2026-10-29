@@ -132,7 +132,7 @@ export class AchievementsService implements OnModuleDestroy {
    */
   async facts(userId: string, now = new Date()): Promise<Facts> {
     const db = this.prisma;
-    const profile = await db.userProfile.findUnique({ where: { userId }, select: { timezone: true, dailyWaterTargetMl: true } });
+    const profile = await db.userProfile.findUnique({ where: { userId }, select: { timezone: true } });
     const tz = profile?.timezone ?? DEFAULT_TIMEZONE;
     const today = localDate(now, tz);
     const ok = (r: { date: Date; createdAt: Date; dateChangedAt?: Date | null }) => counts(day(r.date), r.dateChangedAt ?? r.createdAt, today, tz);
@@ -155,7 +155,6 @@ export class AchievementsService implements OnModuleDestroy {
       coreXp: xp._sum.amount ?? 0,
       foodDates: [...new Set(food.filter(ok).map((r) => day(r.date)))],
       waterByDate,
-      waterGoalMl: profile?.dailyWaterTargetMl ?? DEFAULT_WATER_GOAL_ML,
       waterGoalOn: (date) => targetsOn(date).waterMl ?? DEFAULT_WATER_GOAL_ML,
       measurementDates: [...new Set(measurements.filter(ok).map((r) => day(r.date)))],
     };
