@@ -23,6 +23,8 @@ data class Profile(
     val dailyCalorieTargetKcal: Int? = null,
     val dailyWaterTargetMl: Int? = null,
     val onboardingCompleted: Boolean = false,
+    /** IANA zone id from the profile; null when unknown. Read-only here (not part of ProfileChanges). */
+    val timezone: String? = null,
 )
 
 /** A partial PUT /me/profile. Defaults leave everything unchanged. */

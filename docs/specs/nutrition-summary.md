@@ -21,7 +21,7 @@
 ## Targets
 
 - The profile stores only the **current** `dailyCalorieTargetKcal` and `dailyWaterTargetMl`. There is no target history and there are no macro targets.
-- `targets` are therefore the current targets, applied to every period. `proteinG`, `carbsG` and `fatG` are always `null` until the profile gains macro targets. `targets` is `null` when neither calories nor water has a target.
+- `targets` are therefore the current targets, applied to every period. `proteinG`, `carbsG` and `fatG` are always `null` until the profile gains macro targets. `targets` is `null` only when none of calories, water, protein, carbs or fat has a target (only macros set → non-null with `kcal`/`waterMl` null).
 - Adherence, each × 100 with one decimal HALF_UP:
   - `kcalPct` = `avgPerLoggedDay.energyKcal / targets.kcal`
   - `proteinPct`, `carbsPct`, `fatPct` = `avgPerLoggedDay.<macro> / targets.<macro>`
@@ -31,7 +31,7 @@
 - **Client local date:** periods use the local `date` the client sends on each food and water log. The profile timezone is only echoed back as `timezone` and is not used to re-bucket logs, so the client must send the correct local date for logs made near midnight.
 - **Unrounded pcts:** the pcts are computed from the unrounded average, so a pct may not exactly match the displayed (rounded) average divided by the target.
 - **Water-only days:** a day with only water logged counts in `waterDaysLogged` but not in `daysLogged`.
-- **Macro targets:** `targets.proteinG`, `carbsG` and `fatG` come from the profile's `dailyProteinTargetG`, `dailyCarbsTargetG` and `dailyFatTargetG` (see [macro-targets.md](macro-targets.md)); the macro pcts follow the rules above (each pct is null when its own target is null, independently; PATCH 0 is stored as null; current targets apply to every period, including past ones).
+- **Macro targets:** `targets.proteinG`, `carbsG` and `fatG` come from the profile's `dailyProteinTargetG`, `dailyCarbsTargetG` and `dailyFatTargetG` (see [macro-targets.md](macro-targets.md)); the macro pcts follow the rules above (each pct is null when its own target is null, independently; 0 sent on PUT /me/profile is stored as null; current targets apply to every period, including past ones).
 - If targets are stored with history later, each day should use the target in effect that day. That would be an additive change, documented then.
 
 ## Rounding

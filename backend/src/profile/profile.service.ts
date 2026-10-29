@@ -22,6 +22,9 @@ export interface ProfileView {
   currency: 'INR';
   dailyCalorieTargetKcal: number | null;
   dailyWaterTargetMl: number | null;
+  dailyProteinTargetG: number | null;
+  dailyCarbsTargetG: number | null;
+  dailyFatTargetG: number | null;
   onboardingCompleted: boolean;
   updatedAt: string;
 }
@@ -43,6 +46,10 @@ export function toProfileView(p: UserProfile, displayName: string | null): Profi
     currency: 'INR',
     dailyCalorieTargetKcal: p.dailyCalorieTargetKcal,
     dailyWaterTargetMl: p.dailyWaterTargetMl,
+    // 0 is normalized to null on write; also mask any legacy 0 on read.
+    dailyProteinTargetG: p.dailyProteinTargetG || null,
+    dailyCarbsTargetG: p.dailyCarbsTargetG || null,
+    dailyFatTargetG: p.dailyFatTargetG || null,
     onboardingCompleted: p.onboardingCompleted,
     updatedAt: p.updatedAt.toISOString(),
   };
@@ -50,6 +57,8 @@ export function toProfileView(p: UserProfile, displayName: string | null): Profi
 
 const round = (v: number | null | undefined, places: number) =>
   v == null ? v : Math.round(v * 10 ** places) / 10 ** places;
+
+const macro = (v: number | null | undefined) => (v === 0 ? null : v);
 
 @Injectable()
 export class ProfileService {
@@ -69,6 +78,10 @@ export class ProfileService {
       ...fields,
       heightCm: round(fields.heightCm, 1),
       weightKg: round(fields.weightKg, 2),
+      // Macro targets: omitted keeps (undefined), null clears, 0 is stored as null.
+      dailyProteinTargetG: macro(fields.dailyProteinTargetG),
+      dailyCarbsTargetG: macro(fields.dailyCarbsTargetG),
+      dailyFatTargetG: macro(fields.dailyFatTargetG),
     };
     return this.prisma.$transaction(async (tx) => {
       const user =
