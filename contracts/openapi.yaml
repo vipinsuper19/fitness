@@ -224,10 +224,10 @@ paths:
         for the formula). Rule-based, no AI. It **never writes**: the profile's
         `daily*TargetG` are unchanged. To use it, the client sends the numbers with
         `PUT /me/profile`. Always 200. When the suggestion can't be computed,
-        `suggestion` is null and `reason` says why.
+        `suggestion` is null and `missingInputs` lists every missing input.
       responses:
         '200':
-          description: Suggestion, or null with a reason
+          description: Suggestion, or null with the missing inputs
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MacroSuggestion' }
@@ -1981,7 +1981,7 @@ components:
         updatedAt: { type: string, format: date-time }
     MacroSuggestion:
       type: object
-      required: [suggestion, reason, basis, formulaVersion]
+      required: [suggestion, missingInputs, basis, formulaVersion]
       properties:
         suggestion:
           oneOf:
@@ -1992,11 +1992,17 @@ components:
                 proteinG: { type: integer, minimum: 0 }
                 carbsG: { type: integer, minimum: 0 }
                 fatG: { type: integer, minimum: 0 }
-                kcal: { type: integer, description: '4·protein + 4·carbs + 9·fat; can be a few kcal below the target because of rounding' }
-        reason:
-          type: [string, 'null']
-          enum: [NO_CALORIE_TARGET, NO_WEIGHT, null]
-          description: 'Null when `suggestion` is set. `NO_CALORIE_TARGET` wins when both inputs are missing. New values may be added.'
+                kcal: { type: integer, description: 'Sum of the rounded grams, 4·proteinG + 4·carbsG + 9·fatG; not the calorie target (see basis.calorieTargetKcal). Usually 0–3 kcal below it because of rounding, more if carbs hit the 1000 g cap.' }
+        missingInputs:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [CALORIE_TARGET, WEIGHT] }
+          description: |
+            Every profile input that is missing, in this order: `CALORIE_TARGET`
+            (`dailyCalorieTargetKcal` null), then `WEIGHT` (`weightKg` null). Empty exactly when
+            `suggestion` is present; `suggestion` is null exactly when this is non-empty.
+            Both are listed when both are missing. New values may be added; treat unknown ones as
+            "complete your profile".
         basis:
           type: object
           required: [calorieTargetKcal, weightKg, goal, goalSource, dietPreference, proteinGPerKg, fatPct]

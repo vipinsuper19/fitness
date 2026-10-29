@@ -3,7 +3,7 @@
 A read-only, rule-based suggestion for the daily macro targets added in [macro-targets.md](macro-targets.md). No AI and no paid service. It never changes stored targets: macro targets stay **explicit**, and the user applies a suggestion with `PUT /me/profile`.
 
 ## Endpoint
-`GET /me/macro-suggestion` (JWT auth guard, like every `/me` route) → 200 `MacroSuggestion`; no token or an invalid one → 401. There are no other errors, and the response is always 200, with `suggestion: null` and a `reason` when it can't be computed.
+`GET /me/macro-suggestion` (JWT auth guard, like every `/me` route) → 200 `MacroSuggestion`; no token or an invalid one → 401. There are no other errors, and the response is always 200, with `suggestion: null` and `missingInputs` listing every missing input when it can't be computed. `missingInputs` is `[]` exactly when `suggestion` is present.
 
 It is a separate endpoint, not a field on `GET /me/profile`, because:
 - it reads goals as well as the profile;
@@ -15,7 +15,7 @@ It **never writes** and has no side effects (no XP, no `updatedAt` bump), so the
 ```json
 {
   "suggestion": { "proteinG": 112, "carbsG": 262, "fatG": 56, "kcal": 2000 },
-  "reason": null,
+  "missingInputs": [],
   "basis": { "calorieTargetKcal": 2000, "weightKg": 70, "goal": "lose_weight", "goalSource": "active_goal",
              "dietPreference": "vegetarian", "proteinGPerKg": 1.6, "fatPct": 25 },
   "formulaVersion": 1
@@ -23,8 +23,9 @@ It **never writes** and has no side effects (no XP, no `updatedAt` bump), so the
 ```
 
 ## Inputs
-- `K` = `profile.dailyCalorieTargetKcal` (800–6000). If it is null, `suggestion: null` with `reason: "NO_CALORIE_TARGET"`.
-- `W` = `profile.weightKg` (20–400). If it is null, `reason: "NO_WEIGHT"`. When both are missing, `NO_CALORIE_TARGET` wins.
+- `K` = `profile.dailyCalorieTargetKcal` (800–6000). If it is null, `missingInputs` contains `CALORIE_TARGET`.
+- `W` = `profile.weightKg` (20–400). If it is null, `missingInputs` contains `WEIGHT`.
+- `missingInputs` lists **every** missing input, always in the order `CALORIE_TARGET`, `WEIGHT`, so the UI can ask for both at once. When it is non-empty, `suggestion` is null; when it is empty, `suggestion` is present.
 - **Goal:** goals are a list, not a profile field. Use the **newest active** goal (`status = active`, latest `createdAt`) whose type is `lose_weight`, `gain_muscle`, `maintain` or `improve_endurance`. `workouts_per_week` is ignored. If there is none, use `maintain` with `goalSource: "default"`.
 - `dietPreference` is echoed in `basis` but **does not change the numbers in v1** (see below).
 
@@ -41,7 +42,7 @@ It **never writes** and has no side effects (no XP, no `updatedAt` bump), so the
 1. **Protein:** `P = round(W × perKg)`, then `P = min(P, floor(0.30 × K / 4))`. Protein is capped at 30% of kcal.
 2. **Fat:** `F = max(round(0.25 × K / 9), round(0.6 × W))` (25% of kcal, but at least 0.6 g/kg), then `F = min(F, floor(0.35 × K / 9))` (at most 35% of kcal).
 3. **Carbs:** `C = floor((K − 4P − 9F) / 4)`, the remainder. Because of the caps, protein and fat are at most 65% of kcal, so `C ≥ 0.35 × K / 4 − 1` and is never negative.
-4. `kcal = 4P + 4C + 9F` (≤ `K`; at most 3 kcal under it because carbs are floored, except when step 5 caps carbs).
+4. `kcal = 4P + 4C + 9F`: the **sum after rounding**, not the target `K` (that is `basis.calorieTargetKcal`) (≤ `K`; at most 3 kcal under it because carbs are floored, except when step 5 caps carbs).
 
 `round` is half-up to a whole gram.
 
@@ -64,8 +65,10 @@ It **never writes** and has no side effects (no XP, no `updatedAt` bump), so the
 | F | 6000 | 20 | maintain | 24 | 167 | 1000 | 5599 | C = floor(4401/4) = 1100, capped to 1000 |
 
 ## Other planned tests
-- `dailyCalorieTargetKcal` null → `suggestion: null`, `reason: NO_CALORIE_TARGET`, `basis.calorieTargetKcal: null`.
-- `weightKg` null (kcal set) → `NO_WEIGHT`. Both null → `NO_CALORIE_TARGET`.
+- `dailyCalorieTargetKcal` null (weight set) → `suggestion: null`, `missingInputs: ["CALORIE_TARGET"]`, `basis.calorieTargetKcal: null`.
+- `weightKg` null (kcal set) → `suggestion: null`, `missingInputs: ["WEIGHT"]`.
+- Both null → `suggestion: null`, `missingInputs: ["CALORIE_TARGET", "WEIGHT"]`.
+- Both set → `missingInputs: []` and `suggestion` non-null. Every example also asserts `suggestion.kcal == 4P + 4C + 9F`, which differs from `K` in B–F.
 - Goal choice:
   - Two active goals (`gain_muscle` older, `lose_weight` newer) → `lose_weight`.
   - Only `workouts_per_week` active → `maintain` / `default`.
