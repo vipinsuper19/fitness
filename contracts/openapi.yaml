@@ -1460,33 +1460,42 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
               example:
-                id: bed97175-b06e-48eb-bff5-722897aa86b8
-                version: 1
-                name: Beginner full body, 3 days
+                id: 3c7e9a1b-5d2f-4a6c-8e0b-1f3d5a7c9e24
+                version: 4
+                name: Push pull legs
                 weeks: 8
-                rationale: Three full-body days with a rest day between them, sized for 45-minute sessions with a barbell and bench.
+                rationale: Push, pull and legs on separate days so each muscle group gets a full week to recover.
                 workouts:
-                  - id: 4c437ce0-6bc7-4ac5-8554-7efcc9cf5e1b
+                  - id: 0b9d3c2e-1f4a-4c55-9a7e-2d6f8e1a7b01
                     dayOfWeek: 1
-                    name: Full body A
+                    name: Push
                     exercises:
-                      - exerciseId: eb70d1fc-df82-4fda-896f-9a129bacd4ee
+                      - exerciseId: 5f1c2a9e-7b3d-4e8a-9c21-0a4b6d8e2f13
                         order: 0
                         sets: 3
                         repsMin: 8
-                        repsMax: 12
+                        repsMax: 10
+                        targetWeightKg: 40
                         durationSeconds: null
-                        targetWeightKg: 30
                         restSeconds: 90
-                        notes: Keep your feet flat on the floor.
-                      - exerciseId: b7788caf-78de-4cd4-b632-048c5bd5edc1
+                        notes: null
+                      - exerciseId: 8a2e4c6f-1b3d-4f5a-8c7e-9d0b2a4c6e81
                         order: 1
                         sets: 3
                         repsMin: null
                         repsMax: null
-                        durationSeconds: 45
                         targetWeightKg: null
+                        durationSeconds: 65
                         restSeconds: 60
+                        notes: null
+                      - exerciseId: e4b6d8f0-2a4c-4e6a-9b1d-3f5a7c9e0b42
+                        order: 2
+                        sets: 3
+                        repsMin: 8
+                        repsMax: 10
+                        targetWeightKg: 30
+                        durationSeconds: null
+                        restSeconds: 90
                         notes: null
                 isActive: true
                 source: rule_based
@@ -1494,7 +1503,7 @@ paths:
                 activatedAt: 2026-10-19T19:41:00+05:30
                 pausedAt: null
                 archivedAt: null
-                currentWeek: 2
+                currentWeek: 4
                 planEnded: false
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1545,13 +1554,13 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/WorkoutPlan' }
               example:
-                id: bed97175-b06e-48eb-bff5-722897aa86b8
+                id: 3c7e9a1b-5d2f-4a6c-8e0b-1f3d5a7c9e24
                 version: 5
                 name: Push pull legs
                 weeks: 8
                 rationale: Push, pull and legs on separate days so each muscle group gets a full week to recover.
                 workouts:
-                  - id: 6aefc30c-d19c-419d-9d96-b91edd1c32aa
+                  - id: 410e0102-5d55-4414-827c-8a282b0f158b
                     dayOfWeek: 1
                     name: Push
                     exercises:
@@ -4218,7 +4227,7 @@ components:
                 message: A request with this Idempotency-Key is still running. Retry shortly.
                 requestId: req_7f3a9c1e2b4d
     RateLimited:
-      description: '`RATE_LIMITED`'
+      description: '`RATE_LIMITED`. Like every response it carries `X-Request-Id`, equal to `requestId` in the body.'
       headers:
         Retry-After: { $ref: '#/components/headers/RetryAfter' }
         X-Request-Id: { $ref: '#/components/headers/XRequestId' }
@@ -4260,8 +4269,21 @@ components:
         details:
           type: object
           additionalProperties: true
+          description: |
+            Optional; present only for the codes below. Clients must ignore keys they don't know.
+            - `VALIDATION_FAILED`: `fields`, a map of field path to message.
+            - `VERSION_CONFLICT`: `currentVersion`, the plan's latest version (refetch it).
+            - `NO_MATCHING_EXERCISES`: `experienceLevel` and `equipment`, echoed from the request.
+            - `RATE_LIMITED` from the sign-in failure limiter: `retryAfterSeconds` (same as `Retry-After`). Other 429s have no `details`.
+          properties:
+            fields: { type: object, additionalProperties: { type: string } }
+            currentVersion: { type: integer, minimum: 1 }
+            experienceLevel: { $ref: '#/components/schemas/ExperienceLevel' }
+            equipment: { type: array, items: { $ref: '#/components/schemas/Equipment' } }
+            retryAfterSeconds: { type: integer, minimum: 1 }
         requestId:
           type: string
+          description: Same value as the `X-Request-Id` response header (also on 429)
     PageMeta:
       type: object
       required: [nextCursor]
@@ -4681,6 +4703,11 @@ components:
         weeks: { type: integer, minimum: 1, maximum: 16, default: 4 }
     PlannedExercise:
       type: object
+      description: |
+        As input (plan create, `POST /workout-plans/generate` output saved as-is, and the plan `PATCH`), only `exerciseId`,
+        `order` and `sets` are required. Any other field may be left out: `repsMin`, `repsMax`, `durationSeconds`,
+        `targetWeightKg` and `notes` are stored as null, and `restSeconds` as 90. Sending `null` for the nullable ones
+        is the same as leaving them out. Responses always include every field.
       required: [exerciseId, order, sets]
       properties:
         exerciseId: { $ref: '#/components/schemas/Id' }
@@ -4690,8 +4717,8 @@ components:
         repsMax: { type: [integer, 'null'], minimum: 1, maximum: 100 }
         durationSeconds: { type: [integer, 'null'], minimum: 1, maximum: 7200 }
         targetWeightKg: { type: [number, 'null'], minimum: 0, maximum: 1000 }
-        restSeconds: { type: integer, minimum: 0, maximum: 600, default: 90 }
-        notes: { type: [string, 'null'], maxLength: 500 }
+        restSeconds: { type: integer, minimum: 0, maximum: 600, default: 90, description: 'Optional on input; 90 when left out' }
+        notes: { type: [string, 'null'], maxLength: 500, description: 'Optional on input; null when left out' }
     PlannedWorkout:
       type: object
       required: [dayOfWeek, name, exercises]
@@ -4712,6 +4739,9 @@ components:
         A `WorkoutPlanDraft` plus `baseVersion`. `name` is **ignored**: it is still accepted
         (optional, any valid draft name) for compatibility, but the new version always copies
         the latest version's name. Renaming is only possible with `PUT /workout-plans/{planId}/name`.
+        Each exercise follows the `PlannedExercise` input rules: only `exerciseId`, `order` and `sets` are required;
+        a left-out `restSeconds` becomes 90 (not the previous version's value) and a left-out `notes` or prescription
+        field becomes null, so send the full plan to keep them.
       required: [weeks, workouts, generator, baseVersion]
       properties:
         name: { type: string, deprecated: true, description: 'Ignored and never validated (any length, even empty); accepted for compatibility. The new version copies the latest name.' }
@@ -4803,7 +4833,7 @@ components:
           required: [field, rule, percent, capPercent, capApplied, minStepApplied, rounding, limitApplied]
           properties:
             field: { type: string, enum: [targetWeightKg, reps, durationSeconds] }
-            rule: { type: string, enum: [percent_increase, heaviest_used, rep_step, deload], description: '`heaviest_used` for NO_TARGET_SET' }
+            rule: { type: string, enum: [percent_increase, heaviest_used, rep_step, deload], description: '`heaviest_used` for NO_TARGET_SET. New rules may be added without a version bump: clients must treat an unknown value as an unexplained step (show the suggestion without rule-specific text), never fail on it.' }
             percent: { type: [number, 'null'], description: 'Rule percentage (2.5, 5, 10, −10); null for rep_step and heaviest_used' }
             capPercent: { type: [number, 'null'], description: '10 for load increases; null when exempt (reps, deload, heaviest_used)' }
             capApplied: { type: boolean, description: "The 10% load cap reduced the step" }
