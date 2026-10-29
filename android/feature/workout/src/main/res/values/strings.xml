@@ -46,6 +46,10 @@
     <string name="err_empty_day">Each training day needs at least one exercise</string>
     <string name="err_sets">Sets must be 1 to 20</string>
     <string name="err_reps">Reps must be 1 to 100, and \"from\" no more than \"to\"</string>
+    <string name="err_field_sets">1 to 20</string>
+    <string name="err_field_reps">1 to 100</string>
+    <string name="err_field_reps_order">At least \"from\"</string>
+    <string name="err_field_duration">1 to 7200 s</string>
     <string name="err_duration">Duration must be 1 to 7200 seconds</string>
 
     <string name="preview_title">Preview</string>

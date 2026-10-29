@@ -57,6 +57,13 @@ import com.vipin.fitness.core.data.workout.MuscleGroup
 @Composable internal fun GoalType.label() = stringResource(labelRes())
 @Composable internal fun ExperienceLevel.label() = stringResource(labelRes())
 
+internal fun ExerciseFieldError.message() = when (this) {
+    ExerciseFieldError.SETS_RANGE -> R.string.err_field_sets
+    ExerciseFieldError.REPS_RANGE -> R.string.err_field_reps
+    ExerciseFieldError.REPS_ORDER -> R.string.err_field_reps_order
+    ExerciseFieldError.DURATION_RANGE -> R.string.err_field_duration
+}
+
 internal fun CustomPlanError.message() = when (this) {
     CustomPlanError.NAME -> R.string.err_name
     CustomPlanError.NO_DAYS -> R.string.err_no_days

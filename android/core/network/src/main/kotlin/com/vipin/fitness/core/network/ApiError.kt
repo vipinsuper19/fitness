@@ -1,6 +1,7 @@
 package com.vipin.fitness.core.network
 
 import com.vipin.fitness.core.network.model.ErrorDto
+import com.vipin.fitness.core.network.model.retryAfterSeconds
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 import java.io.IOException
@@ -49,7 +50,7 @@ internal fun HttpException.toApiError(json: Json): ApiError.Http {
         code = dto?.code ?: "HTTP_${code()}",
         message = dto?.message ?: message(),
         requestId = dto?.requestId ?: response()?.headers()?.get("X-Request-Id"),
-        retryAfterMs = retryAfterFor(code(), response()?.headers()?.get("Retry-After"), System.currentTimeMillis()),
+        retryAfterMs = retryAfterFor(code(), response()?.headers()?.get("Retry-After"), System.currentTimeMillis(), dto?.details.retryAfterSeconds()),
     )
 }
 
@@ -67,9 +68,14 @@ val ApiError.isRetryable: Boolean
 /** Wait after a 429 whose `Retry-After` is missing or unparseable (never 0 ms: that would hammer the server). */
 const val DEFAULT_RETRY_AFTER_MS = 30_000L
 
-/** [status]'s wait: the header if usable; a 429 without one waits [DEFAULT_RETRY_AFTER_MS]; others null. */
-fun retryAfterFor(status: Int, header: String?, nowMs: Long): Long? =
-    parseRetryAfter(header, nowMs) ?: DEFAULT_RETRY_AFTER_MS.takeIf { status == 429 }
+/**
+ * [status]'s wait, in order: the `Retry-After` header if usable, then the body's
+ * `details.retryAfterSeconds` ([detailsSeconds]), then for a 429 [DEFAULT_RETRY_AFTER_MS]; others null.
+ */
+fun retryAfterFor(status: Int, header: String?, nowMs: Long, detailsSeconds: Long? = null): Long? =
+    parseRetryAfter(header, nowMs)
+        ?: detailsSeconds?.takeIf { it >= 0 }?.let { it * 1000 }
+        ?: DEFAULT_RETRY_AFTER_MS.takeIf { status == 429 }
 
 /** `Retry-After` as delay-seconds or an HTTP date, in ms from [nowMs] (never negative); null if missing or bad. */
 fun parseRetryAfter(value: String?, nowMs: Long): Long? {
