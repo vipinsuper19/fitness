@@ -5,7 +5,7 @@ package com.vipin.fitness.ui
  * - XP ledger: no screen exists. These tag values are a proposal; move them into the feature
  *   module and use them in Modifier.testTag(...). Data: GET /xp/ledger (newest first, cursor
  *   paging, XpTransaction {id, sourceType, sourceId, amount (negative for reversals), reason, createdAt}).
- * - Goals: tags copied from PR #76 (feat/android-goals) GoalsScreen/ProgressScreen/HomeScreen.
+ * - Goals (#76, merged): real tag values used in GoalsScreen/ProgressScreen/HomeScreen.
  *
  * The seeds below stand in for the fakes until the real ones exist. When a screen lands,
  * replace them with @Inject of the real fake (#76: core.testing.FakeGoalsRepository via
@@ -51,17 +51,4 @@ class PendingXpLedgerSeed {
     /** cursor (null = first page) → (items, nextCursor); a missing cursor means a network failure. */
     val pages = mutableMapOf<String?, Pair<List<LedgerRow>, String?>>()
     val calls = mutableListOf<String?>()
-}
-
-/** Stand-in for #76's FakeGoalsRepository (wire values for type/status). */
-data class GoalRow(val id: String, val type: String, val status: String, val target: Double?, val start: Double?, val date: String?)
-class PendingGoalsSeed {
-    val goals = mutableListOf<GoalRow>()
-    var listFails = false
-    var failNextWrite = false
-    /** (operation, idempotency key) per write, e.g. "create", "update:g1", "delete:g1". */
-    val writes = mutableListOf<Pair<String, String>>()
-    /** Latest weight entries for progress (kg). */
-    var latestWeightKg: Double? = null
-    var completedWorkoutsThisWeek = 0
 }
