@@ -162,7 +162,7 @@ Table `notification_devices`: `id` uuid, `user_id` (FK → users `ON DELETE CASC
 Both: 401, 409 (key reuse), `429 RATE_LIMITED` per user per route, `NOTIFICATION_DEVICES_RATE_LIMIT_PER_MINUTE` (default 30).
 
 ### Session binding (decision 4; checked against the auth code)
-**Finding:** the access token does **not** carry the refresh-family id today. `TokenService.signAccess(userId)` signs only `{sub, typ: 'access'}` plus `iss`, `aud`, `exp` and a random `jti`; `verifyAccess` returns only the user id. Families exist only on `refresh_tokens.family_id` (a UUID per login, kept across rotations). `POST /auth/logout` takes the refresh token in the body and revokes **only that token** (`TokenService.revoke`), not the family; reuse detection revokes the whole family (`revokeFamily`).
+**Finding:** the access token does **not** carry the refresh-family id today. `TokenService.signAccess(userId)` signs only `{sub, typ: 'access'}` plus `iss`, `aud`, `exp` and a random `jti`; `verifyAccess` returns only the user id. Families exist only on `refresh_tokens.family_id` (a UUID per login, kept across rotations). `POST /auth/logout` takes the refresh token in the body and revokes the presented token's **whole family** (`TokenService.revoke`, since backend/logout-revoke-family; docs/specs/auth-logout.md); reuse detection revokes the whole family (`revokeFamily`).
 
 **How devices are bound:**
 1. Access tokens gain a session claim `sid` = the refresh `family_id`. `issue()` passes the new family id; `rotate()` passes `row.familyId`. The guard exposes it to handlers (e.g. `@CurrentSession()`); it isn't needed elsewhere. No contract change (tokens are opaque to the client).

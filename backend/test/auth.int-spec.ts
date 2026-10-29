@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 
-import { TokenService } from '../src/auth/token.service';
+import { hashRefreshToken, TokenService } from '../src/auth/token.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { createTestApp } from './helpers';
 
@@ -152,6 +152,88 @@ describeDb('auth (HTTP + Postgres)', () => {
     await http().post('/api/v1/auth/logout').set('Authorization', `Bearer ${a.accessToken}`).send({ refreshToken: a.refreshToken }).expect(204);
     const res = await http().post('/api/v1/auth/refresh').send({ refreshToken: a.refreshToken }).expect(401);
     expect(res.body.code).toBe('REFRESH_TOKEN_REUSED');
+  });
+
+  describe('logout revokes the whole refresh family', () => {
+    const refresh = (t: string) => http().post('/api/v1/auth/refresh').send({ refreshToken: t });
+    const logout = (access: string, t: string) => http().post('/api/v1/auth/logout').set('Authorization', `Bearer ${access}`).send({ refreshToken: t });
+    /** One login, rotated twice: [original, middle, current]. */
+    async function rotatedFamily(address: string) {
+      const login = (await http().post('/api/v1/auth/login').send({ email: address, password }).expect(200)).body;
+      const r1 = (await refresh(login.refreshToken).expect(200)).body;
+      const r2 = (await refresh(r1.refreshToken).expect(200)).body;
+      return { access: r2.accessToken as string, tokens: [login.refreshToken, r1.refreshToken, r2.refreshToken] as string[] };
+    }
+    const familyOf = async (t: string) => (await prisma.refreshToken.findUniqueOrThrow({ where: { tokenHash: hashRefreshToken(t) } })).familyId;
+
+    it.each([
+      ['the current token', 2],
+      ['a rotated old token', 0],
+    ])('logout with %s revokes every token in that family; another family of the same user still refreshes', async (_label, which) => {
+      const address = email();
+      const me = (await register(address)).body;
+      const other = await rotatedFamily(address);
+      const fam = await rotatedFamily(address);
+      const familyId = await familyOf(fam.tokens[0]!);
+
+      await logout(fam.access, fam.tokens[which]!).expect(204);
+
+      expect(await prisma.refreshToken.count({ where: { familyId } })).toBe(3);
+      expect(await prisma.refreshToken.count({ where: { familyId, revokedAt: null } })).toBe(0);
+      for (const t of fam.tokens) expect((await refresh(t).expect(401)).body.code).toBe('REFRESH_TOKEN_REUSED');
+      // Other logins of the same user are untouched.
+      await refresh(other.tokens[2]!).expect(200);
+      await refresh(me.refreshToken).expect(200);
+    });
+
+    it('is idempotent: logging out again, or with an unknown token, is 204 and changes nothing else', async () => {
+      const address = email();
+      const me = (await register(address)).body;
+      const fam = await rotatedFamily(address);
+      await logout(fam.access, fam.tokens[2]!).expect(204);
+      await logout(fam.access, fam.tokens[2]!).expect(204);
+      await logout(fam.access, fam.tokens[0]!).expect(204);
+      await logout(fam.access, 'definitely-not-a-token').expect(204);
+      expect(await prisma.refreshToken.count({ where: { userId: me.user.id, revokedAt: null } })).toBe(1);
+      await refresh(me.refreshToken).expect(200);
+    });
+
+    it('refresh answers revoked, reused and invalid tokens with 401 (never 400/403)', async () => {
+      const address = email();
+      await register(address);
+      // Reused: a token rotated away, presented again (no logout).
+      const reusedFam = await rotatedFamily(address);
+      const reused = await refresh(reusedFam.tokens[0]!);
+      expect([reused.status, reused.body.code]).toEqual([401, 'REFRESH_TOKEN_REUSED']);
+      // Revoked: the current token after logout.
+      const fam = await rotatedFamily(address);
+      await logout(fam.access, fam.tokens[2]!).expect(204);
+      const revoked = await refresh(fam.tokens[2]!);
+      expect([revoked.status, revoked.body.code]).toEqual([401, 'REFRESH_TOKEN_REUSED']);
+      // Invalid: unknown, and an empty-looking but well-formed string.
+      for (const t of ['definitely-not-a-token', 'x'.repeat(43)]) {
+        const invalid = await refresh(t);
+        expect([invalid.status, invalid.body.code]).toEqual([401, 'REFRESH_TOKEN_INVALID']);
+      }
+    });
+
+    it('logout with a pre-rotation token after the family is already revoked by reuse is still 204', async () => {
+      const address = email();
+      await register(address);
+      const fam = await rotatedFamily(address);
+      await refresh(fam.tokens[0]!).expect(401); // reuse detection revokes the family
+      await logout(fam.access, fam.tokens[0]!).expect(204);
+      await logout(fam.access, fam.tokens[1]!).expect(204);
+      for (const t of fam.tokens) expect((await refresh(t)).status).toBe(401);
+    });
+
+    it("another user's token is not revoked (204, no change)", async () => {
+      const a = (await register()).body;
+      const b = (await register()).body;
+      const bRot = (await refresh(b.refreshToken).expect(200)).body;
+      await logout(a.accessToken, b.refreshToken).expect(204);
+      await refresh(bRot.refreshToken).expect(200);
+    });
   });
 
   it('deletes the account only with the right password, then the old credentials stop working', async () => {

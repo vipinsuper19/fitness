@@ -165,7 +165,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
         '401':
-          description: '`REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED` or `REFRESH_TOKEN_REUSED`'
+          description: '`REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED` or `REFRESH_TOKEN_REUSED`. Every rejected refresh token (unknown, expired, revoked by logout, or reused after rotation) is a `401`, never `400`/`403`; clients treat only a `401` from refresh as "session over".'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -174,7 +174,16 @@ paths:
     post:
       tags: [auth]
       operationId: logout
-      summary: Revoke a refresh token (this device)
+      summary: Sign out this login (revokes the presented token's whole refresh family)
+      description: |
+        Revokes every refresh token in the presented token's family: the login it came from, including tokens already
+        rotated away and the current one. Presenting an old (rotated) token of the family works the same. Other families
+        of the same user (other devices or logins) are untouched. Idempotent: an unknown token, a token of another user, or
+        an already-revoked family is still `204` and changes nothing else. Access tokens stay valid until they expire.
+        Afterwards, `POST /auth/refresh` with any token of that family is `401 REFRESH_TOKEN_REUSED` (the family is
+        already fully revoked, so nothing else changes). `/auth/refresh` always answers a revoked, reused, expired or unknown
+        refresh token with HTTP `401` (never `400`/`403`); clients treat only a `401` from refresh as "session over".
+        See docs/specs/auth-logout.md.
       requestBody:
         required: true
         content:
