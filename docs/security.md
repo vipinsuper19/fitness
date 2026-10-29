@@ -54,3 +54,13 @@ The init and analyze actions are pinned to a SHA, like every other action.
 
 
 History: GHSA-27r3-jxmh-p828 (body-parser, high, reachable) was fixed by a lockfile-only bump of body-parser from 2.3.0 to 2.4.0, then removed from the allowlist. The multer entry stays: @nestjs/platform-express pins multer to exactly 2.4.0, so a lockfile-only update can't reach the fixed 2.5.0.
+
+### Audit gate checks
+
+`.github/scripts/npm-audit-prod.cjs` fails CI when:
+- a high or critical advisory is not allowlisted (NOT ALLOWED);
+- an entry's `package` differs from the package npm reports for that GHSA (PACKAGE MISMATCH);
+- an entry's `reviewBy` is in the past (EXPIRED) or isn't a YYYY-MM-DD date (INVALID);
+- an entry is no longer reported (STALE).
+
+Unit tests: `node --test .github/scripts/*.test.cjs`. These run in the backend workflow.
