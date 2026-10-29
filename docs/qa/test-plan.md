@@ -282,3 +282,25 @@ Spec: `docs/specs/badges-challenges.md` §2 (water goal, dated). No new endpoint
 | DW7 | Future-dated water in the window | Not counted (AB1) | "a future-dated water log does not count today…" |
 | DW8 | IST Monday week boundary (Sun 23:30 IST; Mon 00:30 IST = Sun 19:00 UTC) | Sun 23:30 IST: Sunday water counts for the week of Mon 19th, Monday water is still future and never counts; Mon 00:30 IST: a weekly join opens the week of Mon 26th (re-join 409), Monday water counts there, the old week expires at 1/3; at 19:00 UTC Sunday the IST date (Monday) is used, never the UTC date | "Sunday 23:30 IST counts for the old week…" |
 | DW9 | Weekly XP cap, then a water challenge on dated goals | 30+30+50 then a second PERSONAL_WORKOUTS_N capped to 40 (=150); the water challenge then completes (goal raised mid-week) with `xpAwarded` 0 and no ledger row; more water, a goal change, reads and a direct re-evaluation never pay it; challenge ledger total stays 150 | "cap reached first: the water challenge completes with xpAwarded 0…" |
+
+### Suggest macros — Android UI (#120)
+
+Robolectric, through the real MainActivity (Nutrition → Macro targets) with `FakeMacroSuggestionRepository` and `FakeProfileRepository` from core:testing: `android/app/src/test/kotlin/com/vipin/fitness/ui/MacroTargetsUiTest.kt` (15 tests).
+
+| # | Case | Expected | Test |
+|---|---|---|---|
+| SM1 | Open the screen | Current P/C/F (unset shows "Not set") and the calorie target; no suggestion request until asked | `showsCurrentTargetsWithNotSet` |
+| SM2 | Suggest | Review card: 112 / 262 / 56 g, total 2,000 kcal, note that it can be under the target, basis "70 kg" + goal; no veg hint; nothing saved | `suggestShowsReviewCardWithTotalNoteAndBasis` |
+| SM3 | Apply | One PUT with only the three gram targets (calorie and water unchanged); screen shows the new targets and "saved"; card gone | `applySavesOnlyTheThreeGramTargets` |
+| SM4 | Apply offline, then Retry | Offline error, Apply becomes Retry, targets unchanged; the retry reuses the same Idempotency-Key | `applyOfflineThenRetryReusesTheIdempotencyKey` |
+| SM5 | Apply again after a new suggestion | A new key; "saved" cleared when suggesting | `aNewSuggestionAfterApplyGetsANewKey` |
+| SM6 | Suggested 0 g | Sent as a clear; shows "Not set" | `zeroGramsIsSentAsClearAndShowsNotSet` |
+| SM7 | Missing inputs (2) | Plural title, each input listed, no Apply; Edit profile opens the profile screen | `missingInputsListThemAndEditProfileOpensTheProfile` |
+| SM8 | One unknown missing input | Singular title, "Other profile details" | `oneUnknownMissingInputUsesTheSingular` |
+| SM9 | Suggest offline, then Retry | Error then card; 2 calls | `suggestOfflineThenRetry` |
+| SM10 | Profile load fails, then Retry | Error, no Suggest button; Retry shows targets | `loadFailsThenRetry` |
+| SM11 | Not now | Card hidden, nothing saved; Suggest asks the server again (no cache) | `notNowHidesTheCardWithoutSavingAndAsksAgainNextTime` |
+| SM12 | Imperial units | Exactly "Based on 154.3 lb and the goal: lose weight" (70 kg), no kg | `basisWeightFollowsImperialUnits` |
+| SM13 | Vegetarian + no active goal | Veg protein hint; "no active goal, so maintain" | `vegetarianHintAndDefaultGoal` |
+| SM14 | Back | Returns to the diary | `backReturnsToTheDiary` |
+| SM15 | Suggestion held in flight | Only a spinner: no Not now / Apply / Suggest to tap while held; on release the card appears, nothing saved, 1 call. (Not now can't be tapped mid-request from the UI; the late-after-dismiss drop is covered by `MacroTargetsTest.aLateSuggestionAfterDismissIsDropped`.) | `aHeldSuggestionOffersNoNotNowAndSavesNothingWhenReleased` |
