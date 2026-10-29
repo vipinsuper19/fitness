@@ -31,7 +31,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -169,7 +168,6 @@ class PlansUiTest {
         waitTag(PlansTags.action("b", PlanAction.MAKE_ACTIVE))
     }
 
-    @Ignore("Pending #110")
     @Test fun unarchiveUnderTheArchivedFilterDropsTheRow() {
         openPlans(); filter(PlanStatus.ARCHIVED)
         act("c", PlanAction.UNARCHIVE)

@@ -1,5 +1,6 @@
 package com.vipin.fitness.ui
 
+import com.vipin.fitness.feature.progress.GoalsTags
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.performClick
