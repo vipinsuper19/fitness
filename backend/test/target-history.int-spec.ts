@@ -322,6 +322,18 @@ describeDb('target history (HTTP + Postgres)', () => {
       }
     });
 
+    it('returns at most the newest 1000 rows', async () => {
+      const u = await signUp();
+      const start = Date.parse('2020-01-01T00:00:00Z');
+      await prisma.profileTargetHistory.createMany({
+        data: Array.from({ length: 1001 }, (_, i) => ({ userId: u.id, effectiveFrom: new Date(start + i * 86_400_000), dailyWaterTargetMl: 2000 + i })),
+      });
+      const items = await getHistory(u.token);
+      expect(items).toHaveLength(history.MAX_HISTORY_ITEMS);
+      expect(items[0]!.waterMl).toBe(3000);
+      expect(items[999]!.waterMl).toBe(2001); // the oldest row (2000) is the one dropped
+    });
+
     it('is rate-limited per user with 429', async () => {
       const limited = await createTestApp({ env: { TARGET_HISTORY_RATE_LIMIT_PER_MINUTE: '2' } });
       try {

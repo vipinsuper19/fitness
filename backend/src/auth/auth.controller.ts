@@ -12,7 +12,7 @@ import type { TokenPair } from './token.service';
 @ApiTags('auth')
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
-@SkipThrottle({ refresh: true, export: true, targetHistory: true })
+@SkipThrottle({ refresh: true, export: true, targetHistory: true, notificationPrefs: true })
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
@@ -51,7 +51,7 @@ export class AuthController {
 @ApiTags('me')
 @Controller('me')
 @UseGuards(ThrottlerGuard)
-@SkipThrottle({ refresh: true, export: true, targetHistory: true })
+@SkipThrottle({ refresh: true, export: true, targetHistory: true, notificationPrefs: true })
 export class MeController {
   constructor(private readonly auth: AuthService) {}
 

@@ -110,6 +110,21 @@ class StrengthViewModelTest {
         assertEquals("Bench", vm.state.value.detail!!.progress!!.name)
     }
 
+    @Test fun openingAnExerciseAlwaysStartsOnWeek() {
+        repo.pages[null] = page("a", "b")
+        repo.detail = { _, _, _, b -> ApiResult.Success(progress(b)) }
+        val vm = vm()
+        vm.open("a")
+        vm.setBucket(SummaryBucket.MONTH)
+        vm.open("b")
+        assertEquals(SummaryBucket.WEEK, vm.state.value.detail!!.bucket)
+        assertEquals("b:2026-05-01:2026-10-29:week", repo.detailCalls.last())
+        vm.setBucket(SummaryBucket.DAY)
+        vm.closeDetail()
+        vm.open("a")
+        assertEquals(SummaryBucket.WEEK, vm.state.value.detail!!.bucket)
+    }
+
     @Test fun unitsFollowThePreference() {
         repo.pages[null] = page("a")
         val vm = vm()
@@ -160,20 +175,6 @@ class StrengthFormatTest {
         assertEquals(listOf("Longest set: 1:30 (29 Oct 2026)"), prRows(res, pr, UnitSystem.METRIC, ist))
         val p = ExerciseProgressPoint(LocalDate.parse("2026-10-01"), 1, 3, totalDistanceM = 1500.0, maxSetDistanceM = 600.0)
         assertEquals("3 sets · Distance 1.5 km · Best set 600 m", pointLine(res, p, UnitSystem.METRIC))
-    }
-
-    @Test fun everyLabelComesFromResourcesWithPlurals() {
-        val t = Instant.parse("2026-10-28T19:00:00Z")
-        val pr = PersonalRecords(maxWeightKg = 100.0, maxWeightKgAchievedAt = t, best1RmKg = 110.0, maxReps = 1,
-            maxDurationSec = 45, maxDistanceM = 800.0, maxDistanceMAchievedAt = t)
-        assertEquals("Top 100 kg · 1RM 110 kg · 1 rep · 45 s · 800 m", prLine(res, pr, UnitSystem.METRIC))
-        assertEquals(
-            listOf("Heaviest: 100 kg (29 Oct 2026)", "Best est. 1RM: 110 kg", "Most reps: 1", "Longest set: 45 s", "Longest distance: 800 m (29 Oct 2026)"),
-            prRows(res, pr, UnitSystem.METRIC, ist),
-        )
-        val p = ExerciseProgressPoint(LocalDate.parse("2026-10-01"), 1, 1, volumeKg = 1000.0, totalReps = 10, topSetWeightKg = 100.0,
-            best1RmKg = 110.0, totalDurationSec = 125, maxSetDurationSec = 60)
-        assertEquals("1 set · Volume 1,000 kg · 10 reps · Top 100 kg · 1RM 110 kg · Time 2:05 · Longest 1:00", pointLine(res, p, UnitSystem.METRIC))
     }
 
     @Test fun everyLabelComesFromResourcesWithPlurals() {

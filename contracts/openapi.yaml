@@ -1735,8 +1735,9 @@ paths:
       description: |
         A `weekly` challenge covers the current week (Monday to Sunday, local, in the profile timezone) and counts
         that week's activity, including activity before joining. A `personal` challenge starts today
-        and ends after the template's `deadlineDays` entry for the chosen target. The timezone and the water goal (the profile's
-        `dailyWaterTargetMl`, else 2000 ml) are captured at join.
+        and ends after the template's `deadlineDays` entry for the chosen target. The timezone is captured at join. Water templates
+        judge each day against that day's own dated water target (profile target history, else 2000 ml);
+        `waterGoalMl` records the goal at join for display only.
         Errors (409): `CHALLENGE_ALREADY_JOINED` means there is already an active challenge from this template, or
         this week's weekly instance was already joined (also after leaving it); `CHALLENGE_LIMIT_REACHED`
         means 5 challenges are active. An unknown template or a target not allowed by it is `400 VALIDATION_FAILED`.
@@ -2102,12 +2103,12 @@ components:
         onboardingCompleted: { type: boolean }
     DataExport:
       type: object
-      required: [exportedAt, user, targetHistory]
+      required: [exportedAt, user, targetHistory, notificationPreferences]
       properties:
         exportedAt: { type: string, format: date-time }
         user: { $ref: '#/components/schemas/User' }
         profile: { $ref: '#/components/schemas/Profile' }
-        notificationPreferences: { $ref: '#/components/schemas/NotificationPreferences', description: 'Same shape as GET /me/notification-preferences, defaults included. Optional until implemented.' }
+        notificationPreferences: { $ref: '#/components/schemas/NotificationPreferences', description: 'Same shape as GET /me/notification-preferences, defaults included.' }
         goals: { type: array, items: { $ref: '#/components/schemas/Goal' } }
         workoutPlans: { type: array, items: { $ref: '#/components/schemas/WorkoutPlan' } }
         workoutSessions: { type: array, items: { $ref: '#/components/schemas/WorkoutSession' } }
@@ -3016,7 +3017,7 @@ components:
         windowEnd: { type: [string, 'null'], format: date, description: 'Local date, inclusive (Sunday for weekly); null = no deadline' }
         joinDate: { type: string, format: date, description: 'Local date of joining (in `timezone`). Streak challenges count only days on or after it; personal workout challenges count workouts finished after `joinedAt`.' }
         timezone: { type: string, description: Profile timezone captured at join }
-        waterGoalMl: { type: [integer, 'null'], description: Water goal captured at join (water templates only) }
+        waterGoalMl: { type: [integer, 'null'], description: 'Water goal in force at join (water templates only). For information only: it does not drive progress, which judges each day against its own dated water goal (else 2000 ml).' }
         status: { $ref: '#/components/schemas/ChallengeStatus' }
         joinedAt: { type: string, format: date-time }
         completedAt: { type: [string, 'null'], format: date-time, description: Never cleared once set }

@@ -12,7 +12,7 @@ import { UserThrottlerGuard } from './export.controller';
 @ApiBearerAuth()
 @Controller('me/target-history')
 @UseGuards(UserThrottlerGuard)
-@SkipThrottle({ auth: true, refresh: true, export: true, targetHistory: false })
+@SkipThrottle({ auth: true, refresh: true, export: true, targetHistory: false, notificationPrefs: true })
 export class TargetHistoryController {
   constructor(private readonly prisma: PrismaService) {}
 
