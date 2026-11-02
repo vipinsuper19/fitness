@@ -40,7 +40,7 @@ jobs:
       JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-else
       JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-else
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check for package.json
         id: guard
         run: |
